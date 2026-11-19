@@ -241,18 +241,51 @@ async function serveViewFile(
 const hashOf = (b: Buffer | string) => createHash('sha256').update(b).digest('hex');
 
 /**
+ * View revision from which `source.token` depends on content only
+ * (devcontour-harness 0.1.0-alpha.56, proposal P8): equal tokens ⇔ equal
+ * content for the same language, window, work and `--no-titles`.
+ */
+export const CONTENT_TOKEN_REVISION = 1;
+
+/**
  * Change digest of a live document (`harness view`), sent in SSE events and
  * in the `x-hui-digest` header of `GET /api/view` so the page knows which
- * content it shows. The harness `source.token` cannot serve: harness
- * 0.1.0-alpha.55 hashes the history window, which ends at the projection
- * clock, so the token differs on every run of an unchanged state. The digest
- * hashes the document without `generatedAt` and `source.token`, and with
- * the window bounds cut to the minute: an unchanged state is the same digest
- * within a minute, and the window labels the screens show lag at most a
- * minute. Clock-relative fields the harness computes (ages, elapsed times)
- * do change it: the screens show them.
+ * content it shows.
+ *
+ * From view revision 1 (harness alpha.56) the harness `source.token` is the
+ * identity (`harness:` and the SHA-256 of the token string): it hashes the content without the projection clock, and it also
+ * changes with what the harness knows depends on the clock (leases,
+ * liveness, records leaving the window). The watch key already separates
+ * language and work, the only request options the token depends on.
+ *
+ * Before (revision 0, harness alpha.55) `source.token` cannot serve: it
+ * hashes the history window, which ends at the projection clock, so it
+ * differs on every run of an unchanged state. The local digest then hashes
+ * the document without `generatedAt` and `source.token`, and with the window
+ * bounds cut to the minute: an unchanged state is the same digest within a
+ * minute, and the window labels the screens show lag at most a minute.
+ * Clock-relative fields the harness computes (ages, elapsed times) do change
+ * it: the screens show them.
  */
 export function digestOf(view: unknown): string {
+  const token = contentToken(view);
+  // Hashed, so any token string (spaces, Cyrillic, a newline) gives a
+  // header-safe identity that SSE and `x-hui-digest` carry byte for byte.
+  return token !== undefined ? 'harness:' + hashOf(token) : localDigestOf(view);
+}
+
+/** The harness token when the view revision promises it is content-only; otherwise `undefined`. */
+export function contentToken(view: unknown): string | undefined {
+  if (typeof view !== 'object' || view === null || Array.isArray(view)) return undefined;
+  const v = view as { viewRevision?: unknown; source?: { token?: unknown } | null };
+  if (!Number.isSafeInteger(v.viewRevision) || (v.viewRevision as number) < CONTENT_TOKEN_REVISION)
+    return undefined;
+  const token = typeof v.source === 'object' && v.source !== null ? v.source.token : undefined;
+  return typeof token === 'string' && token !== '' ? token : undefined;
+}
+
+/** The local change digest of a revision 0 document (harness alpha.55). */
+export function localDigestOf(view: unknown): string {
   // The instant cut to the minute, in UTC: offsets never hide an hour.
   const minute = (v: unknown) => {
     const ms = typeof v === 'string' ? Date.parse(v) : NaN;

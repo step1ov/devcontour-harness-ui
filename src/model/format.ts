@@ -6,7 +6,7 @@
 
 import { instantMs } from './compat.ts';
 import { dict, label, type Lang } from './dict.ts';
-import type { Bounded, OperatorQuestion } from './view.ts';
+import type { Bounded, OperatorQuestion, TypicalDuration } from './view.ts';
 
 /** `$1.50`, `≥ $3.40` for a lower bound, "unknown" for anything else — never `$0.00`. */
 export function formatUsd(amount: Bounded | undefined, lang: Lang = 'en'): string {
@@ -28,6 +28,30 @@ export function formatDuration(ms: number, lang: Lang = 'en'): string {
   const s = Math.max(0, Math.floor(ms / 1000));
   if (!Number.isFinite(s)) return dict(lang).unknown;
   return dict(lang).duration(Math.floor(s / 3600), Math.floor((s % 3600) / 60), s % 60);
+}
+
+/**
+ * The usual stage time as an honest range, `обычно 5–12 мин` / `usually
+ * 5–12 min`: the low end rounded down, the high end up, so the range never
+ * looks narrower than observed. `undefined` (show nothing) when the harness
+ * sent no observation or an inconsistent one — never a made-up number.
+ */
+export function formatTypical(
+  typical: TypicalDuration | undefined,
+  lang: Lang = 'en',
+): string | undefined {
+  if (!typical) return undefined;
+  const { p50Ms: lo, p90Ms: hi } = typical;
+  if (!Number.isFinite(lo) || !Number.isFinite(hi) || lo < 0 || hi < lo) return undefined;
+  const t = dict(lang);
+  if (hi < 60_000)
+    return t.typicalRange(t.range(Math.floor(lo / 1000), Math.ceil(hi / 1000), t.unitSec));
+  if (hi < 3_600_000)
+    return t.typicalRange(t.range(Math.floor(lo / 60_000), Math.ceil(hi / 60_000), t.unitMin));
+  const minute = 60_000;
+  const a = formatDuration(Math.floor(lo / minute) * minute, lang);
+  const b = formatDuration(Math.ceil(hi / minute) * minute, lang);
+  return t.typicalRange(a === b ? b : `${a}–${b}`);
 }
 
 /** A window length: `24 ч`, `7 дней` (ru) or `24 h`, `7 days` (en); other lengths as a duration. */
@@ -76,6 +100,8 @@ export const KNOWN_QUESTION_STATES: ReadonlySet<string> = new Set([
   'applied-awaiting-claim',
   'delivered',
   'carry-stale',
+  'cancelled',
+  'superseded',
 ]);
 
 /**
@@ -103,6 +129,11 @@ export function questionStatus(
       return { needsAnswer: false, text: t.appliedAwaitingClaim };
     case 'delivered':
       return { needsAnswer: false, text: t.delivered };
+    // Questions of a closed work (detail only, harness alpha.56): the request lifecycle.
+    case 'cancelled':
+      return { needsAnswer: false, text: t.cancelled };
+    case 'superseded':
+      return { needsAnswer: false, text: t.superseded };
     default:
       return { needsAnswer: false, text: t.unknownState(String(q.state)) };
   }

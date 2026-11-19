@@ -14,11 +14,19 @@ import {
   utimesSync,
   writeFileSync,
 } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
-import { digestOf, fileDigestOf, startServer, type RunningServer } from '../src/server/serve.ts';
+import {
+  contentToken,
+  digestOf,
+  fileDigestOf,
+  localDigestOf,
+  startServer,
+  type RunningServer,
+} from '../src/server/serve.ts';
 import { MAX_BUFFERED, MAX_STREAMS, writeEvent } from '../src/server/live.ts';
 import { MAX_RUNS, RECENT_MAX, RecentCache } from '../src/server/serve.ts';
 import { fakeHarness, runsIn } from './fake-harness.ts';
@@ -41,16 +49,35 @@ function scratch() {
 
 /**
  * Writes the sample view for a "state" named `content` (a question title
- * differs); `clock` moves only the projection clock fields, which are not a change.
+ * differs); `clock` moves only the projection clock fields, which are not a
+ * change. By default the document is what harness alpha.55 sends (revision
+ * 0): its `source.token` also hashes the clock, so it differs on every run.
+ * `revision: 1` is harness alpha.56: the token depends on the content only.
  */
-function writeView(file: string, content: string, clock = '2026-11-19T10:00:00.000Z') {
+function writeView(
+  file: string,
+  content: string,
+  clock = '2026-11-19T10:00:00.000Z',
+  revision: 0 | 1 = 0,
+  token = 'harness-token-' + content,
+) {
   const v = JSON.parse(readFileSync(sample, 'utf8'));
   v.questions[0].title = 'Q ' + content;
   v.generatedAt = clock;
-  v.source.token = 'harness-token-' + content + clock;
   v.history.to = clock;
+  if (revision === 0) {
+    v.viewRevision = 0;
+    for (const q of v.questions) delete q.answerBasis;
+    delete v.history.totals;
+    v.source.token = 'harness-token-' + content + clock;
+  } else {
+    v.viewRevision = 1;
+    v.source.token = token;
+  }
   writeFileSync(file, JSON.stringify(v));
 }
+/** The identity the server gives a revision 1 document with this harness token. */
+const harnessId = (token: string) => 'harness:' + createHash('sha256').update(token).digest('hex');
 /** The digest the server reports for the file as written now. */
 const digestNow = (file: string) => fileDigestOf(JSON.parse(readFileSync(file, 'utf8')));
 
@@ -439,8 +466,97 @@ test('live route: a run that differs only in the clock fields is fresh, not a ch
   }
 });
 
-test('digestOf ignores the clock within a minute, not across one', () => {
+test('live route on alpha.56: equal tokens are fresh, a new token is a change, the GET matches', async () => {
+  const l = liveSetup();
+  let server: RunningServer | undefined;
+  try {
+    writeView(l.viewFile, 'r1-a', '2026-11-19T10:00:00.000Z', 1);
+    server = await l.start({ minMs: 100, maxMs: 100, activeMaxMs: 100 });
+    const es = stream(server.url + 'api/events?lang=en');
+    const first = await es.next('view');
+    assert.equal(first.data.token, harnessId('harness-token-r1-a'));
+    const r = await http(server.url + 'api/view?lang=en');
+    assert.equal(r.headers['x-hui-digest'], first.data.token, 'the page learns the same identity');
+    // Another projection clock, and the window moved by hours, not a minute:
+    // the alpha.55 digest would call this a change; the content token does not.
+    writeView(l.viewFile, 'r1-a', '2026-11-19T13:30:00.000Z', 1);
+    const n = es.events.length;
+    await sleep(600);
+    const later = es.events.slice(n).filter((e) => e.event !== 'ping');
+    assert.ok(later.length >= 2, JSON.stringify(later));
+    assert.ok(later.every((e) => e.event === 'fresh' && e.data.token === first.data.token));
+    // The harness says the content changed: a change, with its token.
+    writeView(l.viewFile, 'r1-b', '2026-11-19T13:30:00.000Z', 1);
+    const changed = await es.next('view', 2000, es.events.length);
+    assert.equal(changed.data.token, harnessId('harness-token-r1-b'));
+    const after = await http(server.url + 'api/view?lang=en');
+    assert.equal(after.headers['x-hui-digest'], changed.data.token, 'GET follows the change');
+    // Any token string, even one a header cannot carry raw, gives the same
+    // identity on the stream and in the header.
+    for (const odd of ['aa11 ', 'токен', 'a\nb', ' ']) {
+      writeView(l.viewFile, 'r1-odd', '2026-11-19T13:30:00.000Z', 1, odd);
+      const pushed = await es.next('view', 2000, es.events.length);
+      assert.equal(pushed.data.token, harnessId(odd), JSON.stringify(odd));
+      const got = await http(server.url + 'api/view?lang=en');
+      assert.equal(got.status, 200, JSON.stringify(odd));
+      assert.equal(got.headers['x-hui-digest'], pushed.data.token, JSON.stringify(odd));
+    }
+    es.close();
+  } finally {
+    await server?.close();
+    l.cleanup();
+  }
+});
+
+test('live route across harness versions: 55 uses the local digest, 56 the token, back to 55 again', async () => {
+  const l = liveSetup();
+  let server: RunningServer | undefined;
+  try {
+    server = await l.start({ minMs: 100, maxMs: 100, activeMaxMs: 100 });
+    const es = stream(server.url + 'api/events');
+    const first = await es.next('view');
+    assert.match(String(first.data.token), /^[0-9a-f]{64}$/, 'a local digest, not the token');
+    // Same content, another clock: the alpha.55 token changed, the digest did not.
+    writeView(l.viewFile, 'token-a', '2026-11-19T10:00:30.000Z');
+    let n = es.events.length;
+    await sleep(400);
+    const quiet = es.events.slice(n).filter((e) => e.event !== 'ping');
+    assert.ok(quiet.length >= 1, 'checks did run');
+    assert.ok(
+      quiet.every((e) => e.event === 'fresh'),
+      JSON.stringify(quiet),
+    );
+    // An upgrade to alpha.56 is one change (another identity), then stable.
+    writeView(l.viewFile, 'token-a', '2026-11-19T10:00:30.000Z', 1);
+    const upgraded = await es.next('view', 2000, es.events.length);
+    assert.equal(upgraded.data.token, harnessId('harness-token-token-a'));
+    assert.equal(
+      (await http(server.url + 'api/view')).headers['x-hui-digest'],
+      upgraded.data.token,
+    );
+    // A rollback to alpha.55: the local digest again, equal to the first one
+    // (same content), and the GET agrees.
+    writeView(l.viewFile, 'token-a', '2026-11-19T10:00:50.000Z');
+    const back = await es.next('view', 2000, es.events.length);
+    assert.equal(back.data.token, first.data.token);
+    assert.equal((await http(server.url + 'api/view')).headers['x-hui-digest'], back.data.token);
+    n = es.events.length;
+    await sleep(400);
+    const stable = es.events.slice(n).filter((e) => e.event !== 'ping');
+    assert.ok(
+      stable.length >= 1 && stable.every((e) => e.event === 'fresh'),
+      JSON.stringify(stable),
+    );
+    es.close();
+  } finally {
+    await server?.close();
+    l.cleanup();
+  }
+});
+
+test('digestOf of an alpha.55 document ignores the clock within a minute, not across one', () => {
   const v = JSON.parse(readFileSync(sample, 'utf8'));
+  v.viewRevision = 0;
   v.history.from = '2026-11-18T10:00:01.000Z';
   v.history.to = '2026-11-19T10:00:01.000Z';
   const d = digestOf(v);
@@ -466,6 +582,45 @@ test('digestOf ignores the clock within a minute, not across one', () => {
   const producer = structuredClone(v);
   producer.source.producerVersion = 'x';
   assert.notEqual(digestOf(producer), d);
+  // Revision 0 never trusts the harness token: it is the local digest.
+  assert.equal(contentToken(v), undefined);
+  assert.equal(d, localDigestOf(v));
+  assert.match(d, /^[0-9a-f]{64}$/);
+});
+
+test('digestOf of an alpha.56 document is the harness content token, nothing else', () => {
+  const v = JSON.parse(readFileSync(sample, 'utf8'));
+  assert.equal(v.viewRevision, 1);
+  v.source.token = 'aa11';
+  const id = harnessId('aa11');
+  assert.equal(digestOf(v), id);
+  // Clock fields and even content the token does not change are not a change:
+  // the harness owns the identity from revision 1.
+  const clock = structuredClone(v);
+  clock.generatedAt = '2030-01-01T00:00:00.000Z';
+  clock.history.to = '2030-01-01T00:00:00.000Z';
+  assert.equal(digestOf(clock), id);
+  const sameToken = structuredClone(v);
+  sameToken.questions[0].title = 'another title, same token';
+  assert.equal(digestOf(sameToken), id, 'the token, not a local hash, decides');
+  const other = structuredClone(v);
+  other.source.token = 'bb22';
+  assert.equal(digestOf(other), harnessId('bb22'));
+  // Any later revision keeps the content-only token.
+  assert.equal(digestOf({ ...v, viewRevision: 7 }), id);
+  // Header-safe for any token string: only hex after the prefix.
+  for (const odd of ['aa11 ', 'токен', 'a\nb'])
+    assert.match(digestOf({ ...v, source: { ...v.source, token: odd } }), /^harness:[0-9a-f]{64}$/);
+  // Never the same identity as a local digest of the same bytes.
+  assert.notEqual(digestOf(v), localDigestOf(v));
+  // A revision 1 document without a usable token falls back to the local digest.
+  for (const token of ['', 7, null, undefined]) {
+    const bad = structuredClone(v);
+    bad.source.token = token;
+    assert.equal(digestOf(bad), localDigestOf(bad), String(token));
+  }
+  for (const rev of [0, -1, 0.5, '1', undefined])
+    assert.equal(contentToken({ ...v, viewRevision: rev }), undefined, String(rev));
 });
 
 test('a watch that stopped never starts its queued harness run', async () => {

@@ -7,7 +7,7 @@
 import type { ReactNode } from 'react';
 import { dict, label, type Dict, type GlossaryId, type Lang } from '../model/dict.ts';
 import { formatClock, targetSentence } from '../model/i18n.ts';
-import type { Actor, BlockerView, WorkView } from '../model/view.ts';
+import type { Actor, BlockerView, OperatorQuestion, WorkView } from '../model/view.ts';
 
 /** Props every screen takes. */
 export interface ScreenProps {
@@ -234,4 +234,40 @@ export function StageStatus({
     );
   }
   return <span className="hui-badge">{text}</span>;
+}
+
+/**
+ * Who answered a question and on what grounds: the harness line
+ * (`answerBasis.line`, «ответил ведущий (технический вопрос): <причина>»)
+ * with the answer time. A view without `answerBasis` (harness alpha.55)
+ * names only who answered, when it says so; nothing is shown otherwise.
+ */
+export function AnswerBasisLine({
+  q,
+  t,
+  timeZone,
+  now,
+}: {
+  q: Pick<OperatorQuestion, 'answerBasis' | 'answeredBy'>;
+  t: Dict;
+  timeZone?: string | undefined;
+  now?: number | undefined;
+}) {
+  const b = q.answerBasis;
+  if (b)
+    return (
+      <div className="hui-muted" data-testid="answer-basis">
+        {t.question.basis(
+          clockOf(b.at, t, timeZone, now),
+          b.line.trim() ? b.line : t.question.answeredBy(actorLabel(t, b.by)),
+        )}
+      </div>
+    );
+  if (q.answeredBy)
+    return (
+      <div className="hui-muted" data-testid="answer-basis">
+        {t.question.answeredBy(actorLabel(t, q.answeredBy))}
+      </div>
+    );
+  return null;
 }

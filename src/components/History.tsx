@@ -2,13 +2,15 @@
 // and failed, cumulative spend against the budget — inline SVG without a
 // chart library. Every chart has a text summary and a data table for screen
 // readers. Regrouping buckets into hours is display work over the view's own
-// series, not new data (design §3.7).
+// series, not new data (design §3.7). Window totals come from the harness
+// (`history.totals`, revision 1); a view without them (alpha.55) says so and
+// its chart summaries add up the series on screen, as before.
 
 import type { ReactNode } from 'react';
 import { instantMs } from '../model/compat.ts';
-import { dict, type Dict } from '../model/dict.ts';
-import { formatUsd, formatWindow, usd } from '../model/format.ts';
-import type { OperatorView, ViewHistory } from '../model/view.ts';
+import { dict, label, type Dict, type GlossaryId, type Lang } from '../model/dict.ts';
+import { formatDuration, formatUsd, formatWindow, usd } from '../model/format.ts';
+import type { HistoryTotals, OperatorView, ViewHistory } from '../model/view.ts';
 import { Heading, Term, clockOf, type ScreenProps } from './common.tsx';
 
 export interface HistoryProps extends Pick<ScreenProps, 'lang' | 'timeZone' | 'now'> {
@@ -55,10 +57,16 @@ export function perHour(h: Pick<ViewHistory, 'bucketMs'>, values: number[]) {
  */
 export function cumulativeSpend(h: ViewHistory) {
   const openingKnown = h.spendOpeningUsd.bound === 'exact' || h.spendOpeningUsd.bound === 'lower';
-  const windowKnown = h.spendBound === 'exact' || h.spendBound === 'lower';
+  // The window totals (revision 1) carry the finer bound: `unknown` when no
+  // call of the window has a known cost, which `spendBound` reads as `lower`.
+  // The more cautious of the two wins; an unrecognized bound reads as unknown.
+  const rank = (b: string) => (b === 'exact' ? 0 : b === 'lower' ? 1 : 2);
+  const worst = Math.max(rank(h.spendBound), h.totals ? rank(h.totals.spendUsd.bound) : 0);
+  const windowBound = (['exact', 'lower', 'unknown'] as const)[worst]!;
+  const windowKnown = windowBound === 'exact' || windowBound === 'lower';
   let sum = openingKnown ? h.spendOpeningUsd.value : 0;
   const values = [sum, ...h.spendUsd.map((x) => (sum += x))];
-  const lower = h.spendBound !== 'exact' || h.spendOpeningUsd.bound !== 'exact';
+  const lower = windowBound !== 'exact' || h.spendOpeningUsd.bound !== 'exact';
   const bound: 'exact' | 'lower' | 'unknown' = !windowKnown ? 'unknown' : lower ? 'lower' : 'exact';
   return { values, openingKnown, lower, end: { value: sum, bound } };
 }
@@ -79,6 +87,7 @@ function Chart({
   t,
   format = String,
   legend,
+  unknown,
 }: {
   id: string;
   title: string;
@@ -87,6 +96,8 @@ function Chart({
   stacked?: boolean;
   /** Draw the first series as a line (cumulative), dashed when `line.dashed`. */
   line?: { dashed: boolean };
+  /** The values are not known: no marks, and the data table says "unknown" (never $0.00). */
+  unknown?: boolean;
   /** Horizontal dashed guide: concurrency or budget. */
   guide?: number;
   guideLabel?: string;
@@ -106,7 +117,9 @@ function Chart({
   const y = (v: number) => H - (v / max) * H;
   const slot = n ? W / n : W;
   const marks: ReactNode[] = [];
-  if (line) {
+  if (unknown) {
+    // Nothing to draw: a flat line at zero would claim a cost.
+  } else if (line) {
     // Boundary values: the first point is the opening balance at the window start.
     const step = n > 1 ? W / (n - 1) : W;
     const pts = series[0]!.values.map((v, i) => `${i * step},${y(v)}`);
@@ -205,7 +218,7 @@ function Chart({
               <tr key={i}>
                 <th scope="row">{time}</th>
                 {series.map((s) => (
-                  <td key={s.name}>{format(s.values[i] ?? 0)}</td>
+                  <td key={s.name}>{unknown ? t.unknown : format(s.values[i] ?? 0)}</td>
                 ))}
               </tr>
             ))}
@@ -225,6 +238,88 @@ const Key = ({ cls, children, dashed }: { cls: string; children: ReactNode; dash
     {children}
   </span>
 );
+
+/**
+ * Window totals from the harness (`history.totals`). Every row is a number
+ * the harness sent, with a «что это значит» disclosure; without totals the
+ * panel says the harness version has none instead of showing zeros.
+ */
+export function HistoryTotalsPanel({
+  totals,
+  slots,
+  lang,
+}: {
+  totals: HistoryTotals | undefined;
+  slots: number;
+  lang: Lang;
+}) {
+  const t = dict(lang);
+  const v = t.history;
+  if (!totals)
+    return (
+      <div className="hui-panel" data-testid="history-totals">
+        <Heading t={t}>{v.totals}</Heading>
+        <p className="hui-muted" data-testid="history-totals-missing">
+          {v.totalsMissing}
+        </p>
+      </div>
+    );
+  const buckets = Object.entries(totals.failuresByBucket).filter(([, n]) => n > 0);
+  const r = totals.reviewRounds;
+  // The spend row explains the window spend, and its bound when not exact.
+  const boundTerm: GlossaryId | undefined =
+    totals.spendUsd.bound === 'exact'
+      ? undefined
+      : totals.spendUsd.bound === 'lower'
+        ? 'lowerBound'
+        : 'unknown';
+  const rows: [string, string, GlossaryId[], string][] = [
+    ['started', v.tStarted, ['attempt'], String(totals.attemptsStarted)],
+    [
+      'failed',
+      v.tFailed,
+      ['failureBucket'],
+      String(totals.attemptsFailed) +
+        (buckets.length
+          ? ` (${v.tByBucket(buckets.map(([b, n]) => v.tBucket(label(t.bucket, b), n)).join(', '))})`
+          : ''),
+    ],
+    [
+      'gates',
+      v.tGates,
+      ['gates'],
+      v.tGatesValue(totals.gatesPassed, totals.gatesFailed, totals.gatesReused),
+    ],
+    ['rounds', v.tRounds, ['reviewRound'], v.tRoundsValue(r.plan, r.contract, r.code, r.attempt)],
+    [
+      'spend',
+      v.tSpend,
+      boundTerm ? ['windowSpend', boundTerm] : ['windowSpend'],
+      formatUsd(totals.spendUsd, lang),
+    ],
+    ['wall', v.tWall, ['wallTime'], formatDuration(totals.wallMs, lang)],
+    ['attempt-ms', v.tAttemptMs, ['attemptTime'], formatDuration(totals.attemptMs, lang)],
+    ['peak', v.tPeak, ['loadPeak'], v.tPeakValue(totals.loadPeak, slots)],
+  ];
+  return (
+    <div className="hui-panel" data-testid="history-totals">
+      <Heading t={t}>{v.totals}</Heading>
+      <dl className="hui-grid hui-totals">
+        {rows.map(([id, name, terms, value]) => (
+          <div key={id} data-testid={`total-${id}`}>
+            <dt>{name}</dt>
+            <dd>
+              <span className="hui-total-value">{value}</span>
+              {terms.map((term) => (
+                <Term key={term} id={term} t={t} />
+              ))}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
+}
 
 export function History({ view, lang = 'ru', timeZone, now: nowProp }: HistoryProps) {
   const t = dict(lang);
@@ -263,6 +358,7 @@ export function History({ view, lang = 'ru', timeZone, now: nowProp }: HistoryPr
   const hourTimes = timesOf(started.values.length, started.groupMs);
   const spend = cumulativeSpend(h);
   const slots = view.settings.concurrency;
+  const tot = h.totals;
   return (
     <section className="hui hui-history" aria-labelledby="hui-history-title" lang={lang}>
       <Heading t={t} level={2} id="hui-history-title">
@@ -275,6 +371,7 @@ export function History({ view, lang = 'ru', timeZone, now: nowProp }: HistoryPr
           formatWindow(h.bucketMs, lang),
         )}
       </p>
+      <HistoryTotalsPanel totals={tot} slots={slots} lang={lang} />
       {!aligned ? (
         <p className="hui-panel hui-bad" data-testid="history-misaligned">
           {v.misaligned}
@@ -290,7 +387,7 @@ export function History({ view, lang = 'ru', timeZone, now: nowProp }: HistoryPr
             series={[{ name: v.peak, values: h.load, cls: 'hui-s1' }]}
             guide={slots}
             guideLabel={v.slotsLine(slots)}
-            summary={v.loadSummary(maxOf(h.load), slots)}
+            summary={v.loadSummary(tot ? tot.loadPeak : maxOf(h.load), slots)}
             legend={
               <>
                 <Key cls="hui-s1">{v.peak}</Key>
@@ -311,8 +408,8 @@ export function History({ view, lang = 'ru', timeZone, now: nowProp }: HistoryPr
               { name: v.failed, values: failed.values, cls: 'hui-s2' },
             ]}
             summary={(started.hourly ? v.attemptsSummary : v.attemptsSummaryBucket)(
-              sum(h.attemptsStarted),
-              sum(h.attemptsFailed),
+              tot ? tot.attemptsStarted : sum(h.attemptsStarted),
+              tot ? tot.attemptsFailed : sum(h.attemptsFailed),
               maxOf(started.values),
             )}
             legend={
@@ -334,7 +431,11 @@ export function History({ view, lang = 'ru', timeZone, now: nowProp }: HistoryPr
               { name: v.gateFailed, values: h.gatesFailed, cls: 'hui-s2' },
             ]}
             summary={
-              <>{v.gatesSummary(sum(h.gatesPassed), sum(h.gatesFailed), sum(h.gatesReused))} </>
+              <>
+                {tot
+                  ? v.gatesSummary(tot.gatesPassed, tot.gatesFailed, tot.gatesReused)
+                  : v.gatesSummary(sum(h.gatesPassed), sum(h.gatesFailed), sum(h.gatesReused))}{' '}
+              </>
             }
             legend={
               <>
@@ -349,6 +450,7 @@ export function History({ view, lang = 'ru', timeZone, now: nowProp }: HistoryPr
             t={t}
             axis={axis}
             line={{ dashed: spend.lower }}
+            unknown={spend.end.bound === 'unknown'}
             times={timesOf(n + 1, h.bucketMs)}
             series={[
               {

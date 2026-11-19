@@ -27,6 +27,7 @@ export {
   SLOT_STAGES,
   formatDuration,
   formatElapsed,
+  formatTypical,
   leadMayAnswer,
   formatUsd,
   formatWindow,

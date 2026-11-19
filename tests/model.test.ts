@@ -2,6 +2,7 @@ import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import {
+  KNOWN_VIEW_REVISION,
   checkView,
   formatElapsed,
   formatUsd,
@@ -26,6 +27,22 @@ test('a different major view version is refused with a reason', () => {
   const check = checkView({ ...fixture, viewVersion: 2 });
   assert.equal(check.ok, false);
   assert.equal(check.ok ? '' : check.code, 'VIEW_VERSION_UNSUPPORTED');
+});
+
+test('revision 1 (harness alpha.56) is known; revision 0 (alpha.55) too; only later ones are newer', () => {
+  assert.equal(KNOWN_VIEW_REVISION, 1);
+  assert.equal(fixture.viewRevision, 1);
+  const c1 = checkView(fixture);
+  assert.equal(c1.ok && c1.newerRevision, false);
+  const old = structuredClone(fixture);
+  old.viewRevision = 0;
+  delete old.history.totals;
+  for (const q of old.questions) delete q.answerBasis;
+  const c0 = checkView(old);
+  assert.equal(c0.ok, true, c0.ok ? '' : c0.message);
+  assert.equal(c0.ok && c0.newerRevision, false);
+  const c2 = checkView({ ...fixture, viewRevision: 2 });
+  assert.equal(c2.ok && c2.newerRevision, true);
 });
 
 test('a newer revision is accepted and flagged; unknown fields are ignored', () => {
@@ -316,6 +333,20 @@ test('the gate refuses every rendered field of the wrong type, optional ones too
     ['works[1].liveness', (v) => (v.works[1].liveness = {})],
     ['progress.queue.reason', (v) => (v.progress.queue.reason = {})],
     ['truncated.questions', (v) => (v.truncated = { questions: 'x' })],
+    // Revision 1 fields (harness alpha.56): optional, but checked when present.
+    ['questions[1].answerBasis.line', (v) => (v.questions[1].answerBasis.line = 7)],
+    ['questions[1].answerBasis.at', (v) => (v.questions[1].answerBasis.at = '2026-11-19 11:27')],
+    ['questions[1].answerBasis.reason', (v) => (v.questions[1].answerBasis.reason = {})],
+    ['questions[1].answerBasis', (v) => (v.questions[1].answerBasis = 'lead')],
+    ['history.totals.attemptsFailed', (v) => (v.history.totals.attemptsFailed = -1)],
+    [
+      'history.totals.failuresByBucket.defect',
+      (v) => (v.history.totals.failuresByBucket.defect = 'x'),
+    ],
+    ['history.totals.reviewRounds.code', (v) => delete v.history.totals.reviewRounds.code],
+    ['history.totals.spendUsd', (v) => (v.history.totals.spendUsd = 6.3)],
+    ['history.totals.wallMs', (v) => (v.history.totals.wallMs = 1.5)],
+    ['history.totals', (v) => (v.history.totals = [])],
   ];
   for (const [path, mutate] of mutations) {
     const v = structuredClone(fixture);

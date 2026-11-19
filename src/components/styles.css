@@ -163,6 +163,12 @@
   margin: 0;
   font-weight: 600;
 }
+.hui-totals {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+}
+.hui-totals .hui-term {
+  font-weight: 400;
+}
 
 /* S2 screens */
 .hui :focus-visible {

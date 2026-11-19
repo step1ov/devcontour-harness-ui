@@ -1,6 +1,6 @@
 {
   "viewVersion": 1,
-  "viewRevision": 0,
+  "viewRevision": 1,
   "generatedAt": "2026-11-19T12:00:00.000Z",
   "source": {
     "producer": "fixture",
@@ -174,7 +174,27 @@
       "line": "план одобрен после 2 раундов, 1 заметка принята как ограничение"
     }
   ],
-  "questions": [],
+  "questions": [
+    {
+      "requestId": "q-5",
+      "workId": "add-greeting",
+      "state": "delivered",
+      "version": 1,
+      "severity": 7,
+      "answerableBy": "operator",
+      "impact": "user-visible",
+      "plain": "Меняет текст, который каждый посетитель видит первым.",
+      "answeredBy": "operator",
+      "answerBasis": {
+        "by": "operator",
+        "impact": "user-visible",
+        "at": "2026-11-19T09:20:00.000Z",
+        "line": "ответил оператор"
+      },
+      "title": "Обращаться ли к посетителю по имени?",
+      "createdAt": "2026-11-19T09:05:00.000Z"
+    }
+  ],
   "drift": {
     "workId": "add-greeting",
     "repositoryId": "app",
