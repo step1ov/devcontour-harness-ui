@@ -195,7 +195,7 @@ export interface DriftView {
 export interface BlockerView {
   /** Engine blocker code, e.g. `DEPENDENCY_INCOMPLETE`, `INPUT_REQUIRED`. */
   code: string;
-  /** Fixed plain text for the code; absent = the harness gave no explanation. */
+  /** Fixed plain text for the code (≤ 160); absent = the harness gave no explanation. */
   plain?: string;
   /** Who has to act; `null` = nobody, the work just waits its turn. */
   actor: Actor | null;
@@ -216,7 +216,7 @@ export interface TargetView {
   remote: {
     state: 'pushed' | 'not-pushed' | 'unknown' | (string & {});
     trackingRef?: string;
-    /** Why the state is unknown. Masked and clipped. */
+    /** Why the state is unknown. Masked and clipped (200). */
     reason?: string;
   };
 }
@@ -254,7 +254,7 @@ export interface WorkView {
       attempt: number;
       /** Report failure bucket (`failureBucketOf`), e.g. `environment`, `defect`. */
       bucket: string;
-      /** Plain sentence, e.g. "environment: the port is busy". Masked and clipped. */
+      /** Plain sentence, e.g. "environment: the port is busy". Masked and clipped (160). */
       plain: string;
       at?: string;
     };
@@ -264,7 +264,7 @@ export interface WorkView {
   model?: string;
   /** Why the work waits; empty = nothing blocks it. Replaces the draft `string[]`. */
   blockers: BlockerView[];
-  /** Work ids this work depends on, from the graph (P2, run plan strip). */
+  /** Work ids this work depends on, from the graph (P2, run plan strip); at most 50. */
   dependsOn?: string[];
   /** Accepted locally and, as far as the local tracking ref knows, on the remote (P2). */
   target?: TargetView;
@@ -345,11 +345,16 @@ export interface ActivityEntry {
   action: string;
   workId?: string;
   subject?: string;
-  /** Plain sentence. Masked and clipped. */
+  /** Plain sentence. Masked and clipped (200). */
   plain: string;
 }
 
-/** A decision taken during the run (P2), including temporary ones. */
+/**
+ * A decision taken during the run (P2), including temporary ones. Required
+ * combinations (design §3.9): `temporary` needs `revisit`, `technical-answer`
+ * needs `requestId` and `reason`, `accepted-limitation` needs `findingId`.
+ * Texts are masked and clipped: title and revisit 200, reason 400.
+ */
 export interface DecisionView {
   id: string;
   kind: 'accepted-limitation' | 'technical-answer' | 'continue' | (string & {});
@@ -424,7 +429,11 @@ export interface AttemptRow {
   stages: { stage: string; durationMs?: number; outcome?: 'passed' | 'failed' }[];
 }
 
-/** How one check was done (harness alpha.55). Never a bare "checked". */
+/**
+ * How one check was done (harness alpha.55). Never a bare "checked".
+ * `executed` needs `by` and `attempt`, `reused` needs `attempt`; a review row
+ * is never `executed`; a gate still running is `not-run` / `not-checked`.
+ */
 export interface VerificationRow {
   /** Gate id, or the review subject for review rows. */
   gate: string;

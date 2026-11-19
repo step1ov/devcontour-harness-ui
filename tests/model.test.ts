@@ -9,6 +9,8 @@ import {
   questionStatus,
   stageLabel,
   staticViewSource,
+  type WorkDetailView,
+  type WorkView,
 } from '../src/model/index.ts';
 
 const fixture = JSON.parse(
@@ -143,4 +145,93 @@ test('language: Russian locales map to ru, everything else to en; plurals', asyn
       'вопросов',
     ],
   );
+});
+
+test('language: ?lang= wins only for ru|en; otherwise the first browser locale', async () => {
+  const { pickLang } = await import('../src/model/i18n.ts');
+  assert.equal(pickLang('en', ['ru-RU']), 'en');
+  assert.equal(pickLang('RU', ['en-US']), 'ru');
+  assert.equal(pickLang('', ['ru-RU', 'en']), 'ru');
+  assert.equal(pickLang('xx', ['ru']), 'ru');
+  assert.equal(pickLang(null, ['', 'ru-RU']), 'ru');
+  assert.equal(pickLang(null, ['uk-UA', 'ru']), 'en');
+  assert.equal(pickLang(undefined, []), 'en');
+});
+
+test('Russian plurals: 0, 3, 4, 14, 101, 112, 1001', async () => {
+  const { ruPlural } = await import('../src/model/i18n.ts');
+  const f = ['решение', 'решения', 'решений'] as const;
+  assert.deepEqual(
+    [0, 3, 4, 14, 101, 112, 1001].map((n) => ruPlural(n, f)),
+    ['решений', 'решения', 'решения', 'решений', 'решение', 'решений', 'решение'],
+  );
+});
+
+test('the gate refuses a missing or non-count progress.byStage', () => {
+  const { byStage: _b, ...progress } = fixture.progress;
+  const missing = checkView({ ...fixture, progress });
+  assert.equal(missing.ok, false);
+  if (!missing.ok) assert.match(missing.message, /progress\.byStage/);
+  const bad = checkView({
+    ...fixture,
+    progress: { ...fixture.progress, byStage: { queued: '3' } },
+  });
+  assert.equal(bad.ok, false);
+  if (!bad.ok) assert.match(bad.message, /progress\.byStage\.queued/);
+});
+
+test('the work detail fixture matches the overview and covers every verification method', () => {
+  const detail = JSON.parse(
+    readFileSync(new URL('../fixtures/work.sample.json', import.meta.url), 'utf8'),
+  ) as WorkDetailView;
+  assert.equal(detail.viewVersion, fixture.viewVersion);
+  assert.equal(detail.generatedAt, fixture.generatedAt);
+  // The detail document carries the same WorkView as the overview, byte for byte.
+  const work = (fixture.works as WorkView[]).find((w) => w.id === detail.work.id);
+  assert.deepEqual(detail.work, work);
+  const rows = detail.verification ?? [];
+  assert.deepEqual([...new Set(rows.map((r) => r.how))].sort(), [
+    'executed',
+    'not-checked',
+    'read',
+    'reused',
+  ]);
+  assert.deepEqual([...new Set(rows.map((r) => r.kind))].sort(), ['gate', 'review']);
+  // Executed rows say who and in which attempt; a read review never claims execution.
+  for (const r of rows.filter((r) => r.how === 'executed')) {
+    assert.ok(r.by && r.attempt, `executed row ${r.gate} lacks by/attempt`);
+  }
+  for (const r of rows.filter((r) => r.kind === 'review')) assert.notEqual(r.how, 'executed');
+  assert.ok(detail.attempts.length <= 20 && rows.length <= 50);
+});
+
+test('the gate refuses zone-less, impossible or non-string instants', async () => {
+  const { isInstant } = await import('../src/model/compat.ts');
+  for (const ok of ['2026-11-19T12:00Z', '2026-11-19T12:00:00.000Z', '2024-02-29T23:59:59+03:00'])
+    assert.equal(isInstant(ok), true, ok);
+  for (const bad of [
+    '2026-02-30T12:00:00Z',
+    '2026-11-19T12:00:00',
+    '2026-11-19',
+    '2026-11-19T24:00:00Z',
+    'now',
+    1763553600000,
+  ])
+    assert.equal(isInstant(bad), false, String(bad));
+  const shifted = checkView({ ...fixture, generatedAt: '2026-02-30T12:00:00Z' });
+  assert.equal(shifted.ok, false);
+  const nullEscalation = checkView({ ...fixture, escalations: [null] });
+  assert.equal(nullEscalation.ok, false);
+  if (!nullEscalation.ok) assert.match(nullEscalation.message, /escalations\[0\]/);
+});
+
+test('the lead may answer only a technical question the policy opens to it', async () => {
+  const { leadMayAnswer, questionStatus } = await import('../src/model/format.ts');
+  const q = { state: 'awaiting-answer', answerableBy: 'operator-or-lead' } as const;
+  assert.equal(leadMayAnswer({ ...q, impact: 'technical' }), true);
+  for (const impact of ['user-visible', 'something-new', undefined])
+    assert.equal(leadMayAnswer({ ...q, impact }), false, String(impact));
+  assert.equal(leadMayAnswer({ answerableBy: 'operator', impact: 'technical' }), false);
+  assert.match(questionStatus({ ...q }).text, /Only you can answer/);
+  assert.match(questionStatus({ ...q, impact: 'technical' }).text, /You or the lead agent/);
 });

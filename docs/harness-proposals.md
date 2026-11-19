@@ -40,7 +40,7 @@ S — до 200, M — 200–600, L — больше 600.
     works: 500, reviews: 50, findingsPerSubject: 50, questions: 50,
     escalations: 50, drift: 50, roles: 100, reviewRules: 100, warnings: 20,
     detailAttempts: 20, buckets: 500, windowMs: 7 days, bytes: 262144,
-    activity: 50, decisions: 50, verificationPerWork: 50,
+    activity: 50, decisions: 50, verificationPerWork: 50, dependsOnPerWork: 50,
   };
   ```
 
@@ -70,6 +70,8 @@ export interface OperatorQuestionInput {
   createdAt: string;
   text?: string; // сырой текст; проекция маскирует, затем обрезает
   answeredBy?: 'operator' | 'lead' | 'host';
+  impact?: 'user-visible' | 'technical'; // P6.4; отсутствие — user-visible
+  plainText?: string; // P6.4: «что изменится»; проекция маскирует, затем обрезает до 200
 }
 export interface OperatorViewInput {
   now: number; // внедрённые часы
@@ -337,8 +339,15 @@ input-answer --actor operator --request-version V --kind K [--option O]
 показывает и ничего не перефразирует. Если поля нет, панель говорит «нет
 сведений», а не ноль и не «всё в порядке».
 
-Все поля ниже необязательны в view: производитель заполняет их, когда его
-harness уже даёт эти данные. Пункты P1 входят в harness
+Все поля ниже, кроме `blockers[]`, необязательны в view: производитель
+заполняет их, когда его harness уже даёт эти данные. `blockers[]` уже
+обязателен в черновике и меняет только форму записи (P6.2). Пределы строк —
+таблица в design.md §3.10.
+
+Тексты `plain` harness пишет по фиксированным шаблонам на языке опции
+проекции `lang: 'ru' | 'en'` (по умолчанию `en`; `harness view --lang`,
+`serve-view --lang`, `GET /api/view?lang=`). Детали из внешнего вывода не
+переводятся. Это открытое решение design.md §11. Пункты P1 входят в harness
 **0.1.0-alpha.55**. Пункты P2 — в следующие релизы, номер пока не назначен.
 
 ### P6.1. Последний сбой попытки (P1, alpha.55, S)
@@ -372,7 +381,9 @@ harness уже даёт эти данные. Пункты P1 входят в har
 - **Поле view.** `WorkDetailView.verification[] {gate, kind: gate|review,
 result: passed|failed|reused|skipped|not-run,
 how: executed|reused|read|not-checked, by?, attempt?, at?}`. Предел — 50
-  строк на работу.
+  строк на работу. `executed` требует `by` и `attempt`, `reused` —
+  `attempt`; строка ревью никогда не `executed`; идущий gate — `not-run` /
+  `not-checked` до завершения.
 
 ### P6.4. Влияние вопроса и технические ответы ведущего (P1, alpha.55, M)
 
@@ -391,7 +402,9 @@ how: executed|reused|read|not-checked, by?, attempt?, at?}`. Предел — 50
 - **Поля view.** `questions[].impact?`, `questions[].plain?` (маскирован,
   до 200 символов), `settings.thresholds.leadAnswersTechnical?`. Когда флаг
   включён, `answerableBy` для технических вопросов становится
-  `operator-or-lead`. Отсутствующий `impact` читается как `user-visible`.
+  `operator-or-lead`. Отсутствующий `impact` читается как `user-visible`, и
+  `impact` сильнее правила по severity: не-`technical` вопрос остаётся за
+  оператором при любой severity.
 
 ### P6.5. Skill запускает панель (P1, alpha.55, S)
 
@@ -404,7 +417,8 @@ how: executed|reused|read|not-checked, by?, attempt?, at?}`. Предел — 50
 
 - **Что.** Кто что делал: ведущий ↔ harness, writer, reviewer,
   контроллер, оператор.
-- **Источник.** Журнал событий, новые сверху, окно 24 ч.
+- **Источник.** Журнал событий, новые сверху, окно — окно истории (24 ч по
+  умолчанию, 7 дней с `--window 7d`).
 - **Поле view.** `activity[] {at, actor, action, workId?, subject?, plain}`,
   предел 50. Открытое решение: остаётся ли лента в обзорном документе или
   переезжает в свой маршрут документа.
@@ -414,7 +428,8 @@ how: executed|reused|read|not-checked, by?, attempt?, at?}`. Предел — 50
 - **Что.** Сколько обычно занимает этап, по уже завершённым этапам этого
   состояния.
 - **Поле view.** `works[].stage.typical {p50Ms, p90Ms, samples}`. Поля нет,
-  если образцов меньше 5. Показывается как диапазон и никогда как
+  если образцов меньше минимума (предложено 5; открытое решение design.md
+  §11). Показывается как диапазон и никогда как
   обещание.
 
 ### P6.8. Принято локально / в удалённом репозитории (P2, S)
@@ -443,7 +458,9 @@ remote: {state: pushed|not-pushed|unknown, trackingRef?, reason?}}`.
 - **Поле view.** `decisions[] {id, kind: accepted-limitation|technical-answer|continue,
 by: lead|operator, at, workId?, subject?, findingId?, requestId?,
 temporary, revisit?, title?, reason?}`, предел 50. Тексты маскируются и
-  обрезаются.
+  обрезаются. Обязательные сочетания: `temporary` требует `revisit`,
+  `technical-answer` — `requestId` и `reason`, `accepted-limitation` —
+  `findingId` (design.md §3.9).
 
 ### P6.11. Объём приёмки (P2, S)
 

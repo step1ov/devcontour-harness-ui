@@ -57,17 +57,34 @@ export interface QuestionStatus {
  * What a question's lifecycle state means for the operator. Only
  * `awaiting-answer` asks for an answer; the other states name who acts.
  */
+/** Question states this build knows; any other state makes the header's count unknown. */
+export const KNOWN_QUESTION_STATES: ReadonlySet<string> = new Set([
+  'awaiting-answer',
+  'answered-not-applied',
+  'applied-awaiting-claim',
+  'delivered',
+  'carry-stale',
+]);
+
+/**
+ * Whether the lead may answer (design §3.4): `answerableBy: operator-or-lead`
+ * and `impact: technical`. An absent, unknown or `user-visible` impact reads
+ * as user-visible, which only the operator answers, whatever the severity.
+ */
+export function leadMayAnswer(q: Pick<OperatorQuestion, 'answerableBy' | 'impact'>): boolean {
+  return q.answerableBy === 'operator-or-lead' && q.impact === 'technical';
+}
+
 export function questionStatus(
-  q: Pick<OperatorQuestion, 'state' | 'answerableBy'>,
+  q: Pick<OperatorQuestion, 'state' | 'answerableBy' | 'impact'>,
 ): QuestionStatus {
   switch (q.state) {
     case 'awaiting-answer':
       return {
         needsAnswer: true,
-        text:
-          q.answerableBy === 'operator-or-lead'
-            ? 'You or the lead agent can answer this question.'
-            : 'Only you can answer this question.',
+        text: leadMayAnswer(q)
+          ? 'You or the lead agent can answer this question.'
+          : 'Only you can answer this question.',
       };
     case 'answered-not-applied':
       return {

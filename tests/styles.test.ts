@@ -13,7 +13,14 @@ test('custom properties are declared only in :root rules', () => {
     const selector = m[1]!.trim();
     if (/--hui-[\w-]+\s*:/.test(m[2]!)) {
       declared++;
-      assert.match(selector, /^:where\(:root/, `declares --hui-* outside :root: ${selector}`);
+      // Every selector in the list must be :root itself (optionally with the
+      // theme attribute), not `:where(:root) .x` or `:where(:root, .x)`.
+      for (const part of selector.split(','))
+        assert.match(
+          part.trim(),
+          /^:where\(:root(?::not\(\[data-theme='light'\]\)|\[data-theme='dark'\])?\)$/,
+          `declares --hui-* outside :root: ${selector}`,
+        );
     }
   }
   assert.ok(declared >= 2);

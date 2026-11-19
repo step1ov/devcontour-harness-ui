@@ -4,13 +4,16 @@
 import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Overview } from '../components/Overview.tsx';
-import { httpViewSource, langOf, type ViewCheck } from '../model/index.ts';
+import { httpViewSource, pickLang, type ViewCheck } from '../model/index.ts';
 import '../components/styles.css';
 import './app.css';
 
 const POLL_MS = 5000;
-// `?lang=ru|en` wins; otherwise the browser locale (Russian first-class).
-const lang = langOf(new URLSearchParams(window.location.search).get('lang') ?? navigator.language);
+// `?lang=ru|en` wins; an empty or unknown value falls back to the browser locale.
+const lang = pickLang(new URLSearchParams(window.location.search).get('lang'), [
+  ...(navigator.languages ?? []),
+  navigator.language,
+]);
 const source = httpViewSource(new URL('./', window.location.href).toString());
 
 function App() {

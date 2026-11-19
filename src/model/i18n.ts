@@ -11,6 +11,17 @@ export function langOf(locale: string | undefined | null): Lang {
   return typeof locale === 'string' && /^ru(?:[-_.]|$)/i.test(locale.trim()) ? 'ru' : 'en';
 }
 
+/**
+ * Panel language from the address parameter and the browser locales: an
+ * explicit `ru` or `en` parameter wins; an empty or unknown parameter falls
+ * back to the first browser locale, never silently to English.
+ */
+export function pickLang(param: string | null | undefined, locales: readonly string[]): Lang {
+  const p = typeof param === 'string' ? param.trim().toLowerCase() : '';
+  if (p === 'ru' || p === 'en') return p;
+  return langOf(locales.find((l) => typeof l === 'string' && l.trim() !== ''));
+}
+
 /** Russian plural form: 1 вопрос, 2 вопроса, 5 вопросов. */
 export function ruPlural(n: number, forms: readonly [string, string, string]): string {
   const m10 = n % 10;
@@ -29,6 +40,10 @@ export interface HeaderCounts {
   questions: number;
   /** Escalations whose actor is the operator. */
   decisions: number;
+  /** `progress.waitingOperator`: works waiting for the operator, over all works. */
+  waitingOperator: number;
+  /** The questions or escalations list was clipped (`truncated`), so the counts are a floor. */
+  incomplete: boolean;
 }
 
 /** The Overview header sentence: «Сейчас… От вас: …». */
@@ -48,10 +63,17 @@ export function headerSentence(c: HeaderCounts, lang: Lang): string {
       asks.push(
         `принять ${c.decisions} ${ruPlural(c.decisions, ['решение', 'решения', 'решений'])}`,
       );
+    let from: string;
+    if (asks.length)
+      from = asks.join(' и ') + (c.incomplete ? ' и, возможно, ещё (список обрезан)' : '');
+    else if (c.waitingOperator)
+      from = `${c.waitingOperator} ${ruPlural(c.waitingOperator, ['работа ждёт', 'работы ждут', 'работ ждут'])} вашего действия`;
+    else if (c.incomplete) from = 'неизвестно — список обрезан';
+    else from = 'ничего не нужно';
     return (
       (now.length ? `Сейчас: ${now.join(', ')}.` : 'Сейчас ничего не выполняется.') +
       ' От вас: ' +
-      (asks.length ? asks.join(' и ') : 'ничего не нужно') +
+      from +
       '.'
     );
   }
@@ -63,28 +85,68 @@ export function headerSentence(c: HeaderCounts, lang: Lang): string {
   const asks: string[] = [];
   if (c.questions) asks.push(`answer ${c.questions} question${c.questions === 1 ? '' : 's'}`);
   if (c.decisions) asks.push(`take ${c.decisions} decision${c.decisions === 1 ? '' : 's'}`);
+  let from: string;
+  if (asks.length)
+    from = asks.join(' and ') + (c.incomplete ? ' and possibly more (the list is clipped)' : '');
+  else if (c.waitingOperator)
+    from = `${c.waitingOperator} work order${c.waitingOperator === 1 ? ' waits' : 's wait'} for your action`;
+  else if (c.incomplete) from = 'unknown — the list is clipped';
+  else from = 'nothing is needed';
   return (
     (now.length ? `Now: ${now.join(', ')}.` : 'Nothing is running now.') +
     ' From you: ' +
-    (asks.length ? asks.join(' and ') : 'nothing is needed') +
+    from +
     '.'
   );
 }
 
-/** `HH:MM` of an ISO instant in the given time zone (the viewer's by default). */
-export function formatClock(iso: string, timeZone?: string): string {
-  return new Intl.DateTimeFormat('en-GB', {
-    hour: '2-digit',
-    minute: '2-digit',
-    hourCycle: 'h23',
-    ...(timeZone ? { timeZone } : {}),
-  }).format(new Date(iso));
+function parts(ms: number, timeZone?: string): Record<string, string> | undefined {
+  try {
+    const out: Record<string, string> = {};
+    for (const p of new Intl.DateTimeFormat('en-GB', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+      ...(timeZone ? { timeZone } : {}),
+    }).formatToParts(new Date(ms)))
+      out[p.type] = p.value;
+    return out;
+  } catch {
+    // Invalid instant or time zone: the caller shows "unknown", never a guess.
+    return undefined;
+  }
+}
+
+/**
+ * `HH:MM` of an ISO instant in the given time zone (the viewer's by default);
+ * `DD.MM.YYYY HH:MM` when `nowMs` falls on another day, so that stale data
+ * never reads as fresh. `undefined` for an invalid instant or time zone.
+ */
+export function formatClock(iso: string, timeZone?: string, nowMs?: number): string | undefined {
+  const ms = Date.parse(iso);
+  if (Number.isNaN(ms)) return undefined;
+  const at = parts(ms, timeZone);
+  if (!at) return undefined;
+  const time = `${at.hour}:${at.minute}`;
+  if (nowMs === undefined || !Number.isFinite(nowMs)) return time;
+  const today = parts(nowMs, timeZone);
+  const sameDay =
+    today && today.year === at.year && today.month === at.month && today.day === at.day;
+  return sameDay ? time : `${at.day}.${at.month}.${at.year} ${time}`;
 }
 
 /** Footer: «Данные harness на HH:MM; панель ничего не меняет». */
-export function footerSentence(generatedAt: string, lang: Lang, timeZone?: string): string {
-  const at = formatClock(generatedAt, timeZone);
-  return lang === 'ru'
-    ? `Данные harness на ${at}; панель ничего не меняет.`
-    : `Harness data as of ${at}; the panel changes nothing.`;
+export function footerSentence(
+  generatedAt: string,
+  lang: Lang,
+  timeZone?: string,
+  nowMs?: number,
+): string {
+  const at = formatClock(generatedAt, timeZone, nowMs);
+  if (lang === 'ru')
+    return `Данные harness на ${at ?? 'неизвестное время'}; панель ничего не меняет.`;
+  return `Harness data as of ${at ?? 'an unknown time'}; the panel changes nothing.`;
 }

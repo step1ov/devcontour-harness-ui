@@ -60,7 +60,7 @@
       "maxNeutralFailures": 3,
       "reviewRoundCap": 6,
       "reviewEscalationRounds": 3,
-      "leadAnswersTechnical": false
+      "leadAnswersTechnical": true
     },
     "budgets": [
       {
@@ -276,9 +276,9 @@
       },
       "open": {
         "blocking": 0,
-        "notes": 1
+        "notes": 0
       },
-      "accepted": 0,
+      "accepted": 1,
       "reviewer": {
         "runtime": "codex"
       },
@@ -300,11 +300,16 @@
         {
           "id": "F2",
           "severity": "note",
-          "status": "open",
-          "rounds": 2
+          "status": "accepted-limitation",
+          "rounds": 2,
+          "disposition": {
+            "decision": "accepted-limitation",
+            "by": "lead",
+            "round": 2
+          }
         }
       ],
-      "line": "plan approved after 2 rounds, 1 open note"
+      "line": "plan approved after 2 rounds, 1 note accepted as a limitation"
     }
   ],
   "questions": [
@@ -319,6 +324,19 @@
       "createdAt": "2026-11-19T11:40:00.000Z",
       "impact": "user-visible",
       "plain": "Changes how the exported file opens in spreadsheet programs."
+    },
+    {
+      "requestId": "q-12",
+      "workId": "locale-format",
+      "state": "delivered",
+      "version": 1,
+      "severity": 6,
+      "answerableBy": "operator-or-lead",
+      "impact": "technical",
+      "plain": "Nothing changes for the user: dates look the same.",
+      "answeredBy": "lead",
+      "title": "Which date library should the formatter use?",
+      "createdAt": "2026-11-19T11:25:00.000Z"
     }
   ],
   "escalations": [],
@@ -428,10 +446,22 @@
       "at": "2026-11-19T11:20:00.000Z",
       "actor": "lead",
       "action": "run.start",
-      "plain": "the lead started the run of graph g1"
+      "plain": "the lead started the run of graph g1",
+      "subject": "g1"
     }
   ],
   "decisions": [
+    {
+      "id": "d-2",
+      "kind": "technical-answer",
+      "by": "lead",
+      "at": "2026-11-19T11:30:00.000Z",
+      "workId": "locale-format",
+      "requestId": "q-12",
+      "temporary": false,
+      "title": "Lead chose the date library already in use",
+      "reason": "technical: no change for the user"
+    },
     {
       "id": "d-1",
       "kind": "accepted-limitation",
@@ -441,7 +471,8 @@
       "findingId": "F2",
       "temporary": true,
       "revisit": "before the release",
-      "title": "Plan note F2 accepted for now"
+      "title": "Plan note F2 accepted for now",
+      "reason": "a wording note in the plan; no change for the user"
     }
   ]
 }

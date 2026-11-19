@@ -5,8 +5,10 @@ export * from './view.ts';
 export { checkView, KNOWN_VIEW_REVISION, type ViewCheck } from './compat.ts';
 export { httpViewSource, staticViewSource, type ViewSource } from './source.ts';
 export {
+  KNOWN_QUESTION_STATES,
   SLOT_STAGES,
   formatElapsed,
+  leadMayAnswer,
   formatUsd,
   questionStatus,
   stageLabel,
@@ -17,6 +19,7 @@ export {
   formatClock,
   headerSentence,
   langOf,
+  pickLang,
   ruPlural,
   type HeaderCounts,
   type Lang,

@@ -29,6 +29,31 @@ const isBounded = (v: unknown) =>
   Number.isFinite(v.value) &&
   typeof v.bound === 'string';
 
+/**
+ * An ISO 8601 instant with an explicit zone (`Z` or `±HH:MM`) and a real
+ * calendar date: `2026-02-30T…` or a zone-less local time is refused, so the
+ * footer never shows a shifted or reader-dependent time.
+ */
+export function isInstant(v: unknown): boolean {
+  if (typeof v !== 'string') return false;
+  const m =
+    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,9})?)?(?:Z|[+-]\d{2}:\d{2})$/.exec(
+      v,
+    );
+  if (!m) return false;
+  const [y, mo, d, h, mi, s] = m.slice(1).map((x) => Number(x ?? 0));
+  const day = new Date(Date.UTC(y!, mo! - 1, d!));
+  return (
+    day.getUTCFullYear() === y &&
+    day.getUTCMonth() === mo! - 1 &&
+    day.getUTCDate() === d &&
+    h! < 24 &&
+    mi! < 60 &&
+    s! < 60 &&
+    !Number.isNaN(Date.parse(v))
+  );
+}
+
 /** Path -> predicate for every field the components dereference. */
 function problems(v: Obj): string[] {
   const out: string[] = [];
@@ -40,10 +65,7 @@ function problems(v: Obj): string[] {
     return isObject(o) ? o : undefined;
   };
   need(isCount(v.viewRevision), 'viewRevision');
-  need(
-    typeof v.generatedAt === 'string' && !Number.isNaN(Date.parse(v.generatedAt)),
-    'generatedAt',
-  );
+  need(isInstant(v.generatedAt), 'generatedAt');
   const source = obj(v.source, 'source');
   if (source) need(typeof source.token === 'string', 'source.token');
   const settings = obj(v.settings, 'settings');
@@ -52,6 +74,9 @@ function problems(v: Obj): string[] {
   if (progress) {
     for (const k of ['total', 'done', 'running', 'waitingOperator'])
       need(isCount(progress[k]), `progress.${k}`);
+    const byStage = obj(progress.byStage, 'progress.byStage');
+    if (byStage)
+      for (const [k, n] of Object.entries(byStage)) need(isCount(n), `progress.byStage.${k}`);
     const queue = obj(progress.queue, 'progress.queue');
     if (queue) need(typeof queue.paused === 'boolean', 'progress.queue.paused');
   }
@@ -80,9 +105,15 @@ function problems(v: Obj): string[] {
       if (!isObject(w)) return need(false, p);
       need(typeof w.id === 'string', `${p}.id`);
       need(isObject(w.stage) && typeof w.stage.name === 'string', `${p}.stage.name`);
+      if (isObject(w.stage) && w.stage.since !== undefined)
+        need(isInstant(w.stage.since), `${p}.stage.since`);
       const a = w.attempts;
       need(isObject(a) && isCount(a.used) && isCount(a.max) && isCount(a.left), `${p}.attempts`);
     });
+  if (Array.isArray(v.escalations))
+    v.escalations.forEach((e, i) =>
+      need(isObject(e) && typeof e.actor === 'string', `escalations[${i}].actor`),
+    );
   if (Array.isArray(v.questions))
     v.questions.forEach((q, i) => {
       const p = `questions[${i}]`;

@@ -5,6 +5,7 @@
 
 import type { OperatorView, ViewHealth } from '../model/view.ts';
 import {
+  KNOWN_QUESTION_STATES,
   SLOT_STAGES,
   formatElapsed,
   formatUsd,
@@ -30,9 +31,12 @@ export interface OverviewProps {
 
 const severityOrder = ['exceeded', 'undetermined', 'within'];
 
-/** The most severe budget row; `undefined` when budgeting is off. */
+/**
+ * The most severe budget row, whatever `budgeting` says: a row the producer
+ * sent is never hidden. `undefined` only when there are no rows.
+ */
 function worstBudget(health: ViewHealth) {
-  if (health.budgeting !== 'on' || !health.budgets.length) return undefined;
+  if (!health.budgets.length) return undefined;
   const rank = (s: string) => {
     const i = severityOrder.indexOf(s);
     return i < 0 ? 1 : i; // unknown state reads as undetermined
@@ -57,6 +61,12 @@ export function Overview({ view, now, onOpenWork, lang = 'en', timeZone }: Overv
       paused: progress.queue.paused,
       questions: asking.length,
       decisions: view.escalations.filter((e) => e.actor === 'operator').length,
+      waitingOperator: progress.waitingOperator,
+      // A clipped list or a question state this build does not know makes the
+      // count a floor: the sentence then never says "nothing is needed".
+      incomplete:
+        Boolean(view.truncated?.questions || view.truncated?.escalations) ||
+        view.questions.some((q) => !KNOWN_QUESTION_STATES.has(String(q.state))),
     },
     lang,
   );
@@ -169,7 +179,10 @@ export function Overview({ view, now, onOpenWork, lang = 'en', timeZone }: Overv
               {budget.id ? ` ${budget.id}` : ''}: {budget.state})
             </dd>
           ) : (
-            <dd>no budget; spent {formatUsd(health.spentTotalUsd)}</dd>
+            <dd data-testid="no-budget">
+              {health.budgeting === 'off' ? 'no budget' : 'budget unknown'}; spent{' '}
+              {formatUsd(health.spentTotalUsd)}
+            </dd>
           )}
         </div>
         <div>
@@ -191,7 +204,7 @@ export function Overview({ view, now, onOpenWork, lang = 'en', timeZone }: Overv
         </div>
       </dl>
       <footer className="hui-muted hui-footer" data-testid="footer" lang={lang}>
-        {footerSentence(view.generatedAt, lang, timeZone)}
+        {footerSentence(view.generatedAt, lang, timeZone, now)}
       </footer>
     </section>
   );
