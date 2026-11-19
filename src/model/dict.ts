@@ -50,6 +50,7 @@ export type GlossaryId =
   | 'wallTime'
   | 'attemptTime'
   | 'loadPeak'
+  | 'windowSpend'
   | 'typical';
 
 const ruGlossary: Record<GlossaryId, { term: string; meaning: string }> = {
@@ -170,6 +171,11 @@ const ruGlossary: Record<GlossaryId, { term: string; meaning: string }> = {
     term: 'пик нагрузки',
     meaning:
       'Наибольшее число попыток, которые шли одновременно в окне. Сравнивается с числом мест в настройках.',
+  },
+  windowSpend: {
+    term: 'расход за окно',
+    meaning:
+      'Стоимость вызовов агентов, закончившихся в окне, по правилам отчёта harness. «≥» — часть цен неизвестна, и настоящая сумма может быть больше; «неизвестно» — цена ни одного вызова не известна.',
   },
   typical: {
     term: 'обычное время этапа',
@@ -296,6 +302,11 @@ const enGlossary: Record<GlossaryId, { term: string; meaning: string }> = {
     term: 'peak load',
     meaning:
       'The most attempts running at the same time in the window, compared with the slots in the settings.',
+  },
+  windowSpend: {
+    term: 'spend in the window',
+    meaning:
+      'The cost of agent calls that finished in the window, by the harness report rules. "≥" means some prices are unknown and the real sum may be higher; "unknown" means no call in it has a known price.',
   },
   typical: {
     term: 'usual stage time',

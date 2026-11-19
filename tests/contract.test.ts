@@ -132,7 +132,13 @@ test('fixture window totals follow the harness rules: series sums, buckets add u
     assert.equal(t.gatesReused, sum(h.gatesReused));
     assert.equal(t.loadPeak, Math.max(0, ...h.load));
     assert.ok(Math.abs(t.spendUsd.value - sum(h.spendUsd)) < 1e-9);
-    assert.equal(t.spendUsd.bound, h.spendBound);
+    // The totals bound is finer: `unknown` (no known cost in the window) is
+    // `lower` in spendBound; an exact window is exact in both.
+    assert.ok(
+      t.spendUsd.bound === h.spendBound ||
+        (t.spendUsd.bound === 'unknown' && h.spendBound === 'lower'),
+      `${t.spendUsd.bound} vs ${h.spendBound}`,
+    );
     assert.ok(t.wallMs <= t.attemptMs, 'parallel attempts add up only in attemptMs');
     assert.ok(t.wallMs <= instantMs(h.to) - instantMs(h.from));
   }
@@ -1065,7 +1071,11 @@ test(
         assert.notEqual(second.generatedAt, view.generatedAt, 'another projection clock');
         assert.equal(second.source.token, view.source.token);
         assert.equal(digestOf(second), digestOf(view));
-        assert.equal(digestOf(view), 'harness:' + view.source.token);
+        const { createHash } = await import('node:crypto');
+        assert.equal(
+          digestOf(view),
+          'harness:' + createHash('sha256').update(view.source.token).digest('hex'),
+        );
       }
     } finally {
       if (dir.startsWith(join(tmpdir(), 'hui-live-harness-'))) rmSync(dir, { recursive: true });

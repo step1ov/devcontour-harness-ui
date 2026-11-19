@@ -743,6 +743,10 @@ test('answer basis: who answered and why, RU first; alpha.55 names only who answ
   assert.doesNotMatch(old, /кто и почему ответил|технический вопрос\)/);
   const oldOverview = html(<Overview view={asAlpha55(view)} lang="ru" timeZone={TZ} />);
   assert.doesNotMatch(oldOverview, /кто и почему ответил/);
+  assert.match(
+    text(oldOverview),
+    /q-12: Ответ передан исполнителю; ничего делать не нужно\.ответил: ведущий/,
+  );
   // Neither basis nor answeredBy: nothing is said about who answered.
   const bare = asAlpha55(running);
   for (const q of bare.questions) delete q.answeredBy;
@@ -794,13 +798,14 @@ test('history totals (alpha.56): every number from the harness, each term explai
   assert.match(row('attempt-ms'), /Сумма времени попыток9 ч 10 мин/);
   assert.match(row('peak'), /Пик нагрузки2 одновременно при 2 местах/);
   // Each row has its «что это значит»: attempt, failure reason, gates, review
-  // round, lower bound (the spend is a lower bound), wall and attempt time, peak.
-  assert.equal(panel.match(/<details class="hui-term">/g)?.length, 8);
+  // round, window spend and its lower bound, wall and attempt time, peak.
+  assert.equal(panel.match(/<details class="hui-term">/g)?.length, 9);
   for (const term of [
     'попытка',
     'причина неудачи',
     'проверки (gates)',
     'раунд ревью',
+    'расход за окно',
     'нижняя граница (≥)',
     'время, когда шли попытки',
     'сумма времени попыток',
@@ -837,9 +842,29 @@ test('history totals drive the chart summaries; alpha.55 says it has none instea
   assert.match(ru, /За окно пройдено: 90, не пройдено: 4; засчитано по прежнему доказательству: 5/);
   assert.match(ru, /Наибольшая нагрузка за окно: 3 одновременно/);
   assert.match(ru, /по причинам: окружение — 2, без группы — 1/);
-  // An unknown spend is "unknown", with its disclosure, never $0.00.
+  // An unknown spend is "unknown", with its disclosures, never $0.00 — in the
+  // totals and in the cumulative chart, though spendBound says only "lower"
+  // (what the harness sends when no call of the window has a known cost).
+  assert.equal(v.history.spendBound, 'lower');
   assert.match(ru, /Расход за окнонеизвестно/);
-  assert.doesNotMatch(ru, /Расход за окно\$0\.00/);
+  assert.match(ru, /К концу окна потрачено неизвестно из бюджета \$40\.00\./);
+  assert.doesNotMatch(ru, /Расход за окно\$0\.00|потрачено ≥/);
+  const spendRow = (doc: OperatorView) => {
+    const m = html(<History view={doc} lang="ru" />);
+    const at = m.indexOf('data-testid="total-spend"');
+    return m.slice(at, m.indexOf('</dd>', at));
+  };
+  const terms = (row: string) =>
+    [...row.matchAll(/<span class="hui-sr"> — ([^<]+)<\/span>/g)].map((x) => x[1]);
+  assert.deepEqual(terms(spendRow(v)), ['расход за окно', 'неизвестно, не проверено']);
+  assert.deepEqual(terms(spendRow(view)), ['расход за окно', 'нижняя граница (≥)']);
+  const exact = structuredClone(view);
+  exact.history.totals!.spendUsd = { value: 6.3, bound: 'exact' };
+  assert.deepEqual(terms(spendRow(exact)), ['расход за окно']);
+  const value = (row: string) => /<span class="hui-total-value">([^<]*)<\/span>/.exec(row)?.[1];
+  assert.equal(value(spendRow(exact)), '$6.30');
+  assert.equal(value(spendRow(view)), '≥ $6.30');
+  assert.equal(value(spendRow(v)), 'неизвестно');
   // alpha.55: no totals panel numbers, a plain sentence; summaries add up the series.
   const old = html(<History view={asAlpha55(view)} lang="ru" timeZone={TZ} />);
   assert.match(old, /data-testid="history-totals-missing"/);
@@ -869,6 +894,9 @@ test('usual stage time: an honest range only when the harness sent one', () => {
   assert.equal(typical(30_000, 100_000, 'en'), 'usually up to 2 min');
   assert.equal(typical(2_700_000, 4_200_000), 'обычно 45 мин–1 ч 10 мин');
   assert.equal(typical(3_900_000, 7_800_000, 'en'), 'usually 1h 05m–2h 10m');
+  // Hours: not whole minutes round outward too (65.5 min down, 130.2 min up).
+  assert.equal(typical(3_930_000, 7_810_000), 'обычно 1 ч 05 мин–2 ч 11 мин');
+  assert.equal(typical(3_630_000, 3_650_000), 'обычно 1 ч 00 мин–1 ч 01 мин');
   // Inconsistent or missing: nothing, never a made-up number.
   assert.equal(typical(720_000, 300_000), undefined);
   assert.equal(typical(Number.NaN, 300_000), undefined);

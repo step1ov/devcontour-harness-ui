@@ -57,10 +57,16 @@ export function perHour(h: Pick<ViewHistory, 'bucketMs'>, values: number[]) {
  */
 export function cumulativeSpend(h: ViewHistory) {
   const openingKnown = h.spendOpeningUsd.bound === 'exact' || h.spendOpeningUsd.bound === 'lower';
-  const windowKnown = h.spendBound === 'exact' || h.spendBound === 'lower';
+  // The window totals (revision 1) carry the finer bound: `unknown` when no
+  // call of the window has a known cost, which `spendBound` reads as `lower`.
+  // The more cautious of the two wins; an unrecognized bound reads as unknown.
+  const rank = (b: string) => (b === 'exact' ? 0 : b === 'lower' ? 1 : 2);
+  const worst = Math.max(rank(h.spendBound), h.totals ? rank(h.totals.spendUsd.bound) : 0);
+  const windowBound = (['exact', 'lower', 'unknown'] as const)[worst]!;
+  const windowKnown = windowBound === 'exact' || windowBound === 'lower';
   let sum = openingKnown ? h.spendOpeningUsd.value : 0;
   const values = [sum, ...h.spendUsd.map((x) => (sum += x))];
-  const lower = h.spendBound !== 'exact' || h.spendOpeningUsd.bound !== 'exact';
+  const lower = windowBound !== 'exact' || h.spendOpeningUsd.bound !== 'exact';
   const bound: 'exact' | 'lower' | 'unknown' = !windowKnown ? 'unknown' : lower ? 'lower' : 'exact';
   return { values, openingKnown, lower, end: { value: sum, bound } };
 }
@@ -255,18 +261,19 @@ export function HistoryTotalsPanel({
     );
   const buckets = Object.entries(totals.failuresByBucket).filter(([, n]) => n > 0);
   const r = totals.reviewRounds;
-  const spendTerm: GlossaryId | undefined =
+  // The spend row explains the window spend, and its bound when not exact.
+  const boundTerm: GlossaryId | undefined =
     totals.spendUsd.bound === 'exact'
       ? undefined
       : totals.spendUsd.bound === 'lower'
         ? 'lowerBound'
         : 'unknown';
-  const rows: [string, string, GlossaryId | undefined, string][] = [
-    ['started', v.tStarted, 'attempt', String(totals.attemptsStarted)],
+  const rows: [string, string, GlossaryId[], string][] = [
+    ['started', v.tStarted, ['attempt'], String(totals.attemptsStarted)],
     [
       'failed',
       v.tFailed,
-      'failureBucket',
+      ['failureBucket'],
       String(totals.attemptsFailed) +
         (buckets.length
           ? ` (${v.tByBucket(buckets.map(([b, n]) => v.tBucket(label(t.bucket, b), n)).join(', '))})`
@@ -275,25 +282,32 @@ export function HistoryTotalsPanel({
     [
       'gates',
       v.tGates,
-      'gates',
+      ['gates'],
       v.tGatesValue(totals.gatesPassed, totals.gatesFailed, totals.gatesReused),
     ],
-    ['rounds', v.tRounds, 'reviewRound', v.tRoundsValue(r.plan, r.contract, r.code, r.attempt)],
-    ['spend', v.tSpend, spendTerm, formatUsd(totals.spendUsd, lang)],
-    ['wall', v.tWall, 'wallTime', formatDuration(totals.wallMs, lang)],
-    ['attempt-ms', v.tAttemptMs, 'attemptTime', formatDuration(totals.attemptMs, lang)],
-    ['peak', v.tPeak, 'loadPeak', v.tPeakValue(totals.loadPeak, slots)],
+    ['rounds', v.tRounds, ['reviewRound'], v.tRoundsValue(r.plan, r.contract, r.code, r.attempt)],
+    [
+      'spend',
+      v.tSpend,
+      boundTerm ? ['windowSpend', boundTerm] : ['windowSpend'],
+      formatUsd(totals.spendUsd, lang),
+    ],
+    ['wall', v.tWall, ['wallTime'], formatDuration(totals.wallMs, lang)],
+    ['attempt-ms', v.tAttemptMs, ['attemptTime'], formatDuration(totals.attemptMs, lang)],
+    ['peak', v.tPeak, ['loadPeak'], v.tPeakValue(totals.loadPeak, slots)],
   ];
   return (
     <div className="hui-panel" data-testid="history-totals">
       <Heading t={t}>{v.totals}</Heading>
       <dl className="hui-grid hui-totals">
-        {rows.map(([id, name, term, value]) => (
+        {rows.map(([id, name, terms, value]) => (
           <div key={id} data-testid={`total-${id}`}>
             <dt>{name}</dt>
             <dd>
               <span className="hui-total-value">{value}</span>
-              {term ? <Term id={term} t={t} /> : null}
+              {terms.map((term) => (
+                <Term key={term} id={term} t={t} />
+              ))}
             </dd>
           </div>
         ))}

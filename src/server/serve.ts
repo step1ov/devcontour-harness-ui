@@ -253,7 +253,7 @@ export const CONTENT_TOKEN_REVISION = 1;
  * content it shows.
  *
  * From view revision 1 (harness alpha.56) the harness `source.token` is the
- * digest: it hashes the content without the projection clock, and it also
+ * identity (`harness:` and the SHA-256 of the token string): it hashes the content without the projection clock, and it also
  * changes with what the harness knows depends on the clock (leases,
  * liveness, records leaving the window). The watch key already separates
  * language and work, the only request options the token depends on.
@@ -269,7 +269,9 @@ export const CONTENT_TOKEN_REVISION = 1;
  */
 export function digestOf(view: unknown): string {
   const token = contentToken(view);
-  return token !== undefined ? 'harness:' + token : localDigestOf(view);
+  // Hashed, so any token string (spaces, Cyrillic, a newline) gives a
+  // header-safe identity that SSE and `x-hui-digest` carry byte for byte.
+  return token !== undefined ? 'harness:' + hashOf(token) : localDigestOf(view);
 }
 
 /** The harness token when the view revision promises it is content-only; otherwise `undefined`. */
