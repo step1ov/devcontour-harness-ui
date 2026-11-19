@@ -1,8 +1,8 @@
 # devcontour-harness-ui: дизайн
 
 Статус: черновик для `0.1.0-alpha.0`. Относится к представлению версии 1.
-Версия 1 фиксируется, когда предложение P1 попадает в harness (срез S1); до
-этого черновик может меняться без новой мажорной версии.
+Версия 1 зафиксирована в harness `0.1.0-alpha.55` (P1): поля меняются только
+добавлением (`viewRevision`) или новой мажорной версией (§4).
 
 ## 1. Цели
 
@@ -105,14 +105,17 @@ Zod-договор `operatorViewSchema` и `workDetailViewSchema` в
 - `tests/contract/harness/*.schema.json` — дословные копии JSON Schema
   harness; `tests/contract.test.ts` проверяет по ним обе фикстуры и
   настоящий документ `harness view`, а также что каждый объект типов
-  перечисляет ровно поля схемы с тем же набором обязательных. С
+  перечисляет ровно поля схемы с тем же набором обязательных и тем же
+  видом значения, а закрытые перечисления совпадают с `enum` схемы. С
   `DEVCONTOUR_HARNESS_DIR=<checkout harness>` тест сверяет копии с
-  checkout побайтно;
+  checkout побайтно и запускает `capabilities` и `view` этого checkout;
 - правила, которых JSON Schema не выражает (например, `how: executed`
   требует `by` и `attempt`), проверяются в том же тесте на фикстурах.
 
-Если поле расходится, правится harness (или копия схемы после выпуска
-harness), а не тип в панели.
+Источник истины — договор harness. Если тип панели или копия схемы
+расходится с ним, их приводят к договору harness (копию — только из
+выпущенного harness). Изменение самого договора — предложение для harness
+([harness-proposals.md](harness-proposals.md)), а не правка типа в панели.
 
 Тексты простыми словами (`plain`, `line`, `reason`, сообщения
 `health.warnings`) harness пишет на запрошенном языке (`harness view --lang
@@ -489,14 +492,23 @@ temporary, revisit?, title?, reason?}` — решения, принятые по
   - `runtime, model?, startedAt, finishedAt?`
   - `stages[] {stage, durationMs?, outcome?}`
 - `verification[]` (alpha.55): как проверялась работа, по строке на gate и
-  на ревью — `{gate, kind: gate | review, result, how, by?, attempt?, at?}`.
-  - `result`: `passed`, `failed`, `reused`, `skipped`, `not-run`.
+  на ревью — `{gate, kind: gate | review, phase?, result, how, by?, attempt?,
+at?}`.
+  - `phase`: `candidate` или `integration` — фаза записи доказательства
+    gate; у строк ревью её нет.
+  - `result`: `passed`, `failed`, `reused`, `skipped` (gate не применим),
+    `not-run` (применим, но не запускался).
+  - `by`: `harness` у выполненного gate; runtime reviewer у строки ревью;
+    у прочих строк нет.
   - `how`: `executed` — запущено в этой попытке; `reused` — взято прежнее
     доказательство; `read` — reviewer прочитал diff и ничего не запускал;
     `not-checked` — не проверялось.
   - `how: executed` требует `by` и `attempt`; `how: reused` требует
-    `attempt`, из которой взято доказательство. Строки ревью никогда не
-    бывают `executed`.
+    `attempt`. `attempt` — попытка проверки, к которой относится вся
+    таблица (`verification.runId`), одна для всех строк; из какой попытки
+    взято переиспользованное доказательство, harness не сообщает (если это
+    понадобится — отдельное поле, предложение для harness). Строки ревью
+    никогда не бывают `executed`.
   - Gate, который сейчас выполняется, имеет `result: not-run` и
     `how: not-checked`, пока не завершится; значения «идёт» в словаре нет.
   - Отсутствие `verification` значит «нет сведений о проверках», а не

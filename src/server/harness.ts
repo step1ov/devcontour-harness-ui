@@ -5,13 +5,15 @@
 // prints the envelope `{ ok, data }` on stdout. The harness CLI prints JSON
 // by default and has no `--json` flag, so none is passed.
 
-import { execFile } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 
 export interface HarnessViewOptions {
   /** Harness executable: `harness` on PATH by default, or a path. */
   bin: string;
   state: string;
   policy?: string;
+  /** Deadline of one harness run; default 30 s. */
+  timeoutMs?: number;
 }
 
 export interface HarnessSupport {
@@ -28,29 +30,110 @@ export class HarnessUnavailable extends Error {
 }
 
 const TIMEOUT_MS = 30_000;
+/** After SIGTERM, how long a run may take to exit before SIGKILL. */
+const KILL_GRACE_MS = 2_000;
 // The view is at most 256 KB; the capabilities catalog carries JSON Schemas.
 const MAX_BUFFER = 8 * 1024 * 1024;
+const posix = process.platform !== 'win32';
 
 interface Run {
   stdout: string;
-  /** Exit code, or `undefined` when the process could not be started. */
+  /** Exit code, or `undefined` when the process could not be started or finish. */
   exit: number | undefined;
   spawnError?: string;
 }
 
-function run(bin: string, args: string[]): Promise<Run> {
+/** Harness runs still alive; `stopHarnessRuns` ends them on shutdown. */
+const active = new Set<ChildProcess>();
+
+function signal(child: ChildProcess, sig: NodeJS.Signals) {
+  try {
+    // The run is its own process group, so a wrapper (sh, npx) and its
+    // children go with it.
+    if (posix && child.pid !== undefined) process.kill(-child.pid, sig);
+    else child.kill(sig);
+  } catch {
+    // Already gone.
+  }
+}
+
+/** SIGTERM now, SIGKILL after the grace period if it is still running. */
+function terminate(child: ChildProcess) {
+  signal(child, 'SIGTERM');
+  const t = setTimeout(() => signal(child, 'SIGKILL'), KILL_GRACE_MS);
+  t.unref();
+  child.once('exit', () => clearTimeout(t));
+}
+
+/**
+ * Terminates every running harness process (panel shutdown) and resolves
+ * once they exited; one that ignores SIGTERM is killed after the grace period.
+ */
+export function stopHarnessRuns(): Promise<void> {
+  const exits = [...active].map(
+    (child) =>
+      new Promise<void>((ok) => {
+        if (child.exitCode !== null || child.signalCode !== null) return ok();
+        const t = setTimeout(ok, KILL_GRACE_MS + 1_000);
+        child.once('exit', () => {
+          clearTimeout(t);
+          ok();
+        });
+        terminate(child);
+      }),
+  );
+  return Promise.all(exits).then(() => undefined);
+}
+
+/**
+ * Runs the harness with a hard deadline: the promise settles at the deadline
+ * even if the process ignores SIGTERM (it is then killed after a grace period).
+ */
+function run(bin: string, args: string[], timeoutMs = TIMEOUT_MS): Promise<Run> {
   return new Promise((ok) => {
-    execFile(
-      bin,
-      args,
-      { encoding: 'utf8', timeout: TIMEOUT_MS, maxBuffer: MAX_BUFFER, windowsHide: true },
-      (err, stdout) => {
-        if (!err) return ok({ stdout, exit: 0 });
-        const e = err as NodeJS.ErrnoException & { code?: unknown; killed?: boolean };
-        if (typeof e.code === 'number') return ok({ stdout, exit: e.code });
-        ok({ stdout, exit: undefined, spawnError: e.killed ? 'timed out' : e.message });
-      },
-    );
+    let settled = false;
+    const done = (r: Run) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(deadline);
+      ok(r);
+    };
+    let child: ChildProcess;
+    try {
+      child = spawn(bin, args, {
+        stdio: ['ignore', 'pipe', 'ignore'],
+        detached: posix,
+        windowsHide: true,
+      });
+    } catch (err) {
+      ok({ stdout: '', exit: undefined, spawnError: (err as Error).message });
+      return;
+    }
+    active.add(child);
+    const chunks: Buffer[] = [];
+    let size = 0;
+    child.stdout!.on('data', (c: Buffer) => {
+      size += c.length;
+      if (size > MAX_BUFFER) {
+        terminate(child);
+        done({ stdout: '', exit: undefined, spawnError: 'output exceeds 8 MB' });
+      } else chunks.push(c);
+    });
+    const deadline = setTimeout(() => {
+      terminate(child);
+      done({ stdout: '', exit: undefined, spawnError: `timed out after ${timeoutMs} ms` });
+    }, timeoutMs);
+    child.once('error', (err) => {
+      active.delete(child);
+      done({ stdout: '', exit: undefined, spawnError: err.message });
+    });
+    child.once('close', (code, sig) => {
+      active.delete(child);
+      const stdout = Buffer.concat(chunks).toString('utf8');
+      if (code === null)
+        done({ stdout, exit: undefined, spawnError: `terminated by ${sig ?? 'a signal'}` });
+      else done({ stdout, exit: code });
+    });
   });
 }
 
@@ -76,7 +159,7 @@ export async function probeHarness(bin: string): Promise<HarnessSupport> {
   if (r.exit === undefined)
     throw new HarnessUnavailable(`Cannot start \`${bin} capabilities\`: ${r.spawnError}.`);
   const env = parseEnvelope(r.stdout);
-  const data = env?.ok === true && isObject(env.data) ? env.data : undefined;
+  const data = r.exit === 0 && env?.ok === true && isObject(env.data) ? env.data : undefined;
   if (!data)
     throw new HarnessUnavailable(`\`${bin} capabilities\` printed no capabilities catalog.`);
   const tools = Array.isArray(data.tools) ? data.tools : [];
@@ -101,13 +184,19 @@ export async function harnessView(
   const args = ['view', '--state', o.state];
   if (o.policy !== undefined) args.push('--policy', o.policy);
   if (lang !== undefined) args.push('--lang', lang);
-  const r = await run(o.bin, args);
+  const r = await run(o.bin, args, o.timeoutMs);
   if (r.exit === undefined)
     return { ok: false, code: 'VIEW_UNAVAILABLE', message: `harness view: ${r.spawnError}.` };
   const env = parseEnvelope(r.stdout);
-  if (env?.ok === true && 'data' in env) return { ok: true, view: env.data };
+  // Success needs both: exit 0 and a success envelope.
+  if (r.exit === 0 && env?.ok === true && 'data' in env) return { ok: true, view: env.data };
   const error = isObject(env?.error) ? env.error : undefined;
-  const code = typeof error?.code === 'string' ? error.code : `exit ${r.exit}`;
-  const message = typeof error?.message === 'string' ? error.message : 'no JSON envelope';
+  const code = typeof error?.code === 'string' && env?.ok === false ? error.code : `exit ${r.exit}`;
+  const message =
+    env?.ok === false && typeof error?.message === 'string'
+      ? error.message
+      : env?.ok === true
+        ? 'a success envelope with a nonzero exit'
+        : 'no JSON envelope';
   return { ok: false, code: 'VIEW_UNAVAILABLE', message: `harness view: ${code}: ${message}` };
 }

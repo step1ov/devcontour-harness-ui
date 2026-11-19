@@ -12,6 +12,8 @@ const fixture = fileURLToPath(new URL('../fixtures/view.sample.json', import.met
 
 export interface FakeHarness {
   bin: string;
+  /** Where a hanging `view` writes its pid. */
+  pidFile: string;
   /** Removes only the directory this helper created. */
   remove(): void;
 }
@@ -22,9 +24,14 @@ export function fakeHarness(o: {
   version?: string;
   /** `view` answers with this harness error envelope (exit 2). */
   refuse?: { code: string; message: string };
+  /** Exit code after a success envelope (a misbehaving wrapper). */
+  exitCode?: number;
+  /** `view` and `capabilities` ignore SIGTERM and never answer. */
+  hang?: boolean;
 }): FakeHarness {
   const dir = mkdtempSync(join(tmpdir(), 'hui-fake-harness-'));
   const bin = join(dir, 'harness');
+  const pidFile = join(dir, 'pid');
   const tools = [{ name: 'init', inputSchema: { properties: {} } }];
   if (o.view)
     tools.push({
@@ -35,10 +42,15 @@ export function fakeHarness(o: {
 const fs = require('node:fs');
 const argv = process.argv.slice(2);
 const out = (v) => process.stdout.write(JSON.stringify(v) + '\\n');
-if (argv[0] === 'capabilities') {
+if (${Boolean(o.hang)}) {
+  process.on('SIGTERM', () => {});
+  fs.writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));
+  setInterval(() => {}, 1000);
+} else if (argv[0] === 'capabilities') {
   out({ apiVersion: 'devcontour-harness/v1alpha1', command: 'capabilities', ok: true,
     data: { name: 'devcontour-harness', version: ${JSON.stringify(o.version ?? '0.1.0-alpha.55')},
       protocolVersion: 1, tools: ${JSON.stringify(tools)} } });
+  process.exitCode = ${o.exitCode ?? 0};
 } else if (argv[0] === 'view' && ${o.view}) {
   const refuse = ${JSON.stringify(o.refuse ?? null)};
   if (refuse) {
@@ -49,6 +61,7 @@ if (argv[0] === 'capabilities') {
   const view = JSON.parse(fs.readFileSync(${JSON.stringify(fixture)}, 'utf8'));
   view.health.warnings = [{ code: 'ARGS', message: JSON.stringify(argv) }];
   out({ apiVersion: 'devcontour-harness/v1alpha1', command: 'view', ok: true, data: view });
+  process.exitCode = ${o.exitCode ?? 0};
 } else {
   out({ ok: false, error: { code: 'INVALID_INPUT', message: 'unknown command ' + argv[0] } });
   process.exit(2);
@@ -58,6 +71,7 @@ if (argv[0] === 'capabilities') {
   chmodSync(bin, 0o755);
   return {
     bin,
+    pidFile,
     remove: () => {
       // Guard: only the directory mkdtemp made above, never a reported path.
       if (!dir.startsWith(join(tmpdir(), 'hui-fake-harness-'))) throw new Error('refusing rm');

@@ -361,10 +361,11 @@ input-answer --actor operator --request-version V --kind K [--option O]
 таблица в design.md §3.10.
 
 Тексты `plain` harness пишет по фиксированным шаблонам на языке опции
-проекции `lang: 'ru' | 'en'` (по умолчанию `en`; `harness view --lang`,
-`serve-view --lang`, `GET /api/view?lang=`). Детали из внешнего вывода не
-переводятся. Это открытое решение design.md §11. Пункты P1 входят в harness
-**0.1.0-alpha.55**. Пункты P2 — в следующие релизы, номер пока не назначен.
+проекции `lang: 'ru' | 'en'` (`harness view --lang`; без флага — `ru`).
+Детали из внешнего вывода не переводятся. Панель передаёт язык интерфейса
+(`GET /api/view?lang=`, design.md §6); `serve-view --lang` — вместе с P3.
+Пункты P1 вошли в harness **0.1.0-alpha.55**. Пункты P2 — в следующие
+релизы, номер пока не назначен.
 
 ### P6.1. Последний сбой попытки (P1, alpha.55, S)
 

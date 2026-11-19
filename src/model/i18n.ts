@@ -4,6 +4,7 @@
 // Pure: no node:*, no React. Sentences are phrasing over the view's own
 // counts; no number is derived here.
 
+import { instantMs } from './compat.ts';
 import type { TargetView } from './view.ts';
 
 export type Lang = 'ru' | 'en';
@@ -128,7 +129,7 @@ function parts(ms: number, timeZone?: string): Record<string, string> | undefine
  * never reads as fresh. `undefined` for an invalid instant or time zone.
  */
 export function formatClock(iso: string, timeZone?: string, nowMs?: number): string | undefined {
-  const ms = Date.parse(iso);
+  const ms = instantMs(iso);
   if (Number.isNaN(ms)) return undefined;
   const at = parts(ms, timeZone);
   if (!at) return undefined;

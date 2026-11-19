@@ -12,6 +12,7 @@ import {
   questionStatus,
   stageLabel,
 } from '../model/format.ts';
+import { instantMs } from '../model/compat.ts';
 import { footerSentence, headerSentence, targetSentence, type Lang } from '../model/i18n.ts';
 
 export interface OverviewProps {
@@ -45,12 +46,13 @@ function worstBudget(health: ViewHealth) {
 }
 
 export function Overview({ view, now, onOpenWork, lang = 'en', timeZone }: OverviewProps) {
-  const clock = now ?? Date.parse(view.generatedAt);
+  const clock = now ?? instantMs(view.generatedAt);
   const { progress, health } = view;
   const running = view.works.filter((w) => SLOT_STAGES.has(w.stage.name));
   const asking = view.questions.filter((q) => questionStatus(q).needsAnswer);
   const otherQuestions = view.questions.filter((q) => !questionStatus(q).needsAnswer);
   const budget = worstBudget(health);
+  // Works listed with a location; the count itself is `progress.done`.
   const accepted = view.works.filter((w) => w.target !== undefined);
   const count = (stage: string) =>
     Object.hasOwn(progress.byStage, stage) ? Number(progress.byStage[stage]) || 0 : 0;
@@ -169,9 +171,9 @@ export function Overview({ view, now, onOpenWork, lang = 'en', timeZone }: Overv
         ) : null}
       </div>
 
-      {accepted.length ? (
+      {accepted.length || progress.done ? (
         <div className="hui-panel" data-testid="accepted">
-          <h3 className="hui-subtitle">Accepted ({accepted.length})</h3>
+          <h3 className="hui-subtitle">Accepted ({progress.done})</h3>
           <ul className="hui-list">
             {accepted.map((w) => (
               <li key={w.id} className="hui-item">
@@ -182,6 +184,13 @@ export function Overview({ view, now, onOpenWork, lang = 'en', timeZone }: Overv
               </li>
             ))}
           </ul>
+          {progress.done > accepted.length ? (
+            <p className="hui-muted" data-testid="accepted-unlisted">
+              {progress.done - accepted.length} accepted work order
+              {progress.done - accepted.length === 1 ? ' has' : 's have'} no location in this view
+              {view.truncated?.works ? ' (view limit)' : ''}.
+            </p>
+          ) : null}
         </div>
       ) : null}
 

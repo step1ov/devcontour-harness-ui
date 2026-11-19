@@ -1,12 +1,20 @@
 import { strict as assert } from 'node:assert';
 import { request } from 'node:http';
 import { createServer } from 'node:net';
-import { mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import { DEFAULT_PORT, ServeError, startServer } from '../src/server/serve.ts';
+import { probeHarness } from '../src/server/harness.ts';
 import { fakeHarness, recordedArgs } from './fake-harness.ts';
 
 const viewFile = fileURLToPath(new URL('../fixtures/view.sample.json', import.meta.url));
@@ -232,4 +240,84 @@ test('live route: a harness without lang gets no --lang; a refusal is VIEW_UNAVA
 
 test('startServer needs exactly one view source', async () => {
   await assert.rejects(() => startServer({ appDir, version: 'test' }), TypeError);
+});
+
+const alive = (pid: number) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+};
+const until = async (ok: () => boolean, ms: number) => {
+  const end = Date.now() + ms;
+  while (!ok() && Date.now() < end) await new Promise((r) => setTimeout(r, 50));
+  return ok();
+};
+
+test('live route: the deadline holds against a harness that ignores SIGTERM', async () => {
+  const fake = fakeHarness({ view: true, lang: true, hang: true });
+  const s = await startServer({
+    harness: { bin: fake.bin, state: '/s', lang: true, defaultLang: 'en', timeoutMs: 300 },
+    appDir,
+    version: 'test',
+  });
+  try {
+    const t0 = Date.now();
+    const r = await get(s.url + 'api/view');
+    assert.ok(Date.now() - t0 < 2000, 'answered at the deadline, not after the child');
+    assert.equal(r.status, 503);
+    assert.match(JSON.parse(r.body).error.message, /timed out after 300 ms/);
+    const pid = Number(readFileSync(fake.pidFile, 'utf8'));
+    assert.ok(await until(() => !alive(pid), 5000), 'SIGKILL after the grace period');
+    // The language slot is free again: a new run starts.
+    const again = await get(s.url + 'api/view');
+    assert.equal(again.status, 503);
+    assert.notEqual(Number(readFileSync(fake.pidFile, 'utf8')), pid);
+  } finally {
+    await s.close();
+    fake.remove();
+  }
+});
+
+test('live route: closing the panel ends a running harness process', async () => {
+  const fake = fakeHarness({ view: true, lang: true, hang: true });
+  const s = await startServer({
+    harness: { bin: fake.bin, state: '/s', lang: true, defaultLang: 'en', timeoutMs: 60_000 },
+    appDir,
+    version: 'test',
+  });
+  try {
+    const pending = get(s.url + 'api/view').catch(() => undefined);
+    assert.ok(await until(() => existsSync(fake.pidFile), 5000));
+    const pid = Number(readFileSync(fake.pidFile, 'utf8'));
+    assert.ok(alive(pid));
+    await s.close();
+    assert.equal(alive(pid), false, 'close() waits until the run is gone');
+    await pending;
+  } finally {
+    fake.remove();
+  }
+});
+
+test('live route: a success envelope with a nonzero exit is not a view', async () => {
+  const fake = fakeHarness({ view: true, lang: true, exitCode: 3 });
+  const s = await startServer({
+    harness: { bin: fake.bin, state: '/s', lang: true, defaultLang: 'en' },
+    appDir,
+    version: 'test',
+  });
+  try {
+    const r = await get(s.url + 'api/view');
+    assert.equal(r.status, 503);
+    assert.match(
+      JSON.parse(r.body).error.message,
+      /exit 3: a success envelope with a nonzero exit/,
+    );
+    await assert.rejects(probeHarness(fake.bin), /printed no capabilities catalog/);
+  } finally {
+    await s.close();
+    fake.remove();
+  }
 });

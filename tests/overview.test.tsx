@@ -235,10 +235,34 @@ test('accepted work: an unknown remote state is shown as unknown with the harnes
   assert.doesNotMatch(accepted, /not on the remote|on the remote \(/);
   const ru = renderToStaticMarkup(<Overview view={view} lang="ru" />);
   assert.match(ru, /Принято локально; в удалённом репозитории — неизвестно: /);
-  const none = renderToStaticMarkup(
+  // The count is the harness total, not the listed targets.
+  assert.match(accepted, /Accepted \(1\)/);
+  const many = renderToStaticMarkup(
+    <Overview
+      view={{
+        ...view,
+        progress: { ...view.progress, done: 10 },
+        truncated: { works: 9 },
+      }}
+    />,
+  );
+  assert.match(many, /Accepted \(10\)/);
+  assert.match(many, /9 accepted work orders have no location in this view \(view limit\)\./);
+  const unlisted = renderToStaticMarkup(
     <Overview view={{ ...view, works: view.works.map(({ target: _t, ...w }) => w) }} />,
   );
-  assert.doesNotMatch(none, /data-testid="accepted"/);
+  assert.match(unlisted, /Accepted \(1\)/);
+  assert.match(unlisted, /1 accepted work order has no location in this view\./);
+  const nothing = renderToStaticMarkup(
+    <Overview
+      view={{
+        ...view,
+        works: view.works.map(({ target: _t, ...w }) => w),
+        progress: { ...view.progress, done: 0 },
+      }}
+    />,
+  );
+  assert.doesNotMatch(nothing, /data-testid="accepted"/);
 });
 
 test('health warnings from the harness are listed with their code and message', () => {

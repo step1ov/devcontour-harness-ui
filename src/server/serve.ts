@@ -7,7 +7,12 @@ import { readFile, realpath, stat } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { extname, join, resolve, sep } from 'node:path';
 import { checkView } from '../model/compat.ts';
-import { harnessView, type HarnessViewOptions, type HarnessViewResult } from './harness.ts';
+import {
+  harnessView,
+  stopHarnessRuns,
+  type HarnessViewOptions,
+  type HarnessViewResult,
+} from './harness.ts';
 
 export const LOOPBACK_HOSTS = ['127.0.0.1', '::1', 'localhost'] as const;
 export const DEFAULT_PORT = 4790;
@@ -273,7 +278,9 @@ export async function startServer(options: ServeOptions): Promise<RunningServer>
         port,
         close: () =>
           new Promise((ok) => {
-            server.close(() => ok());
+            // Running `harness view` processes end with the panel.
+            const runs = live ? stopHarnessRuns() : Promise.resolve();
+            server.close(() => void runs.then(() => ok()));
             server.closeAllConnections();
           }),
       };

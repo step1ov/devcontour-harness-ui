@@ -273,3 +273,55 @@ test('the gate checks the target and warnings the panel renders', () => {
   const w = checkView(badWarnings);
   assert.match(w.ok ? '' : w.message, /health\.warnings\[0\]/);
 });
+
+test('every instant the harness schema accepts passes the gate and renders', async () => {
+  const { isInstant, instantMs } = await import('../src/model/compat.ts');
+  const { formatClock } = await import('../src/model/i18n.ts');
+  for (const ok of [
+    '2026-11-19T12:00:00.1234567890Z',
+    '0099-11-19T12:00:00Z',
+    '0000-01-01T00:00:00Z',
+    '2024-02-29T23:59:59.5+03:00',
+  ])
+    assert.equal(isInstant(ok), true, ok);
+  assert.equal(isInstant('2026-11-19T12:00:00+24:00'), false);
+  assert.equal(
+    instantMs('2026-11-19T12:00:00.1234567890Z'),
+    Date.parse('2026-11-19T12:00:00.123Z'),
+  );
+  assert.equal(new Date(instantMs('0099-11-19T12:00:00Z')).getUTCFullYear(), 99);
+  assert.equal(formatClock('2026-11-19T12:00:00.1234567890Z', 'UTC'), '12:00');
+  assert.equal(
+    formatElapsed('2026-11-19T12:00:00.1234567890Z', Date.parse('2026-11-19T12:00:09Z')),
+    '8s',
+  );
+  const v = structuredClone(fixture);
+  v.generatedAt = '2026-11-19T12:00:00.1234567890Z';
+  v.works[1].stage.since = '0099-11-19T12:00:00Z';
+  assert.equal(checkView(v).ok, true);
+});
+
+test('the gate refuses every rendered field of the wrong type, optional ones too', () => {
+  const mutations: [string, (v: any) => void][] = [
+    ['health.budgets[0].limitUsd', (v) => (v.health.budgets[0].limitUsd = 'oops')],
+    ['health.budgets[0].scope', (v) => (v.health.budgets[0].scope = {})],
+    ['health.budgets[1].id', (v) => (v.health.budgets[1].id = 7)],
+    ['health.spentTotalUsd', (v) => delete v.health.spentTotalUsd],
+    ['health.budgeting', (v) => (v.health.budgeting = 1)],
+    ['questions[0].title', (v) => (v.questions[0].title = {})],
+    ['questions[0].answerableBy', (v) => delete v.questions[0].answerableBy],
+    ['questions[0].impact', (v) => (v.questions[0].impact = 1)],
+    ['works[1].stage.step', (v) => (v.works[1].stage.step = {})],
+    ['works[1].attempts', (v) => (v.works[1].attempts.line = {})],
+    ['works[1].liveness', (v) => (v.works[1].liveness = {})],
+    ['progress.queue.reason', (v) => (v.progress.queue.reason = {})],
+    ['truncated.questions', (v) => (v.truncated = { questions: 'x' })],
+  ];
+  for (const [path, mutate] of mutations) {
+    const v = structuredClone(fixture);
+    mutate(v);
+    const c = checkView(v);
+    assert.equal(c.ok, false, path);
+    assert.ok((c.ok ? '' : c.message).includes(path), `${path}: ${c.ok ? '' : c.message}`);
+  }
+});
