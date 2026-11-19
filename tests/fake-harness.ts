@@ -74,7 +74,9 @@ export function fakeHarness(o: {
 const fs = require('node:fs');
 const argv = process.argv.slice(2);
 const out = (v) => process.stdout.write(JSON.stringify(v) + '\\n');
-if (${Boolean(o.hang)}) {
+const count = ${JSON.stringify(o.countFile ?? null)};
+if (count && argv[0] === 'view') fs.appendFileSync(count, argv.join(' ') + '\\n');
+if (${Boolean(o.hang)} && argv[0] !== '--version') {
   process.on('SIGTERM', () => {});
   fs.writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));
   setInterval(() => {}, 1000);
@@ -87,8 +89,6 @@ if (${Boolean(o.hang)}) {
       protocolVersion: 1, tools: ${JSON.stringify(tools)} } });
   process.exitCode = ${o.exitCode ?? 0};
 } else if (argv[0] === 'view' && ${o.view}) {
-  const count = ${JSON.stringify(o.countFile ?? null)};
-  if (count) fs.appendFileSync(count, argv.join(' ') + '\\n');
   const refuseWhile = ${JSON.stringify(o.refuseWhile ?? null)};
   const refuse = refuseWhile && fs.existsSync(refuseWhile)
     ? { code: 'STATE_BUSY', message: 'state is busy' }

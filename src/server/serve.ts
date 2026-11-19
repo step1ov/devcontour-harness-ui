@@ -204,16 +204,19 @@ async function serveViewFile(
 const hashOf = (b: Buffer | string) => createHash('sha256').update(b).digest('hex');
 
 /**
- * Change digest of a document for the live stream. The harness `source.token`
- * cannot serve: harness 0.1.0-alpha.55 hashes the history window too, and
- * the window ends at the projection clock, so the token differs on every run
- * of an unchanged state. The digest hashes the document without the clock
- * fields — `generatedAt`, `source.token`, `history.from`, `history.to` —
- * so it changes exactly when something the screens show changes (counts,
- * stages, buckets crossing a boundary). Clock-relative fields the harness
- * computes (ages, elapsed times) do change it: the screens show them.
+ * Change digest of a live document (`harness view`), sent in SSE events and
+ * in the `x-hui-digest` header of `GET /api/view` so the page knows which
+ * content it shows. The harness `source.token` cannot serve: harness
+ * 0.1.0-alpha.55 hashes the history window, which ends at the projection
+ * clock, so the token differs on every run of an unchanged state. The digest
+ * hashes the document without `generatedAt` and `source.token`, and with
+ * the window bounds cut to the minute: an unchanged state is the same digest
+ * within a minute, and the window labels the screens show lag at most a
+ * minute. Clock-relative fields the harness computes (ages, elapsed times)
+ * do change it: the screens show them.
  */
 export function digestOf(view: unknown): string {
+  const minute = (v: unknown) => (typeof v === 'string' ? v.slice(0, 16) : v);
   const strip = (v: unknown): unknown => {
     if (typeof v !== 'object' || v === null || Array.isArray(v)) return v;
     const o = { ...(v as Record<string, unknown>) };
@@ -225,14 +228,17 @@ export function digestOf(view: unknown): string {
     }
     if (typeof o.history === 'object' && o.history !== null && !Array.isArray(o.history)) {
       const history = { ...(o.history as Record<string, unknown>) };
-      delete history.from;
-      delete history.to;
+      history.from = minute(history.from);
+      history.to = minute(history.to);
       o.history = history;
     }
     return o;
   };
   return hashOf(JSON.stringify(strip(view)));
 }
+
+/** Digest of a file snapshot: every byte, `generatedAt` included (the snapshot time is its content). */
+export const fileDigestOf = (view: unknown): string => 'file:' + hashOf(JSON.stringify(view));
 
 /** The document shows running work: re-check at least every LIVE_ACTIVE_MAX_MS. */
 function activeWork(view: unknown): boolean {
@@ -258,13 +264,20 @@ async function signature(paths: string[]): Promise<string> {
   return parts.join('|');
 }
 
-function sendView(req: IncomingMessage, res: ServerResponse, view: unknown, gate: Gate = viewGate) {
+function sendView(
+  req: IncomingMessage,
+  res: ServerResponse,
+  view: unknown,
+  gate: Gate = viewGate,
+  digest: (v: unknown) => string = fileDigestOf,
+) {
   const check = gate(view);
   if (!check.ok) return jsonError(res, 409, check.code, check.message);
-  // The ETag is derived from the content, never from a store counter.
+  // The ETag is derived from the bytes, never from a store counter; the
+  // digest is the identity the live stream reports for this content.
   const body = Buffer.from(JSON.stringify(view));
   const etag = '"' + hashOf(body).slice(0, 32) + '"';
-  const headers = { etag, 'cache-control': 'no-store' };
+  const headers = { etag, 'cache-control': 'no-store', 'x-hui-digest': digest(view) };
   if (req.headers['if-none-match'] === etag) return send(res, 304, '', types['.json']!, headers);
   return send(res, 200, body, types['.json']!, headers);
 }
@@ -334,7 +347,15 @@ export async function startServer(options: ServeOptions): Promise<RunningServer>
   // them: distinct work ids cannot fan out into unbounded processes.
   let running = 0;
   const waiting: (() => void)[] = [];
-  const limited = (run: () => Promise<HarnessViewResult>): Promise<HarnessViewResult> => {
+  const cancelled: HarnessViewResult = {
+    ok: false,
+    code: 'VIEW_UNAVAILABLE',
+    message: 'Nobody waits for this harness run any more.',
+  };
+  const limited = (
+    run: () => Promise<HarnessViewResult>,
+    wanted: () => boolean,
+  ): Promise<HarnessViewResult> => {
     if (running >= MAX_RUNS && waiting.length >= MAX_WAITING)
       return Promise.resolve({
         ok: false,
@@ -342,6 +363,11 @@ export async function startServer(options: ServeOptions): Promise<RunningServer>
         message: 'The panel is busy with other harness runs; try again shortly.',
       });
     const start = () => {
+      // A queued run whose callers are all gone never starts a process.
+      if (!wanted()) {
+        waiting.shift()?.();
+        return Promise.resolve(cancelled);
+      }
       running++;
       return run().finally(() => {
         running--;
@@ -351,26 +377,54 @@ export async function startServer(options: ServeOptions): Promise<RunningServer>
     if (running < MAX_RUNS) return start();
     return new Promise((ok) => waiting.push(() => void start().then(ok)));
   };
-  // The last result of each live document, so that the page's GET right after
-  // a pushed change does not run harness a second time.
+  // The last good result of each live document, so that the page's GET right
+  // after a pushed change does not run harness a second time. Entries expire
+  // after RECENT_MS and the map holds at most RECENT_MAX: arbitrary work ids
+  // cannot grow it.
   const recent = new Map<string, { at: number; result: HarnessViewResult }>();
+  const RECENT_MAX = 64;
+  const remember = (key: string, result: HarnessViewResult) => {
+    const now = Date.now();
+    for (const [k, v] of recent) if (now - v.at >= RECENT_MS) recent.delete(k);
+    recent.delete(key);
+    if (!result.ok) return;
+    recent.set(key, { at: now, result });
+    while (recent.size > RECENT_MAX) recent.delete(recent.keys().next().value!);
+  };
   const liveKey = (lang: 'ru' | 'en', workId?: string) =>
     (live!.lang ? lang : '') + (workId !== undefined ? '\0' + workId : '');
-  const liveView = (lang: 'ru' | 'en', workId?: string, reuse = false) => {
+  // A run shared by several callers is wanted while any of them still wants it.
+  const inFlightWants = new Map<string, (() => boolean)[]>();
+  const liveView = (
+    lang: 'ru' | 'en',
+    workId?: string,
+    reuse = false,
+    wanted: () => boolean = () => true,
+  ) => {
     const key = liveKey(lang, workId);
     const r = recent.get(key);
     if (reuse && r && r.result.ok && Date.now() - r.at < RECENT_MS)
       return Promise.resolve(r.result);
     let p = inFlight.get(key);
-    if (!p) {
-      p = limited(() => harnessView(live!, live!.lang ? lang : undefined, workId))
-        .then((result) => {
-          recent.set(key, { at: Date.now(), result });
-          return result;
-        })
-        .finally(() => inFlight.delete(key));
-      inFlight.set(key, p);
+    if (p) {
+      inFlightWants.get(key)?.push(wanted);
+      return p;
     }
+    const wants = [wanted];
+    inFlightWants.set(key, wants);
+    p = limited(
+      () => harnessView(live!, live!.lang ? lang : undefined, workId),
+      () => wants.some((w) => w()),
+    )
+      .then((result) => {
+        if (result !== cancelled) remember(key, result);
+        return result;
+      })
+      .finally(() => {
+        inFlight.delete(key);
+        inFlightWants.delete(key);
+      });
+    inFlight.set(key, p);
     return p;
   };
   const hub = liveHub();
@@ -380,8 +434,8 @@ export async function startServer(options: ServeOptions): Promise<RunningServer>
     activeMaxMs: LIVE_ACTIVE_MAX_MS,
   };
   const liveSpec = (lang: 'ru' | 'en', workId?: string): WatchSpec => ({
-    check: async () => {
-      const r = await liveView(lang, workId);
+    check: async (wanted) => {
+      const r = await liveView(lang, workId, false, wanted);
       const checkedAt = new Date().toISOString();
       if (!r.ok) return { ok: false, code: r.code, message: r.message, checkedAt };
       return { ok: true, token: digestOf(r.view), checkedAt, activeWork: activeWork(r.view) };
@@ -404,7 +458,7 @@ export async function startServer(options: ServeOptions): Promise<RunningServer>
       // An incompatible document still gets a token: the page then reads the refusal.
       return {
         ok: true,
-        token: gate(r.view).ok ? digestOf(r.view) : 'refused:' + hashOf(r.bytes),
+        token: gate(r.view).ok ? fileDigestOf(r.view) : 'refused:' + hashOf(r.bytes),
         checkedAt,
       };
     },
@@ -459,7 +513,7 @@ export async function startServer(options: ServeOptions): Promise<RunningServer>
         const lang = asked === 'ru' || asked === 'en' ? asked : live.defaultLang;
         const r = await liveView(lang, workId, true);
         return r.ok
-          ? sendView(req, res, r.view, detailGate)
+          ? sendView(req, res, r.view, detailGate, digestOf)
           : jsonError(res, 503, r.code, r.message);
       }
       const files = fileSource(params).workFiles;
@@ -526,7 +580,9 @@ export async function startServer(options: ServeOptions): Promise<RunningServer>
         const asked = params.get('lang');
         const lang = asked === 'ru' || asked === 'en' ? asked : live.defaultLang;
         const r = await liveView(lang, undefined, true);
-        return r.ok ? sendView(req, res, r.view) : jsonError(res, 503, r.code, r.message);
+        return r.ok
+          ? sendView(req, res, r.view, viewGate, digestOf)
+          : jsonError(res, 503, r.code, r.message);
       }
       return serveViewFile(req, res, fileSource(params).viewFile!);
     }

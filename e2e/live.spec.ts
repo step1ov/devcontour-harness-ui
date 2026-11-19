@@ -135,3 +135,27 @@ test('a blocked stream falls back to polling every 5 s', async ({ page }) => {
     s.remove();
   }
 });
+
+test('a load that fails after a pushed change is retried until it succeeds', async ({ page }) => {
+  const s = scratch();
+  const file = join(s.dir, 'view.json');
+  writeView(file, 'retry-a', 'Вопрос до сбоя');
+  const cli = await startCli(['--view', file]);
+  try {
+    await page.goto(cli.url + '?lang=ru#/');
+    await expect(page.locator('main')).toContainText('Вопрос до сбоя');
+    await expect(page.getByTestId('freshness')).toContainText('снимок');
+    // The stream stays healthy, but the document GET fails for a while.
+    await page.route('**/api/view**', (r) => r.abort());
+    writeView(file, 'retry-b', 'Вопрос после сбоя');
+    await expect(page.getByTestId('stale')).toBeVisible({ timeout: 3000 });
+    await expect(page.locator('main')).toContainText('Вопрос до сбоя');
+    // No further file change: only the page's own retry can bring the new view.
+    await page.unroute('**/api/view**');
+    await expect(page.locator('main')).toContainText('Вопрос после сбоя', { timeout: 7000 });
+    await expect(page.getByTestId('stale')).toHaveCount(0);
+  } finally {
+    await cli.stop();
+    s.remove();
+  }
+});

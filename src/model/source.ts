@@ -12,11 +12,16 @@
 
 import { checkView, checkWorkDetail, type ViewCheck, type WorkDetailCheck } from './compat.ts';
 
+/** A loaded document may carry the server digest of its content (`x-hui-digest`). */
+export interface Digested {
+  digest?: string;
+}
+
 export interface ViewSource {
   /** Current view or a typed refusal; rejects only on transport failure. */
-  load(signal?: AbortSignal): Promise<ViewCheck>;
+  load(signal?: AbortSignal): Promise<ViewCheck & Digested>;
   /** Work detail document or a typed refusal; absent = the host has no detail route. */
-  loadWork?(workId: string, signal?: AbortSignal): Promise<WorkDetailCheck>;
+  loadWork?(workId: string, signal?: AbortSignal): Promise<WorkDetailCheck & Digested>;
   /**
    * Optional push of changes; returns an unsubscribe function. `onChange()`
    * without an event means "something changed, load again". The standalone
@@ -122,7 +127,13 @@ export function httpViewSource(
       headers: { accept: 'application/json' },
       ...(signal ? { signal } : {}),
     });
-    if (res.ok) return gate(await res.json());
+    if (res.ok) {
+      const checked = gate(await res.json());
+      // The server's digest of this content (`x-hui-digest`): the identity the
+      // live stream reports, so the page knows which content it shows.
+      const digest = res.headers?.get?.('x-hui-digest');
+      return typeof digest === 'string' && digest !== '' ? { ...checked, digest } : checked;
+    }
     // A typed refusal keeps its code and fix hint instead of becoming a
     // generic transport error.
     const body = (await res.json().catch(() => undefined)) as

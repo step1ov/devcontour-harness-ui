@@ -18,6 +18,7 @@ import {
   type Dict,
   type Lang,
   type ViewSource,
+  type Digested,
   formatClock,
   pickLang,
   questionStatus,
@@ -83,53 +84,35 @@ const RESUBSCRIBE_MS = 30_000;
  * A transport error, or a temporary `VIEW_UNAVAILABLE` after a good
  * document, keeps the last good document on screen with a banner (§5.9).
  */
-function useLive<T extends Checked>(load: () => Promise<T>, key: string, workId?: string) {
+function useLive<T extends Checked & { digest?: string }>(
+  load: () => Promise<T>,
+  key: string,
+  workId?: string,
+  active = true,
+) {
   const [value, setValue] = useState<T | undefined>();
   const [live, setLive] = useState<Live>({ mode: 'poll' });
   const last = useRef<T | undefined>(undefined);
+  const shownKey = useRef<string | undefined>(undefined);
   useEffect(() => {
-    setValue(undefined);
-    setLive({ mode: 'poll' });
-    last.current = undefined;
+    // A new document starts empty; pausing and resuming the same one keeps it.
+    if (shownKey.current !== key) {
+      shownKey.current = key;
+      setValue(undefined);
+      setLive({ mode: 'poll' });
+      last.current = undefined;
+    }
+    if (!active) return;
     let stopped = false;
     let poll: number | undefined;
     let retry: number | undefined;
     let unsubscribe: (() => void) | undefined;
     let seq = 0;
-    let docDigest: string | undefined;
-    let wanted: string | undefined;
-    /** Loads the document; `digest` = the server digest this load answers. */
-    const fetchNow = async (digest?: string) => {
-      const mine = ++seq;
-      wanted = digest;
-      busy++;
-      try {
-        const next = await load().finally(() => busy--);
-        // A slower, older answer never replaces a newer one.
-        if (stopped || mine !== seq) return;
-        if (!next.ok && next.code === 'VIEW_UNAVAILABLE' && last.current?.ok) {
-          const message = next.message;
-          setLive((l) => ({
-            ...l,
-            lost: { message, harness: true, since: l.lost?.since ?? new Date().toISOString() },
-          }));
-          return;
-        }
-        last.current = next;
-        docDigest = digest;
-        setValue(next);
-        setLive((l) => ({ ...l, lost: undefined, docDigest: digest }));
-      } catch (err) {
-        if (stopped || mine !== seq) return;
-        const message = (err as Error).message;
-        setLive((l) => ({
-          ...l,
-          lost: { message, harness: false, since: l.lost?.since ?? new Date().toISOString() },
-        }));
-      }
-    };
-    let busy = 0;
-    const seqBusy = () => busy > 0;
+    /** Server digest of the shown document (`x-hui-digest` of its GET). */
+    let docDigest = last.current?.digest;
+    /** The stream delivers events; polling then runs only to retry a failed load. */
+    let pushing = false;
+    let failing = false;
     const startPoll = () => {
       if (poll === undefined) poll = window.setInterval(() => void fetchNow(), POLL_MS);
     };
@@ -137,11 +120,46 @@ function useLive<T extends Checked>(load: () => Promise<T>, key: string, workId?
       window.clearInterval(poll);
       poll = undefined;
     };
+    const failed = (message: string, harness: boolean) => {
+      failing = true;
+      // A failed load is retried by polling, whatever the stream says.
+      startPoll();
+      setLive((l) => ({
+        ...l,
+        lost: { message, harness, since: l.lost?.since ?? new Date().toISOString() },
+      }));
+    };
+    const fetchNow = async () => {
+      const mine = ++seq;
+      try {
+        const next = await load();
+        // A slower, older answer never replaces a newer one.
+        if (stopped || mine !== seq) return;
+        if (!next.ok && next.code === 'VIEW_UNAVAILABLE' && last.current?.ok)
+          return failed(next.message, true);
+        last.current = next;
+        docDigest = next.digest;
+        failing = false;
+        if (pushing) stopPoll();
+        setValue(next);
+        setLive((l) => ({
+          ...l,
+          lost: undefined,
+          docDigest: next.digest,
+          // A GET answered while polling ran the source just now: the data is current.
+          ...(pushing ? {} : { stale: undefined }),
+        }));
+      } catch (err) {
+        if (stopped || mine !== seq) return;
+        failed((err as Error).message, false);
+      }
+    };
     const unsubscribeNow = () => {
       unsubscribe?.();
       unsubscribe = undefined;
       window.clearTimeout(retry);
       retry = undefined;
+      pushing = false;
     };
     const subscribe = () => {
       unsubscribeNow();
@@ -155,28 +173,35 @@ function useLive<T extends Checked>(load: () => Promise<T>, key: string, workId?
           if (!ev) return void fetchNow();
           if (ev.kind === 'down') {
             unsubscribe = undefined;
-            setLive((l) => ({ ...l, mode: 'poll', stale: undefined }));
+            pushing = false;
+            // A known failure stays on screen until a load succeeds.
+            setLive((l) => ({ ...l, mode: 'poll' }));
             startPoll();
             void fetchNow();
             retry = window.setTimeout(subscribe, RESUBSCRIBE_MS);
             return;
           }
-          stopPoll();
+          pushing = true;
+          if (!failing) stopPoll();
           if (ev.kind === 'stale') {
             const stale = { since: ev.since, message: ev.message };
             setLive((l) => ({ ...l, mode: 'push', stale }));
             return;
           }
+          const shown = docDigest !== undefined && ev.token === docDigest;
           setLive((l) => ({
             ...l,
             mode: 'push',
             checkedAt: ev.checkedAt,
             token: ev.token,
             stale: undefined,
+            // The server confirmed exactly the shown content: the link works again.
+            ...(shown ? { lost: undefined } : {}),
           }));
-          // Load unless the shown document (or the load under way) is for this digest.
-          if (ev.token !== docDigest && !(seqBusy() && wanted === ev.token))
-            void fetchNow(ev.token);
+          if (shown) {
+            failing = false;
+            stopPoll();
+          } else void fetchNow();
         },
         workId !== undefined ? { workId } : {},
       );
@@ -202,7 +227,7 @@ function useLive<T extends Checked>(load: () => Promise<T>, key: string, workId?
       stopPoll();
     };
     // `key` names the document; `load` is recreated on every render.
-  }, [key]);
+  }, [key, active]);
   return { value, live };
 }
 
@@ -303,7 +328,11 @@ function Note({ bad, children }: { bad?: boolean; children: ReactNode }) {
 }
 
 function WorkScreen({ id, anchor }: { id: string; anchor: string | undefined }) {
-  const { value, live } = useLive<WorkDetailCheck>(() => source.loadWork!(id), 'work:' + id, id);
+  const { value, live } = useLive<WorkDetailCheck & Digested>(
+    () => source.loadWork!(id),
+    'work:' + id,
+    id,
+  );
   const error = live.lost?.message;
   useEffect(() => {
     // The clicked link is gone after navigation: move focus to the target, not just the view.
@@ -337,7 +366,14 @@ function WorkScreen({ id, anchor }: { id: string; anchor: string | undefined }) 
 
 function App() {
   const route = useRoute();
-  const { value: check, live } = useLive<ViewCheck>(() => source.load(), 'view');
+  const { value: check, live } = useLive<ViewCheck & Digested>(
+    () => source.load(),
+    'view',
+    undefined,
+    // The work screen has its own stream; the overview one would only cost
+    // a harness run per check and a browser connection.
+    route.screen !== 'work',
+  );
   const error = live.lost?.message;
   const main = useRef<HTMLElement>(null);
   const first = useRef(true);

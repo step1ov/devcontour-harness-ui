@@ -18,8 +18,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
-import { digestOf, startServer, type RunningServer } from '../src/server/serve.ts';
-import { MAX_STREAMS } from '../src/server/live.ts';
+import { digestOf, fileDigestOf, startServer, type RunningServer } from '../src/server/serve.ts';
+import { MAX_BUFFERED, MAX_STREAMS, writeEvent } from '../src/server/live.ts';
+import { MAX_RUNS } from '../src/server/serve.ts';
 import { fakeHarness, runsIn } from './fake-harness.ts';
 
 const sample = fileURLToPath(new URL('../fixtures/view.sample.json', import.meta.url));
@@ -51,7 +52,7 @@ function writeView(file: string, content: string, clock = '2026-11-19T10:00:00.0
   writeFileSync(file, JSON.stringify(v));
 }
 /** The digest the server reports for the file as written now. */
-const digestNow = (file: string) => digestOf(JSON.parse(readFileSync(file, 'utf8')));
+const digestNow = (file: string) => fileDigestOf(JSON.parse(readFileSync(file, 'utf8')));
 
 /** One request on its own connection (no keep-alive across servers on a reused port). */
 function http(url: string, method = 'GET') {
@@ -312,6 +313,8 @@ test('live route: the GET right after a pushed change reuses that harness run', 
     const r = await http(server.url + 'api/view?lang=en');
     assert.equal(r.status, 200);
     assert.equal(digestOf(JSON.parse(r.body)), pushed.data.token, 'the pushed document is served');
+    // The page learns the identity of what it shows from the response.
+    assert.equal(r.headers['x-hui-digest'], pushed.data.token);
     assert.equal(runsIn(l.countFile).length, 1, 'no second run for the GET');
     await sleep(1600);
     await http(server.url + 'api/view?lang=en');
@@ -323,7 +326,7 @@ test('live route: the GET right after a pushed change reuses that harness run', 
   }
 });
 
-test('file route: a rewritten file is pushed; a missing one is stale; no fresh events', async () => {
+test('file route: a rewritten file is pushed; a missing one is stale; restoring it is said', async () => {
   const s = scratch();
   const file = join(s.dir, 'view.json');
   writeView(file, 'file-a');
@@ -332,7 +335,9 @@ test('file route: a rewritten file is pushed; a missing one is stale; no fresh e
     const health = JSON.parse((await http(server.url + 'api/health')).body) as { live: string };
     assert.equal(health.live, 'file');
     const es = stream(server.url + 'api/events');
-    assert.equal((await es.next('view')).data.token, digestNow(file));
+    const a = (await es.next('view')).data.token;
+    assert.equal(a, digestNow(file));
+    assert.equal((await http(server.url + 'api/view')).headers['x-hui-digest'], a);
     const n = es.events.length;
     writeView(file, 'file-b');
     const b = digestNow(file);
@@ -342,10 +347,29 @@ test('file route: a rewritten file is pushed; a missing one is stale; no fresh e
     const changed = await es.next('view', 3000, n);
     assert.equal(changed.data.token, b);
     assert.ok(Date.now() - t0 <= 2000);
+    // A new generatedAt alone is a new snapshot: the snapshot time is its content.
+    const v = JSON.parse(readFileSync(file, 'utf8'));
+    v.generatedAt = '2026-11-19T11:00:00.000Z';
+    const before = es.events.length;
+    writeFileSync(file, JSON.stringify(v));
+    utimesSync(file, new Date(), new Date(Date.now() + 10000));
+    const snap = await es.next('view', 3000, before);
+    assert.notEqual(snap.data.token, b);
+    assert.equal(
+      es.events.filter((e) => e.event === 'fresh').length,
+      0,
+      'no fresh while unchanged',
+    );
+    const saved = readFileSync(file);
     unlinkSync(file);
     const stale = await es.next('stale', 3000);
     assert.match(String(stale.data.message), /not readable/);
-    assert.equal(es.events.filter((e) => e.event === 'fresh').length, 0);
+    // The same bytes back: no change, but the recovery is said (fresh), or the
+    // page would keep its stale warning forever.
+    const m = es.events.length;
+    writeFileSync(file, saved);
+    const back = await es.next('fresh', 3000, m);
+    assert.equal(back.data.token, snap.data.token);
     es.close();
   } finally {
     await server.close();
@@ -398,14 +422,14 @@ test('live route: a run that differs only in the clock fields is fresh, not a ch
     const es = stream(server.url + 'api/events');
     const first = await es.next('view');
     // Another projection clock: generatedAt, source.token and the window end move.
-    writeView(l.viewFile, 'token-a', '2026-11-19T10:05:00.000Z');
+    writeView(l.viewFile, 'token-a', '2026-11-19T10:00:40.000Z');
     const n = es.events.length;
     await sleep(600);
     const later = es.events.slice(n).filter((e) => e.event !== 'ping');
     assert.ok(later.length >= 2, JSON.stringify(later));
     assert.ok(later.every((e) => e.event === 'fresh' && e.data.token === first.data.token));
     // A real change is still a change.
-    writeView(l.viewFile, 'token-z', '2026-11-19T10:05:00.000Z');
+    writeView(l.viewFile, 'token-z', '2026-11-19T10:00:40.000Z');
     const changed = await es.next('view', 2000, es.events.length);
     assert.notEqual(changed.data.token, first.data.token);
     es.close();
@@ -415,19 +439,77 @@ test('live route: a run that differs only in the clock fields is fresh, not a ch
   }
 });
 
-test('digestOf ignores only the clock fields', () => {
+test('digestOf ignores the clock within a minute, not across one', () => {
   const v = JSON.parse(readFileSync(sample, 'utf8'));
+  v.history.from = '2026-11-18T10:00:01.000Z';
+  v.history.to = '2026-11-19T10:00:01.000Z';
   const d = digestOf(v);
   const moved = structuredClone(v);
   moved.generatedAt = '2030-01-01T00:00:00.000Z';
   moved.source.token = 'other';
-  moved.history.from = '2029-12-31T00:00:00.000Z';
-  moved.history.to = '2030-01-01T00:00:00.000Z';
+  moved.history.from = '2026-11-18T10:00:59.999Z';
+  moved.history.to = '2026-11-19T10:00:59.999Z';
   assert.equal(digestOf(moved), d);
+  // The window labels the History screen shows move with the minute.
+  const nextMinute = structuredClone(v);
+  nextMinute.history.to = '2026-11-19T10:01:00.000Z';
+  assert.notEqual(digestOf(nextMinute), d);
   const changed = structuredClone(v);
   changed.history.load[0] = (changed.history.load[0] ?? 0) + 1;
   assert.notEqual(digestOf(changed), d);
   const producer = structuredClone(v);
   producer.source.producerVersion = 'x';
   assert.notEqual(digestOf(producer), d);
+});
+
+test('a watch that stopped never starts its queued harness run', async () => {
+  const s = scratch();
+  const countFile = join(s.dir, 'runs');
+  const fake = fakeHarness({ view: true, lang: true, hang: true, countFile });
+  const server = await startServer({
+    harness: { bin: fake.bin, state: '/s', lang: true, defaultLang: 'en', timeoutMs: 1500 },
+    appDir,
+    version: 'test',
+  });
+  try {
+    // MAX_RUNS hanging detail runs hold every slot.
+    const held = Array.from({ length: MAX_RUNS }, (_, i) => http(server.url + `api/work/w${i}`));
+    assert.ok(await waitFor(() => runsIn(countFile).length === MAX_RUNS, 5000));
+    // The stream's first check queues behind them; the page leaves at once.
+    const es = stream(server.url + 'api/events');
+    await es.opened;
+    es.close();
+    assert.ok(await waitFor(() => server.live().watches === 0, 2000));
+    await Promise.all(held);
+    await sleep(500);
+    assert.equal(
+      runsIn(countFile).filter((r) => !r.includes('--work=')).length,
+      0,
+      'the overview run of the gone page never started',
+    );
+  } finally {
+    await server.close();
+    fake.remove();
+    s.remove();
+  }
+});
+
+test('a stream that stops reading is dropped instead of buffering without bound', () => {
+  let destroyed = false;
+  const written: string[] = [];
+  const res = {
+    writableEnded: false,
+    writableLength: 0,
+    write: (c: string) => written.push(c) > 0,
+    destroy: () => {
+      destroyed = true;
+      return res;
+    },
+  };
+  writeEvent(res as never, 'ping', {});
+  assert.equal(written.length, 1);
+  res.writableLength = MAX_BUFFERED + 1;
+  writeEvent(res as never, 'ping', {});
+  assert.equal(written.length, 1, 'nothing more is queued');
+  assert.ok(destroyed);
 });

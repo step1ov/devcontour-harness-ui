@@ -14,6 +14,7 @@ export {
   liveEventOf,
   staticViewSource,
   STREAM_SILENCE_MS,
+  type Digested,
   type EventSourceFactory,
   type EventSourceLike,
   type HttpViewSourceOptions,

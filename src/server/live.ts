@@ -15,7 +15,8 @@
 //
 // Events (one JSON object in `data`):
 //   view  {token, checkedAt}  the content token differs from the last one sent
-//   fresh {token, checkedAt}  checked again, same content (live route only)
+//   fresh {token, checkedAt}  checked again, same content (live route; a file
+//                             only after recovering from a failure)
 //   stale {code, message, since, checkedAt}  the check failed or timed out;
 //                             `since` is the first failure of this streak
 //   ping  {}                  every 15 s, so a page can tell a dead stream
@@ -27,7 +28,8 @@ export type CheckResult =
   | { ok: false; code: string; message: string; checkedAt: string };
 
 export interface WatchSpec {
-  check(): Promise<CheckResult>;
+  /** `wanted()` turns false once the watch stopped: a queued check then must not start. */
+  check(wanted: () => boolean): Promise<CheckResult>;
   /** Cheap change signature, polled every `hintMs`; a different value checks at once. */
   hint?(): Promise<string>;
   /** First interval between checks without a hint change; `undefined` = only on a hint change. */
@@ -61,9 +63,20 @@ interface Watch {
   stopped: boolean;
 }
 
-function write(res: ServerResponse, event: string, data: unknown) {
-  if (!res.writableEnded) res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+/** Bytes a stream may hold unsent; a page that stops reading is disconnected beyond it. */
+export const MAX_BUFFERED = 64 * 1024;
+
+/** Writes one event; a consumer that stopped reading (buffer over MAX_BUFFERED) is dropped. */
+export function writeEvent(
+  res: Pick<ServerResponse, 'writableEnded' | 'writableLength' | 'write' | 'destroy'>,
+  event: string,
+  data: unknown,
+) {
+  if (res.writableEnded) return;
+  if (res.writableLength > MAX_BUFFERED) return void res.destroy();
+  res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
 }
+const write = writeEvent;
 
 export interface LiveHub {
   /** Opens an SSE stream on `res` for the watch `key`, created from `spec()` if new. */
@@ -109,7 +122,7 @@ export function liveHub(): LiveHub {
     checks++;
     let r: CheckResult;
     try {
-      r = await w.spec.check();
+      r = await w.spec.check(() => !w.stopped);
     } catch (err) {
       r = {
         ok: false,
@@ -123,11 +136,14 @@ export function liveHub(): LiveHub {
     w.last = r;
     const { minMs, maxMs = minMs, activeMaxMs } = w.spec;
     if (r.ok) {
+      // Recovery after a failure is always said, even with unchanged content.
+      const recovered = w.failingSince !== undefined;
       w.failingSince = undefined;
       const changed = r.token !== w.lastToken;
       w.lastToken = r.token;
       if (changed) broadcast(w, 'view', { token: r.token, checkedAt: r.checkedAt });
-      else if (w.spec.fresh) broadcast(w, 'fresh', { token: r.token, checkedAt: r.checkedAt });
+      else if (w.spec.fresh || recovered)
+        broadcast(w, 'fresh', { token: r.token, checkedAt: r.checkedAt });
       if (minMs !== undefined) {
         const ceiling = r.activeWork && activeMaxMs !== undefined ? activeMaxMs : maxMs!;
         w.interval = changed ? minMs : Math.min((w.interval ?? minMs) * 2, ceiling);
