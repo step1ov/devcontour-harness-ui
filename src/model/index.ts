@@ -12,3 +12,12 @@ export {
   stageLabel,
   type QuestionStatus,
 } from './format.ts';
+export {
+  footerSentence,
+  formatClock,
+  headerSentence,
+  langOf,
+  ruPlural,
+  type HeaderCounts,
+  type Lang,
+} from './i18n.ts';

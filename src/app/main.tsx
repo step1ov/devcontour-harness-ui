@@ -4,11 +4,13 @@
 import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Overview } from '../components/Overview.tsx';
-import { httpViewSource, type ViewCheck } from '../model/index.ts';
+import { httpViewSource, langOf, type ViewCheck } from '../model/index.ts';
 import '../components/styles.css';
 import './app.css';
 
 const POLL_MS = 5000;
+// `?lang=ru|en` wins; otherwise the browser locale (Russian first-class).
+const lang = langOf(new URLSearchParams(window.location.search).get('lang') ?? navigator.language);
 const source = httpViewSource(new URL('./', window.location.href).toString());
 
 function App() {
@@ -48,7 +50,7 @@ function App() {
           detail.
         </p>
       ) : null}
-      <Overview view={check.view} now={Date.now()} />
+      <Overview view={check.view} now={Date.now()} lang={lang} />
     </>
   );
 }

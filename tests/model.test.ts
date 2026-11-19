@@ -123,3 +123,24 @@ test('httpViewSource keeps a typed 409 refusal and its message', async () => {
   const down = (async () => new Response('x', { status: 500 })) as typeof fetch;
   await assert.rejects(httpViewSource('http://127.0.0.1:1/', down).load());
 });
+
+test('language: Russian locales map to ru, everything else to en; plurals', async () => {
+  const { langOf, ruPlural } = await import('../src/model/i18n.ts');
+  for (const tag of ['ru', 'ru-RU', 'ru_RU.UTF-8', 'RU']) assert.equal(langOf(tag), 'ru');
+  for (const tag of ['en-US', 'rus', '', undefined, null, 'C']) assert.equal(langOf(tag), 'en');
+  const f = ['вопрос', 'вопроса', 'вопросов'] as const;
+  assert.deepEqual(
+    [1, 2, 5, 11, 12, 21, 22, 25, 111].map((n) => ruPlural(n, f)),
+    [
+      'вопрос',
+      'вопроса',
+      'вопросов',
+      'вопросов',
+      'вопросов',
+      'вопрос',
+      'вопроса',
+      'вопросов',
+      'вопросов',
+    ],
+  );
+});

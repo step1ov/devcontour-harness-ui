@@ -61,6 +61,12 @@ export interface ViewSettings {
     inputSeverity: number;
     /** `inputPolicy.leadAnswers.maxSeverity`; absent = the lead answers no blocking question. */
     leadAnswersMaxSeverity?: number;
+    /**
+     * `inputPolicy.leadAnswers.technical` (harness alpha.55): the lead answers
+     * technical questions with a recorded reason. Questions that change the
+     * result for the user always go to the operator. Absent = no.
+     */
+    leadAnswersTechnical?: boolean;
     criticalPaths: number;
     maxAttempts: number;
     repairBudget: number;
@@ -150,6 +156,13 @@ export interface OperatorQuestion {
   severity: number;
   /** Who may answer under the policy: severity above `leadAnswersMaxSeverity` is operator-only. */
   answerableBy: 'operator' | 'operator-or-lead';
+  /**
+   * Whether the answer changes the result for the user (harness alpha.55).
+   * Absent or unknown reads as `user-visible`: only the operator answers.
+   */
+  impact?: 'user-visible' | 'technical' | (string & {});
+  /** One plain line: what changes for the user. Masked and clipped (200). */
+  plain?: string;
   answeredBy?: 'operator' | 'lead' | 'host';
   /** Clipped and masked by the projection. */
   title?: string;
@@ -178,6 +191,36 @@ export interface DriftView {
   unavailable?: string;
 }
 
+/** Why a work waits, in plain words (harness alpha.55). */
+export interface BlockerView {
+  /** Engine blocker code, e.g. `DEPENDENCY_INCOMPLETE`, `INPUT_REQUIRED`. */
+  code: string;
+  /** Fixed plain text for the code; absent = the harness gave no explanation. */
+  plain?: string;
+  /** Who has to act; `null` = nobody, the work just waits its turn. */
+  actor: Actor | null;
+}
+
+/** Observed duration of a stage in this state (P2); a range, never a promise. */
+export interface TypicalDuration {
+  p50Ms: number;
+  p90Ms: number;
+  samples: number;
+}
+
+/** Where an accepted result is (P2). The remote state is read from the local remote-tracking ref, never fetched. */
+export interface TargetView {
+  repositoryId: string;
+  ref: string;
+  acceptedSha?: string;
+  remote: {
+    state: 'pushed' | 'not-pushed' | 'unknown' | (string & {});
+    trackingRef?: string;
+    /** Why the state is unknown. Masked and clipped. */
+    reason?: string;
+  };
+}
+
 export interface WorkView {
   id: string;
   graphId: string;
@@ -189,6 +232,8 @@ export interface WorkView {
     since?: string;
     next: string[];
     needs?: { actor: Actor | null; action: string };
+    /** Observed duration of this stage (P2); absent below the sample minimum. */
+    typical?: TypicalDuration;
   };
   attempts: {
     used: number;
@@ -204,11 +249,25 @@ export interface WorkView {
     neutral: { used: number; max: number };
     /** One-line summary computed by the harness; never re-derived here. */
     line?: string;
+    /** Why the previous attempt stopped (harness alpha.55). */
+    lastFailure?: {
+      attempt: number;
+      /** Report failure bucket (`failureBucketOf`), e.g. `environment`, `defect`. */
+      bucket: string;
+      /** Plain sentence, e.g. "environment: the port is busy". Masked and clipped. */
+      plain: string;
+      at?: string;
+    };
   };
   liveness?: 'active' | 'quiet' | 'stalled';
   runtime?: Runtime;
   model?: string;
-  blockers: string[];
+  /** Why the work waits; empty = nothing blocks it. Replaces the draft `string[]`. */
+  blockers: BlockerView[];
+  /** Work ids this work depends on, from the graph (P2, run plan strip). */
+  dependsOn?: string[];
+  /** Accepted locally and, as far as the local tracking ref knows, on the remote (P2). */
+  target?: TargetView;
   question?: Pick<OperatorQuestion, 'requestId' | 'state' | 'severity'>;
   spend: { calls: number; usd: Bounded; durationMs: number };
   resultSha?: string;
@@ -278,6 +337,35 @@ export interface ViewHealth {
   warnings: { code: string; message: string }[];
 }
 
+/** One entry of "who did what" (P2): lead, harness, writer, reviewer, operator. */
+export interface ActivityEntry {
+  at: string;
+  actor: Actor | 'harness' | 'writer' | 'reviewer';
+  /** Event code, e.g. `work.attempt`, `review.round`, `input.answer`. */
+  action: string;
+  workId?: string;
+  subject?: string;
+  /** Plain sentence. Masked and clipped. */
+  plain: string;
+}
+
+/** A decision taken during the run (P2), including temporary ones. */
+export interface DecisionView {
+  id: string;
+  kind: 'accepted-limitation' | 'technical-answer' | 'continue' | (string & {});
+  by: 'lead' | 'operator';
+  at: string;
+  workId?: string;
+  subject?: string;
+  findingId?: string;
+  requestId?: string;
+  /** Temporary: to be revisited when `revisit` holds. */
+  temporary: boolean;
+  revisit?: string;
+  title?: string;
+  reason?: string;
+}
+
 export interface OperatorView {
   viewVersion: typeof VIEW_VERSION;
   /** Additive revision inside a major version; the UI ignores unknown fields. */
@@ -287,7 +375,7 @@ export interface OperatorView {
     producer: string;
     producerVersion: string;
     stateVersion: number;
-    /** Opaque change token (store data version); equal token = same view. */
+    /** Content token: SHA-256 of the canonical view bytes; equal token = same view. */
     token: string;
   };
   settings: ViewSettings;
@@ -299,6 +387,10 @@ export interface OperatorView {
   progress: ViewProgress;
   history: ViewHistory;
   health: ViewHealth;
+  /** Newest first, at most 50 (P2). Absent = the producer has no activity feed. */
+  activity?: ActivityEntry[];
+  /** At most 50 (P2). Absent = the producer reports no decisions. */
+  decisions?: DecisionView[];
   /** Entries omitted by the projection's per-list limits, by list. */
   truncated?: Partial<
     Record<
@@ -310,7 +402,9 @@ export interface OperatorView {
       | 'drift'
       | 'roles'
       | 'reviewRules'
-      | 'warnings',
+      | 'warnings'
+      | 'activity'
+      | 'decisions',
       number
     >
   >;
@@ -330,6 +424,20 @@ export interface AttemptRow {
   stages: { stage: string; durationMs?: number; outcome?: 'passed' | 'failed' }[];
 }
 
+/** How one check was done (harness alpha.55). Never a bare "checked". */
+export interface VerificationRow {
+  /** Gate id, or the review subject for review rows. */
+  gate: string;
+  kind: 'gate' | 'review';
+  result: 'passed' | 'failed' | 'reused' | 'skipped' | 'not-run' | (string & {});
+  /** executed = ran now; reused = earlier evidence; read = reviewer read the diff and ran nothing. */
+  how: 'executed' | 'reused' | 'read' | 'not-checked' | (string & {});
+  /** Runtime or actor that did it. */
+  by?: string;
+  attempt?: number;
+  at?: string;
+}
+
 /**
  * Work detail: a second document (`harness view --work <id>`, `/api/view?work=<id>`)
  * so that per-attempt rows never inflate the overview document.
@@ -342,8 +450,10 @@ export interface WorkDetailView {
   work: WorkView;
   /** Newest first, at most 20. */
   attempts: AttemptRow[];
+  /** At most 50. Absent = the producer has no verification rows: shown as "no data", never as checked. */
+  verification?: VerificationRow[];
   reviews: ReviewSubjectView[];
   questions: OperatorQuestion[];
   drift?: DriftView;
-  truncated?: Partial<Record<'attempts' | 'findings', number>>;
+  truncated?: Partial<Record<'attempts' | 'findings' | 'verification', number>>;
 }

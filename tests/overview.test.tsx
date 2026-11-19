@@ -102,3 +102,21 @@ test('unavailable drift checks are not shown as zero drift', () => {
   };
   assert.match(renderToStaticMarkup(<Overview view={unknown} />), /0 \(2 not checked\)/);
 });
+
+test('header sentence and footer: Russian first-class, English fallback', () => {
+  const ru = renderToStaticMarkup(<Overview view={view} lang="ru" timeZone="UTC" />);
+  assert.match(ru, /Сейчас: в работе 1, в очереди 1\. От вас: ответить на 1 вопрос\./);
+  assert.match(ru, /Данные harness на 12:00; панель ничего не меняет\./);
+  const en = renderToStaticMarkup(<Overview view={view} timeZone="UTC" />);
+  assert.match(en, /Now: 1 working, 1 waiting in the queue\. From you: answer 1 question\./);
+  assert.match(en, /Harness data as of 12:00; the panel changes nothing\./);
+  const idle: OperatorView = {
+    ...view,
+    questions: [],
+    progress: { ...view.progress, running: 0, byStage: { done: 1 } },
+  };
+  assert.match(
+    renderToStaticMarkup(<Overview view={idle} lang="ru" timeZone="UTC" />),
+    /Сейчас ничего не выполняется\. От вас: ничего не нужно\./,
+  );
+});

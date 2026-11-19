@@ -11,6 +11,7 @@ import {
   questionStatus,
   stageLabel,
 } from '../model/format.ts';
+import { footerSentence, headerSentence, type Lang } from '../model/i18n.ts';
 
 export interface OverviewProps {
   view: OperatorView;
@@ -18,6 +19,13 @@ export interface OverviewProps {
   now?: number;
   /** Host navigation to a work order; without it work ids are plain text. */
   onOpenWork?: (workId: string) => void;
+  /**
+   * Panel language; Russian is first-class. Until slice S2 only the header
+   * sentence and the footer are localized. Default `en`.
+   */
+  lang?: Lang;
+  /** IANA time zone for the footer clock; defaults to the viewer's. */
+  timeZone?: string;
 }
 
 const severityOrder = ['exceeded', 'undetermined', 'within'];
@@ -32,13 +40,26 @@ function worstBudget(health: ViewHealth) {
   return [...health.budgets].sort((a, b) => rank(a.state) - rank(b.state))[0];
 }
 
-export function Overview({ view, now, onOpenWork }: OverviewProps) {
+export function Overview({ view, now, onOpenWork, lang = 'en', timeZone }: OverviewProps) {
   const clock = now ?? Date.parse(view.generatedAt);
   const { progress, health } = view;
   const running = view.works.filter((w) => SLOT_STAGES.has(w.stage.name));
   const asking = view.questions.filter((q) => questionStatus(q).needsAnswer);
   const otherQuestions = view.questions.filter((q) => !questionStatus(q).needsAnswer);
   const budget = worstBudget(health);
+  const count = (stage: string) =>
+    Object.hasOwn(progress.byStage, stage) ? Number(progress.byStage[stage]) || 0 : 0;
+  const sentence = headerSentence(
+    {
+      running: progress.running,
+      queued: count('queued'),
+      stopped: count('stopped'),
+      paused: progress.queue.paused,
+      questions: asking.length,
+      decisions: view.escalations.filter((e) => e.actor === 'operator').length,
+    },
+    lang,
+  );
   const workRef = (id: string) =>
     onOpenWork ? (
       <button type="button" className="hui-link" onClick={() => onOpenWork(id)}>
@@ -67,6 +88,9 @@ export function Overview({ view, now, onOpenWork }: OverviewProps) {
           {progress.done} of {progress.total} accepted
         </span>
       </header>
+      <p className="hui-lead" data-testid="sentence" lang={lang}>
+        {sentence}
+      </p>
 
       <div className="hui-panel" data-testid="needs-you">
         <h3 className="hui-subtitle">Needs your answer ({asking.length})</h3>
@@ -166,6 +190,9 @@ export function Overview({ view, now, onOpenWork }: OverviewProps) {
           </dd>
         </div>
       </dl>
+      <footer className="hui-muted hui-footer" data-testid="footer" lang={lang}>
+        {footerSentence(view.generatedAt, lang, timeZone)}
+      </footer>
     </section>
   );
 }

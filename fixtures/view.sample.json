@@ -59,7 +59,8 @@
       "repairBudget": 6,
       "maxNeutralFailures": 3,
       "reviewRoundCap": 6,
-      "reviewEscalationRounds": 3
+      "reviewEscalationRounds": 3,
+      "leadAnswersTechnical": false
     },
     "budgets": [
       {
@@ -119,7 +120,16 @@
         },
         "durationMs": 840000
       },
-      "resultSha": "3b1f9e0c2a7d"
+      "resultSha": "3b1f9e0c2a7d",
+      "target": {
+        "repositoryId": "app",
+        "ref": "refs/heads/harness/accepted",
+        "acceptedSha": "3b1f9e0c2a7d",
+        "remote": {
+          "state": "not-pushed",
+          "trackingRef": "refs/remotes/origin/harness/accepted"
+        }
+      }
     },
     {
       "id": "locale-format",
@@ -130,7 +140,12 @@
         "name": "gates",
         "step": "candidate-test:unit",
         "since": "2026-11-19T11:52:10.000Z",
-        "next": ["review", "integration"]
+        "next": ["review", "integration"],
+        "typical": {
+          "p50Ms": 300000,
+          "p90Ms": 720000,
+          "samples": 6
+        }
       },
       "attempts": {
         "used": 2,
@@ -143,7 +158,13 @@
           "used": 0,
           "max": 3
         },
-        "line": "2 attempts: 1 failed (check), 1 running; 1 left"
+        "line": "2 attempts: 1 failed (check), 1 running; 1 left",
+        "lastFailure": {
+          "attempt": 1,
+          "bucket": "defect",
+          "plain": "a check failed: lint found an unused import",
+          "at": "2026-11-19T11:40:30.000Z"
+        }
       },
       "liveness": "active",
       "runtime": "claude",
@@ -183,7 +204,13 @@
           "max": 3
         }
       },
-      "blockers": ["INPUT_REQUIRED"],
+      "blockers": [
+        {
+          "code": "INPUT_REQUIRED",
+          "plain": "waits for your answer to question q-17",
+          "actor": "operator"
+        }
+      ],
       "question": {
         "requestId": "q-17",
         "state": "awaiting-answer",
@@ -196,7 +223,8 @@
           "bound": "exact"
         },
         "durationMs": 420000
-      }
+      },
+      "dependsOn": ["add-greeting"]
     },
     {
       "id": "docs-page",
@@ -219,7 +247,13 @@
           "max": 3
         }
       },
-      "blockers": ["DEPENDENCY_INCOMPLETE"],
+      "blockers": [
+        {
+          "code": "DEPENDENCY_INCOMPLETE",
+          "plain": "just waits for export-csv to be accepted; nothing is needed",
+          "actor": null
+        }
+      ],
       "spend": {
         "calls": 0,
         "usd": {
@@ -227,7 +261,8 @@
           "bound": "exact"
         },
         "durationMs": 0
-      }
+      },
+      "dependsOn": ["export-csv"]
     }
   ],
   "reviews": [
@@ -281,7 +316,9 @@
       "severity": 8,
       "answerableBy": "operator",
       "title": "Which delimiter should the CSV use?",
-      "createdAt": "2026-11-19T11:40:00.000Z"
+      "createdAt": "2026-11-19T11:40:00.000Z",
+      "impact": "user-visible",
+      "plain": "Changes how the exported file opens in spreadsheet programs."
     }
   ],
   "escalations": [],
@@ -371,5 +408,40 @@
       "unavailable": 0
     },
     "warnings": []
-  }
+  },
+  "activity": [
+    {
+      "at": "2026-11-19T11:52:10.000Z",
+      "actor": "harness",
+      "action": "attempt.gate",
+      "workId": "locale-format",
+      "plain": "harness started check candidate-test:unit for locale-format"
+    },
+    {
+      "at": "2026-11-19T11:40:00.000Z",
+      "actor": "writer",
+      "action": "input.request",
+      "workId": "export-csv",
+      "plain": "the writer asked a question (q-17) and paused export-csv"
+    },
+    {
+      "at": "2026-11-19T11:20:00.000Z",
+      "actor": "lead",
+      "action": "run.start",
+      "plain": "the lead started the run of graph g1"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "d-1",
+      "kind": "accepted-limitation",
+      "by": "lead",
+      "at": "2026-11-19T11:10:00.000Z",
+      "subject": "g1",
+      "findingId": "F2",
+      "temporary": true,
+      "revisit": "before the release",
+      "title": "Plan note F2 accepted for now"
+    }
+  ]
 }
