@@ -159,3 +159,63 @@ test('a load that fails after a pushed change is retried until it succeeds', asy
     s.remove();
   }
 });
+
+test('a first load refused as unavailable is retried until the view comes', async ({ page }) => {
+  const s = scratch();
+  const file = join(s.dir, 'view.json');
+  writeView(file, 'cold-a', 'Вопрос после старта');
+  const cli = await startCli(['--view', file]);
+  try {
+    await page.route('**/api/view**', (r) =>
+      r.fulfill({
+        status: 503,
+        json: { error: { code: 'VIEW_UNAVAILABLE', message: 'harness view: timed out' } },
+      }),
+    );
+    await page.goto(cli.url + '?lang=ru#/');
+    await expect(page.locator('main')).toContainText('Представление сейчас недоступно');
+    // The stream is healthy and the file never changes again: only a retry helps.
+    await page.unroute('**/api/view**');
+    await expect(page.locator('main')).toContainText('Вопрос после старта', { timeout: 7000 });
+  } finally {
+    await cli.stop();
+    s.remove();
+  }
+});
+
+test('a hidden tab never polls, even after a load failed', async ({ page }) => {
+  const s = scratch();
+  const file = join(s.dir, 'view.json');
+  writeView(file, 'hide-a', 'Скрытый вопрос');
+  const cli = await startCli(['--view', file]);
+  try {
+    await page.goto(cli.url + '?lang=ru#/');
+    await expect(page.locator('main')).toContainText('Скрытый вопрос');
+    let gets = 0;
+    await page.route('**/api/view**', (r) => {
+      gets++;
+      return r.abort();
+    });
+    writeView(file, 'hide-b', 'Новый скрытый вопрос');
+    await expect(page.getByTestId('stale')).toBeVisible({ timeout: 3000 });
+    await setHidden(page, true);
+    const before = gets;
+    await page.waitForTimeout(6000);
+    expect(gets, 'GETs while hidden').toBe(before);
+  } finally {
+    await cli.stop();
+    s.remove();
+  }
+});
+
+test('the work screen holds one stream, the work detail one', async ({ page }) => {
+  const opened: string[] = [];
+  page.on('request', (r) => {
+    if (r.url().includes('/api/events')) opened.push(r.url());
+  });
+  await page.goto('./?lang=ru#/work/locale-format');
+  await expect(page.locator('main')).toContainText('Что проверено');
+  await expect(page.getByTestId('freshness')).toContainText('снимок');
+  expect(opened.length).toBe(1);
+  expect(new URL(opened[0]!).searchParams.get('work')).toBe('locale-format');
+});

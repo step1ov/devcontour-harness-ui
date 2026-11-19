@@ -107,14 +107,28 @@ function useLive<T extends Checked & { digest?: string }>(
     let poll: number | undefined;
     let retry: number | undefined;
     let unsubscribe: (() => void) | undefined;
-    let seq = 0;
+    /**
+     * Loads run one at a time. A load asked while one runs is coalesced into
+     * one more load after it. `generation` changes when a pending answer must
+     * not land any more (the tab was hidden, or the server confirmed the
+     * shown content meanwhile).
+     */
+    let generation = 0;
+    let loading = false;
+    let again = false;
     /** Server digest of the shown document (`x-hui-digest` of its GET). */
     let docDigest = last.current?.digest;
+    /** Digest of the latest `view`/`fresh` event: what the server has now. */
+    let latest: string | undefined;
+    /** Loads in a row whose digest still differs from `latest` (bounded catch-up). */
+    let behind = 0;
     /** The stream delivers events; polling then runs only to retry a failed load. */
     let pushing = false;
     let failing = false;
     const startPoll = () => {
-      if (poll === undefined) poll = window.setInterval(() => void fetchNow(), POLL_MS);
+      // A hidden tab never polls.
+      if (poll === undefined && !document.hidden)
+        poll = window.setInterval(() => void fetchNow(), POLL_MS);
     };
     const stopPoll = () => {
       window.clearInterval(poll);
@@ -129,14 +143,34 @@ function useLive<T extends Checked & { digest?: string }>(
         lost: { message, harness, since: l.lost?.since ?? new Date().toISOString() },
       }));
     };
-    const fetchNow = async () => {
-      const mine = ++seq;
+    const fetchNow = async (): Promise<void> => {
+      if (loading) {
+        again = true;
+        return;
+      }
+      loading = true;
+      again = false;
+      const mine = generation;
+      let next: T | undefined;
+      let error: string | undefined;
       try {
-        const next = await load();
-        // A slower, older answer never replaces a newer one.
-        if (stopped || mine !== seq) return;
-        if (!next.ok && next.code === 'VIEW_UNAVAILABLE' && last.current?.ok)
-          return failed(next.message, true);
+        next = await load();
+      } catch (err) {
+        error = (err as Error).message;
+      }
+      if (stopped || mine !== generation) return;
+      loading = false;
+      if (next === undefined) failed(error ?? 'error', false);
+      else if (!next.ok && next.code === 'VIEW_UNAVAILABLE') {
+        // Temporary: keep a good document with a warning, and retry either way.
+        if (last.current?.ok) failed(next.message, true);
+        else {
+          failing = true;
+          startPoll();
+          last.current = next;
+          setValue(next);
+        }
+      } else {
         last.current = next;
         docDigest = next.digest;
         failing = false;
@@ -149,10 +183,19 @@ function useLive<T extends Checked & { digest?: string }>(
           // A GET answered while polling ran the source just now: the data is current.
           ...(pushing ? {} : { stale: undefined }),
         }));
-      } catch (err) {
-        if (stopped || mine !== seq) return;
-        failed((err as Error).message, false);
+        // The server moved on while this load ran: catch up (a few times at most).
+        const lagging =
+          pushing && latest !== undefined && next.digest !== undefined && next.digest !== latest;
+        behind = lagging ? behind + 1 : 0;
+        if (lagging && behind <= 3) again = true;
       }
+      if (again) void fetchNow();
+    };
+    /** Drops a pending load: its answer is no longer wanted. */
+    const forget = () => {
+      generation++;
+      loading = false;
+      again = false;
     };
     const unsubscribeNow = () => {
       unsubscribe?.();
@@ -174,6 +217,7 @@ function useLive<T extends Checked & { digest?: string }>(
           if (ev.kind === 'down') {
             unsubscribe = undefined;
             pushing = false;
+            latest = undefined;
             // A known failure stays on screen until a load succeeds.
             setLive((l) => ({ ...l, mode: 'poll' }));
             startPoll();
@@ -188,6 +232,7 @@ function useLive<T extends Checked & { digest?: string }>(
             setLive((l) => ({ ...l, mode: 'push', stale }));
             return;
           }
+          latest = ev.token;
           const shown = docDigest !== undefined && ev.token === docDigest;
           setLive((l) => ({
             ...l,
@@ -199,6 +244,9 @@ function useLive<T extends Checked & { digest?: string }>(
             ...(shown ? { lost: undefined } : {}),
           }));
           if (shown) {
+            // A pending load would only replace confirmed content with an older answer.
+            forget();
+            behind = 0;
             failing = false;
             stopPoll();
           } else void fetchNow();
@@ -210,6 +258,7 @@ function useLive<T extends Checked & { digest?: string }>(
       if (document.hidden) {
         unsubscribeNow();
         stopPoll();
+        forget();
       } else {
         void fetchNow();
         subscribe();

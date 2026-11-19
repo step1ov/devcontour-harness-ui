@@ -451,6 +451,12 @@ test('digestOf ignores the clock within a minute, not across one', () => {
   moved.history.to = '2026-11-19T10:00:59.999Z';
   assert.equal(digestOf(moved), d);
   // The window labels the History screen shows move with the minute.
+  const offset = structuredClone(v);
+  offset.history.to = '2026-11-19T10:00:01.000+01:00';
+  assert.notEqual(digestOf(offset), d, 'an offset an hour away is another instant');
+  const sameInstant = structuredClone(v);
+  sameInstant.history.to = '2026-11-19T11:00:30.000+01:00';
+  assert.equal(digestOf(sameInstant), d, 'the same minute written with an offset');
   const nextMinute = structuredClone(v);
   nextMinute.history.to = '2026-11-19T10:01:00.000Z';
   assert.notEqual(digestOf(nextMinute), d);

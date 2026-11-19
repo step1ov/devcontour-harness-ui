@@ -216,7 +216,11 @@ const hashOf = (b: Buffer | string) => createHash('sha256').update(b).digest('he
  * do change it: the screens show them.
  */
 export function digestOf(view: unknown): string {
-  const minute = (v: unknown) => (typeof v === 'string' ? v.slice(0, 16) : v);
+  // The instant cut to the minute, in UTC: offsets never hide an hour.
+  const minute = (v: unknown) => {
+    const ms = typeof v === 'string' ? Date.parse(v) : NaN;
+    return Number.isNaN(ms) ? v : new Date(ms - (ms % 60_000)).toISOString();
+  };
   const strip = (v: unknown): unknown => {
     if (typeof v !== 'object' || v === null || Array.isArray(v)) return v;
     const o = { ...(v as Record<string, unknown>) };
