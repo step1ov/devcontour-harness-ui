@@ -1,0 +1,141 @@
+/* devcontour-harness-ui styles. Every colour, size and font is a `--hui-*`
+   variable on `.hui`; a host (DevContour) themes the components by setting
+   these variables on an ancestor, no class overrides needed. */
+
+:where(.hui) {
+  --hui-bg: #ffffff;
+  --hui-surface: #f6f7f9;
+  --hui-border: #d9dde3;
+  --hui-text: #1b1f24;
+  --hui-muted: #5b6470;
+  --hui-accent: #2856c9;
+  --hui-ok: #1d7a4a;
+  --hui-ok-bg: #e5f4ec;
+  --hui-warn: #8a5a00;
+  --hui-warn-bg: #fdf1d8;
+  --hui-bad: #b3261e;
+  --hui-font: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --hui-font-code: ui-monospace, 'SF Mono', Menlo, monospace;
+  --hui-radius: 8px;
+  --hui-gap: 12px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :where(:root:not([data-theme='light'])) :where(.hui) {
+    --hui-bg: #14171b;
+    --hui-surface: #1d2126;
+    --hui-border: #333a42;
+    --hui-text: #e7eaee;
+    --hui-muted: #9aa4af;
+    --hui-accent: #7aa2ff;
+    --hui-ok: #6fd19c;
+    --hui-ok-bg: #173325;
+    --hui-warn: #f2c266;
+    --hui-warn-bg: #3a2d10;
+    --hui-bad: #ff8a80;
+  }
+}
+:where(:root[data-theme='dark']) :where(.hui) {
+  --hui-bg: #14171b;
+  --hui-surface: #1d2126;
+  --hui-border: #333a42;
+  --hui-text: #e7eaee;
+  --hui-muted: #9aa4af;
+  --hui-accent: #7aa2ff;
+  --hui-ok: #6fd19c;
+  --hui-ok-bg: #173325;
+  --hui-warn: #f2c266;
+  --hui-warn-bg: #3a2d10;
+  --hui-bad: #ff8a80;
+}
+
+.hui {
+  font-family: var(--hui-font);
+  color: var(--hui-text);
+  background: var(--hui-bg);
+  display: grid;
+  gap: var(--hui-gap);
+  min-width: 0;
+}
+.hui code {
+  font-family: var(--hui-font-code);
+  font-size: 0.9em;
+  overflow-wrap: anywhere;
+}
+.hui-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.hui-title {
+  font-size: 1.25rem;
+  margin: 0;
+}
+.hui-subtitle {
+  font-size: 1rem;
+  margin: 0 0 8px;
+}
+.hui-panel {
+  background: var(--hui-surface);
+  border: 1px solid var(--hui-border);
+  border-radius: var(--hui-radius);
+  padding: var(--hui-gap);
+  min-width: 0;
+}
+.hui-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.hui-item {
+  min-width: 0;
+}
+.hui-muted {
+  color: var(--hui-muted);
+  margin: 0;
+}
+.hui-badge {
+  display: inline-block;
+  border: 1px solid var(--hui-border);
+  border-radius: 999px;
+  padding: 0 8px;
+  font-size: 0.8rem;
+  line-height: 1.6;
+}
+.hui-ok {
+  color: var(--hui-ok);
+  background: var(--hui-ok-bg);
+}
+.hui-warn {
+  color: var(--hui-warn);
+  background: var(--hui-warn-bg);
+}
+.hui-bad {
+  color: var(--hui-bad);
+}
+.hui-link {
+  font: inherit;
+  color: var(--hui-accent);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+}
+.hui-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--hui-gap);
+  margin: 0;
+}
+.hui-grid dt {
+  color: var(--hui-muted);
+  font-size: 0.85rem;
+}
+.hui-grid dd {
+  margin: 0;
+  font-weight: 600;
+}

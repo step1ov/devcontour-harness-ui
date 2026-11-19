@@ -1,0 +1,74 @@
+{
+  "name": "devcontour-harness-ui",
+  "version": "0.1.0-alpha.0",
+  "description": "Read-only operator panel for devcontour-harness: React components and a local standalone app over the harness operator view.",
+  "type": "module",
+  "license": "MIT",
+  "private": false,
+  "engines": {
+    "node": ">=24.3.0"
+  },
+  "bin": {
+    "devcontour-harness-ui": "dist/lib/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/lib/index.d.ts",
+      "default": "./dist/lib/index.js"
+    },
+    "./model": {
+      "types": "./dist/lib/model/index.d.ts",
+      "default": "./dist/lib/model/index.js"
+    },
+    "./styles.css": "./dist/lib/styles.css",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "fixtures",
+    "docs",
+    "skills",
+    "LICENSE",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "tag": "alpha"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "node --disable-warning=ExperimentalWarning --import tsx --test tests/*.test.ts tests/*.test.tsx",
+    "build": "node scripts/clean.mjs && tsc -p tsconfig.build.json && node scripts/copy-assets.mjs && vite build",
+    "start": "node dist/lib/cli.js --view fixtures/view.sample.json",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "peerDependencies": {
+    "devcontour-harness": ">=0.1.0-alpha.53 <0.2.0",
+    "react": "^19.2.9",
+    "react-dom": "^19.2.9"
+  },
+  "peerDependenciesMeta": {
+    "devcontour-harness": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    },
+    "react-dom": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "24.13.5",
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.6",
+    "@vitejs/plugin-react": "6.1.2",
+    "prettier": "3.9.7",
+    "react": "19.2.9",
+    "react-dom": "19.2.9",
+    "tsx": "4.23.13",
+    "typescript": "6.0.3",
+    "vite": "8.3.5"
+  }
+}

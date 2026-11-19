@@ -1,0 +1,9 @@
+node_modules/
+/dist/
+/.private/
+*.tgz
+.DS_Store
+.env*
+.idea/
+*.iml
+/coverage/
