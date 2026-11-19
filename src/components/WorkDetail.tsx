@@ -9,6 +9,7 @@ import {
   SLOT_STAGES,
   formatDuration,
   formatElapsed,
+  formatTypical,
   formatUsd,
   questionStatus,
   stageLabel,
@@ -16,6 +17,7 @@ import {
 import type { DriftView, VerificationRow, WorkDetailView } from '../model/view.ts';
 import {
   AcceptedLine,
+  AnswerBasisLine,
   BlockerLine,
   Heading,
   StageStatus,
@@ -87,6 +89,7 @@ export function WorkDetail({
   const work = detail.work;
   const links = { onOpenWork, workHref };
   const clock = now ?? instantMs(detail.generatedAt);
+  const typical = formatTypical(work.stage.typical, lang);
   const latest = detail.attempts[0];
   const a = work.attempts;
   const accepted = work.stage.name === 'done' || work.target !== undefined;
@@ -150,14 +153,8 @@ export function WorkDetail({
                 formatElapsed(work.stage.since, clock, lang),
               )
             : ''}
-          {work.stage.typical
-            ? '; ' +
-              t.typicalRange(
-                formatDuration(work.stage.typical.p50Ms, lang),
-                formatDuration(work.stage.typical.p90Ms, lang),
-              )
-            : ''}
-          {work.stage.step || work.stage.since || work.stage.typical ? '.' : ''}{' '}
+          {typical ? '; ' + typical : ''}
+          {work.stage.step || work.stage.since || typical ? '.' : ''}{' '}
           {work.stage.next.length
             ? w.next(work.stage.next.map((s) => stageLabel(s, lang).toLowerCase()).join(', '))
             : w.nothingNext}
@@ -171,6 +168,11 @@ export function WorkDetail({
           <p className="hui-muted">
             {t.actor.writer}: {[work.runtime, work.model].filter(Boolean).join(' · ')}
           </p>
+        ) : null}
+        {typical ? (
+          <div className="hui-terms">
+            <Term id="typical" t={t} named />
+          </div>
         ) : null}
       </div>
 
@@ -341,15 +343,18 @@ export function WorkDetail({
                     {t.question.whatChanges} {q.plain}
                   </div>
                 ) : null}
-                <div className="hui-muted">
-                  {questionStatus(q, lang).text}
-                  {q.answeredBy ? ' ' + t.question.answeredBy(actorLabel(t, q.answeredBy)) : ''}
-                </div>
+                <div className="hui-muted">{questionStatus(q, lang).text}</div>
+                <AnswerBasisLine q={q} t={t} timeZone={timeZone} now={clock} />
               </li>
             ))}
           </ul>
         )}
         {clipped(w.clippedName.questions!, detail.truncated?.questions)}
+        {detail.questions.some((q) => q.answerBasis) ? (
+          <div className="hui-terms">
+            <Term id="answerBasis" t={t} named />
+          </div>
+        ) : null}
       </div>
 
       <div className="hui-panel" data-testid="work-reviews">

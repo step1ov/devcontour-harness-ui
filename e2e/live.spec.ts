@@ -119,6 +119,37 @@ test('live route: a hidden tab runs no harness; showing it again resumes', async
   }
 });
 
+test('live route on harness alpha.56: the page follows the harness content token', async ({
+  page,
+}) => {
+  const s = scratch();
+  const viewFile = join(s.dir, 'view.json');
+  const countFile = join(s.dir, 'runs');
+  expect(sample.viewRevision).toBe(1);
+  writeView(viewFile, 'tok-a', 'Вопрос с токеном');
+  const fake = fakeHarness({ view: true, lang: true, viewFile, countFile });
+  const cli = await startCli(['--state', join(s.dir, 'state'), '--harness', fake.bin]);
+  try {
+    await page.goto(cli.url + '?lang=ru#/');
+    await expect(page.locator('main')).toContainText('Вопрос с токеном');
+    // Probe: a rerun with the same token but another title. The token says
+    // "same content" (alpha.56 contract), so the page must not reload — with
+    // the local digest of alpha.55 the new title would show up.
+    writeView(viewFile, 'tok-a', 'Подмена без нового токена');
+    const runs = runsIn(countFile).length;
+    await expect.poll(() => runsIn(countFile).length, { timeout: 10_000 }).toBeGreaterThan(runs);
+    await page.waitForTimeout(500);
+    await expect(page.locator('main')).toContainText('Вопрос с токеном');
+    // The harness token changes with the content: the page loads it.
+    writeView(viewFile, 'tok-b', 'Новый вопрос с токеном');
+    await expect(page.locator('main')).toContainText('Новый вопрос с токеном', { timeout: 20_000 });
+  } finally {
+    await cli.stop();
+    fake.remove();
+    s.remove();
+  }
+});
+
 test('a blocked stream falls back to polling every 5 s', async ({ page }) => {
   const s = scratch();
   const file = join(s.dir, 'view.json');

@@ -1,6 +1,6 @@
 {
   "viewVersion": 1,
-  "viewRevision": 0,
+  "viewRevision": 1,
   "generatedAt": "2026-11-19T12:00:00.000Z",
   "source": {
     "producer": "fixture",
@@ -164,6 +164,14 @@
       "impact": "technical",
       "plain": "Nothing changes for the user: dates look the same.",
       "answeredBy": "lead",
+      "answerBasis": {
+        "by": "lead",
+        "rule": "technical",
+        "reason": "the built-in Intl.DateTimeFormat is enough; no new dependency",
+        "impact": "technical",
+        "at": "2026-11-19T11:27:00.000Z",
+        "line": "answered by the lead (technical question): the built-in Intl.DateTimeFormat is enough; no new dependency"
+      },
       "title": "Which date library should the formatter use?",
       "createdAt": "2026-11-19T11:25:00.000Z"
     }

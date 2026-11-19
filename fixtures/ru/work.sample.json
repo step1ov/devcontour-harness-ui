@@ -1,6 +1,6 @@
 {
   "viewVersion": 1,
-  "viewRevision": 0,
+  "viewRevision": 1,
   "generatedAt": "2026-11-19T12:00:00.000Z",
   "source": {
     "producer": "fixture",
@@ -164,6 +164,14 @@
       "impact": "technical",
       "plain": "Для пользователя ничего не меняется: даты выглядят так же.",
       "answeredBy": "lead",
+      "answerBasis": {
+        "by": "lead",
+        "rule": "technical",
+        "reason": "хватает встроенного Intl.DateTimeFormat, без новой зависимости",
+        "impact": "technical",
+        "at": "2026-11-19T11:27:00.000Z",
+        "line": "ответил ведущий (технический вопрос): хватает встроенного Intl.DateTimeFormat, без новой зависимости"
+      },
       "title": "Какую библиотеку дат использовать для форматирования?",
       "createdAt": "2026-11-19T11:25:00.000Z"
     }

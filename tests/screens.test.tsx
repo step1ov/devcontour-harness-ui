@@ -20,6 +20,8 @@ import {
   checkWorkDetail,
   cumulativeSpend,
   effectiveCodeReview,
+  formatTypical,
+  questionStatus,
   perHour,
   type Lang,
   type OperatorView,
@@ -38,6 +40,20 @@ const detailOf = (rel: string): WorkDetailView => {
 };
 const running = detailOf('../fixtures/work.sample.json');
 const accepted = detailOf('../fixtures/work.accepted.sample.json');
+const ruView = (() => {
+  const c = checkView(read('../fixtures/ru/view.sample.json'));
+  if (!c.ok) throw new Error(c.message);
+  return c.view;
+})();
+const ruAccepted = detailOf('../fixtures/ru/work.accepted.sample.json');
+/** The same document as harness alpha.55 sends it: revision 0, no revision 1 fields. */
+function asAlpha55<T extends OperatorView | WorkDetailView>(doc: T): T {
+  const d = structuredClone(doc) as T & { history?: OperatorView['history'] };
+  d.viewRevision = 0;
+  for (const q of d.questions) delete q.answerBasis;
+  if (d.history) delete d.history.totals;
+  return d;
+}
 const workHref = (id: string) => '#/work/' + id;
 const html = (el: ReactElement) => renderToStaticMarkup(el);
 const TZ = 'UTC';
@@ -85,10 +101,7 @@ const text = (s: string) => s.replace(/<[^>]+>/g, '');
 
 test('work detail (RU): now, stages, why a retry, what was checked and how', () => {
   const ru = html(<WorkDetail detail={running} lang="ru" timeZone={TZ} workHref={workHref} />);
-  assert.match(
-    text(ru),
-    /Проверки \(candidate-test:unit\) с 11:52, 7 мин 50 с; обычно 5 мин–12 мин\./,
-  );
+  assert.match(text(ru), /Проверки \(candidate-test:unit\) с 11:52, 7 мин 50 с; обычно 5–12 мин\./);
   assert.match(ru, /Дальше: ревью, интеграция\./);
   assert.match(ru, /Подготовка<\/span> <span class="hui-muted">— пройден, 20 с/);
   assert.match(ru, /Проверки<\/span> <span class="hui-muted">— идёт сейчас/);
@@ -112,7 +125,12 @@ test('work detail (RU): now, stages, why a retry, what was checked and how', () 
   assert.match(ru, /≥ \$3\.40 · 5 вызовов · 31 мин 40 с/);
   assert.match(ru, /Ещё не принято\./);
   assert.match(ru, /Работа ещё не принята — дрейфа быть не может\./);
-  assert.match(ru, /q-12.*Ответ передан исполнителю.*ответил: ведущий/s);
+  // Who answered and why: the harness line with the answer time.
+  assert.match(
+    text(ru),
+    /q-12.*Ответ передан исполнителю; ничего делать не нужно\.11:27 — answered by the lead \(technical question\): the built-in Intl\.DateTimeFormat is enough; no new dependency/s,
+  );
+  assert.match(text(ru), /кто и почему ответил: что это значит/);
 });
 
 test('work detail (EN) and the accepted work: where it is, drift and the checks link', () => {
@@ -405,7 +423,7 @@ test('overview: plan strip, waiting with who acts, plain question lines (RU)', (
     ru,
     /just waits for export-csv to be accepted; nothing is needed<\/span> — <span class="hui-who">никто — просто ждёт очереди, ничего не нужно/,
   );
-  assert.match(ru, /обычно 5 мин–12 мин/);
+  assert.match(ru, /обычно 5–12 мин/);
 });
 
 const variants = (): { name: string; v: OperatorView; d: WorkDetailView[] }[] => {
@@ -698,5 +716,178 @@ test('settings: role/repository pairs from review overrides; a clipped rule list
   assert.match(
     html(<Settings view={empty} lang="ru" />),
     /data-testid="default-thresholds\.inputSeverity"/,
+  );
+});
+
+test('answer basis: who answered and why, RU first; alpha.55 names only who answered', () => {
+  // The Russian demo: the harness line in Russian, with the answer time.
+  const ru = text(html(<Overview view={ruView} lang="ru" timeZone={TZ} workHref={workHref} />));
+  assert.match(
+    ru,
+    /q-12: Ответ передан исполнителю; ничего делать не нужно\.11:27 — ответил ведущий \(технический вопрос\): хватает встроенного Intl\.DateTimeFormat, без новой зависимости/,
+  );
+  assert.match(ru, /кто и почему ответил: что это значит/);
+  // A question of a closed work: the detail names the operator's answer.
+  const ok = text(html(<WorkDetail detail={ruAccepted} lang="ru" timeZone={TZ} />));
+  assert.match(
+    ok,
+    /q-5.*Ответ передан исполнителю; ничего делать не нужно\.09:20 — ответил оператор/s,
+  );
+  // English UI over the English demo.
+  const en = text(html(<WorkDetail detail={accepted} lang="en" timeZone={TZ} />));
+  assert.match(en, /09:20 — answered by the operator/);
+  assert.match(en, /who answered and why: what this means/);
+  // alpha.55: no basis, only who answered (as before); no disclosure without a basis.
+  const old = text(html(<WorkDetail detail={asAlpha55(running)} lang="ru" timeZone={TZ} />));
+  assert.match(old, /Ответ передан исполнителю; ничего делать не нужно\.ответил: ведущий/);
+  assert.doesNotMatch(old, /кто и почему ответил|технический вопрос\)/);
+  const oldOverview = html(<Overview view={asAlpha55(view)} lang="ru" timeZone={TZ} />);
+  assert.doesNotMatch(oldOverview, /кто и почему ответил/);
+  // Neither basis nor answeredBy: nothing is said about who answered.
+  const bare = asAlpha55(running);
+  for (const q of bare.questions) delete q.answeredBy;
+  assert.doesNotMatch(
+    html(<WorkDetail detail={bare} lang="ru" timeZone={TZ} />),
+    /data-testid="answer-basis"/,
+  );
+  // An empty line from another producer falls back to who answered.
+  const blank = structuredClone(running);
+  blank.questions[0]!.answerBasis!.line = '  ';
+  assert.match(
+    text(html(<WorkDetail detail={blank} lang="ru" timeZone={TZ} />)),
+    /11:27 — ответил: ведущий/,
+  );
+});
+
+test('questions of a closed work: cancelled and superseded are said, never "needs an answer"', () => {
+  const d = structuredClone(ruAccepted);
+  d.questions[0]!.state = 'cancelled';
+  d.questions.push({ ...d.questions[0]!, requestId: 'q-6', state: 'superseded' });
+  const ru = text(html(<WorkDetail detail={d} lang="ru" timeZone={TZ} />));
+  assert.match(ru, /q-5.*Вопрос снят: работу отменили\./s);
+  assert.match(ru, /q-6.*Вопрос заменён другим\./s);
+  const en = text(html(<WorkDetail detail={d} lang="en" timeZone={TZ} />));
+  assert.match(en, /Question withdrawn: the work was cancelled\./);
+  assert.match(en, /Question replaced by another one\./);
+  for (const state of ['cancelled', 'superseded'])
+    assert.equal(questionStatus({ state, answerableBy: 'operator' }).needsAnswer, false);
+});
+
+test('history totals (alpha.56): every number from the harness, each term explained', () => {
+  const ru = html(<History view={view} lang="ru" timeZone={TZ} />);
+  const panel = ru.slice(
+    ru.indexOf('data-testid="history-totals"'),
+    ru.indexOf('data-testid="chart-load"'),
+  );
+  const row = (id: string) => {
+    const at = panel.indexOf(`data-testid="total-${id}"`);
+    assert.ok(at >= 0, id);
+    return text(panel.slice(at, panel.indexOf('</div>', at)));
+  };
+  assert.ok(text(panel).includes('Итоги окна'));
+  assert.match(row('started'), /Начато попыток11/);
+  assert.match(row('failed'), /Неудачных попыток1 \(по причинам: ошибка в коде — 1\)/);
+  assert.match(row('gates'), /пройдено 27, не пройдено 1, по прежнему доказательству 1/);
+  assert.match(row('rounds'), /план 2, контракт 1, код 1, в попытках 4/);
+  assert.match(row('spend'), /Расход за окно≥ \$6\.30/);
+  assert.match(row('wall'), /Время, когда шли попытки7 ч 40 мин/);
+  assert.match(row('attempt-ms'), /Сумма времени попыток9 ч 10 мин/);
+  assert.match(row('peak'), /Пик нагрузки2 одновременно при 2 местах/);
+  // Each row has its «что это значит»: attempt, failure reason, gates, review
+  // round, lower bound (the spend is a lower bound), wall and attempt time, peak.
+  assert.equal(panel.match(/<details class="hui-term">/g)?.length, 8);
+  for (const term of [
+    'попытка',
+    'причина неудачи',
+    'проверки (gates)',
+    'раунд ревью',
+    'нижняя граница (≥)',
+    'время, когда шли попытки',
+    'сумма времени попыток',
+    'пик нагрузки',
+  ])
+    assert.ok(panel.includes(`<span class="hui-sr"> — ${term}</span>`), term);
+  const en = text(html(<History view={view} lang="en" timeZone={TZ} />));
+  assert.match(en, /Window totals/);
+  assert.match(en, /Attempts failed1 \(by reason: a defect in the code — 1\)/);
+  assert.match(en, /Checks27 passed, 1 failed, 1 from earlier evidence/);
+  assert.match(en, /plan 2, contract 1, code 1, in attempts 4/);
+  assert.match(en, /Spend in the window≥ \$6\.30/);
+  assert.match(en, /Time attempts were running7h 40m/);
+  assert.match(en, /Attempt time added up9h 10m/);
+  assert.match(en, /2 at once with 2 slots/);
+});
+
+test('history totals drive the chart summaries; alpha.55 says it has none instead of zeros', () => {
+  // Totals that differ from the series: the summaries read the totals.
+  const v = structuredClone(view);
+  v.history.totals = {
+    ...v.history.totals!,
+    attemptsStarted: 40,
+    attemptsFailed: 3,
+    failuresByBucket: { environment: 2, unclassified: 1 },
+    gatesPassed: 90,
+    gatesFailed: 4,
+    gatesReused: 5,
+    loadPeak: 3,
+    spendUsd: { value: 0, bound: 'unknown' },
+  };
+  const ru = text(html(<History view={v} lang="ru" timeZone={TZ} />));
+  assert.match(ru, /За окно начато попыток: 40, неудачных: 3;/);
+  assert.match(ru, /За окно пройдено: 90, не пройдено: 4; засчитано по прежнему доказательству: 5/);
+  assert.match(ru, /Наибольшая нагрузка за окно: 3 одновременно/);
+  assert.match(ru, /по причинам: окружение — 2, без группы — 1/);
+  // An unknown spend is "unknown", with its disclosure, never $0.00.
+  assert.match(ru, /Расход за окнонеизвестно/);
+  assert.doesNotMatch(ru, /Расход за окно\$0\.00/);
+  // alpha.55: no totals panel numbers, a plain sentence; summaries add up the series.
+  const old = html(<History view={asAlpha55(view)} lang="ru" timeZone={TZ} />);
+  assert.match(old, /data-testid="history-totals-missing"/);
+  assert.match(text(old), /Итогов окна нет в этой версии harness/);
+  assert.doesNotMatch(old, /data-testid="total-/);
+  assert.match(text(old), /За окно начато попыток: 11, неудачных: 1;/);
+  assert.match(
+    text(html(<History view={asAlpha55(view)} lang="en" timeZone={TZ} />)),
+    /This harness version sends no window totals/,
+  );
+  // Zero failures: no "by reason" part, the count is a real 0 from the harness.
+  const none = structuredClone(view);
+  none.history.totals = { ...none.history.totals!, attemptsFailed: 0, failuresByBucket: {} };
+  assert.match(text(html(<History view={none} lang="ru" />)), /Неудачных попыток0(?! \()/);
+});
+
+test('usual stage time: an honest range only when the harness sent one', () => {
+  const typical = (p50Ms: number, p90Ms: number, lang: Lang = 'ru') =>
+    formatTypical({ p50Ms, p90Ms, samples: 6 }, lang);
+  assert.equal(typical(300_000, 720_000), 'обычно 5–12 мин');
+  assert.equal(typical(300_000, 720_000, 'en'), 'usually 5–12 min');
+  // The low end rounds down, the high end up: never narrower than observed.
+  assert.equal(typical(749_000, 1_441_000), 'обычно 12–25 мин');
+  assert.equal(typical(720_000, 720_000), 'обычно 12 мин');
+  assert.equal(typical(20_500, 44_200), 'обычно 20–45 с');
+  assert.equal(typical(30_000, 100_000), 'обычно до 2 мин');
+  assert.equal(typical(30_000, 100_000, 'en'), 'usually up to 2 min');
+  assert.equal(typical(2_700_000, 4_200_000), 'обычно 45 мин–1 ч 10 мин');
+  assert.equal(typical(3_900_000, 7_800_000, 'en'), 'usually 1h 05m–2h 10m');
+  // Inconsistent or missing: nothing, never a made-up number.
+  assert.equal(typical(720_000, 300_000), undefined);
+  assert.equal(typical(Number.NaN, 300_000), undefined);
+  assert.equal(formatTypical(undefined, 'ru'), undefined);
+  // Without an observation the screens say nothing about usual time.
+  const v = structuredClone(view);
+  for (const w of v.works) delete w.stage.typical;
+  const ov = html(<Overview view={v} lang="ru" timeZone={TZ} />);
+  assert.doesNotMatch(ov, /data-testid="typical"|обычно|обычное время этапа/);
+  const d = structuredClone(running);
+  delete d.work.stage.typical;
+  assert.doesNotMatch(html(<WorkDetail detail={d} lang="ru" />), /обычно|обычное время этапа/);
+  // With one: the range and its disclosure on both screens.
+  assert.match(
+    html(<Overview view={view} lang="ru" timeZone={TZ} />),
+    /обычно 5–12 мин.*обычное время этапа: что это значит/s,
+  );
+  assert.match(
+    text(html(<WorkDetail detail={running} lang="ru" />)),
+    /обычное время этапа: что это значит/,
   );
 });

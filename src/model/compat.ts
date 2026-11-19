@@ -20,7 +20,7 @@ export type ViewCheck =
     };
 
 /** Highest `viewRevision` this build knows how to render in full. */
-export const KNOWN_VIEW_REVISION = 0;
+export const KNOWN_VIEW_REVISION = 1;
 
 type Obj = Record<string, unknown>;
 const isObject = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -230,6 +230,7 @@ const question: Check = (v, path, out) => {
     impact: opt(S),
     plain: opt(S),
     answeredBy: opt(S),
+    answerBasis: opt(obj({ by: S, rule: opt(S), reason: opt(S), impact: S, at: I, line: S })),
     title: opt(S),
     createdAt: I,
   })(v, path, out);
@@ -287,6 +288,21 @@ const overview = obj({
     spendBound: S,
     spendOpeningUsd: bounded,
     budgetUsd: opt(N),
+    totals: opt(
+      obj({
+        attemptsStarted: C,
+        attemptsFailed: C,
+        failuresByBucket: rec(C),
+        gatesPassed: C,
+        gatesFailed: C,
+        gatesReused: C,
+        reviewRounds: obj({ plan: C, contract: C, code: C, attempt: C }),
+        spendUsd: bounded,
+        wallMs: C,
+        attemptMs: C,
+        loadPeak: C,
+      }),
+    ),
   }),
   health: obj({
     controller: obj({ present: B, leaseUntil: opt(I) }),

@@ -1,10 +1,14 @@
 // Contract with devcontour-harness: the view schema is owned by the harness.
 // tests/contract/harness/*.schema.json are verbatim copies of the harness
 // schemas (schemas/operator-view.schema.json, schemas/work-detail-view.schema.json
-// of 0.1.0-alpha.55); empty-state.view.json is a real `harness view --lang en`
-// envelope for a state that does not exist yet. With DEVCONTOUR_HARNESS_DIR
-// pointing at a harness checkout the copies are compared byte for byte and a
-// live smoke runs that checkout's `capabilities` and `view`.
+// of 0.1.0-alpha.56, view revision 1); empty-state.view.json is a real
+// `harness view --lang en` envelope of that version for a state that does not
+// exist yet. tests/contract/harness-0.1.0-alpha.55/ keeps the same files of
+// 0.1.0-alpha.55 (revision 0): the panel still supports that harness
+// (peer >=0.1.0-alpha.55), so 55-shaped documents must pass both schemas and
+// the gate. With DEVCONTOUR_HARNESS_DIR pointing at a harness checkout the
+// copies are compared byte for byte and a live smoke runs that checkout's
+// `capabilities` and `view`.
 
 import { strict as assert } from 'node:assert';
 import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -15,12 +19,14 @@ import {
   checkView,
   checkWorkDetail,
   type ActivityEntry,
+  type AnswerBasis,
   type AttemptRow,
   type BlockerView,
   type DecisionView,
   type DriftView,
   type Escalation,
   type FindingView,
+  type HistoryTotals,
   type OperatorQuestion,
   type OperatorView,
   type ReviewRuleView,
@@ -36,6 +42,7 @@ import {
   type WorkView,
 } from '../src/model/index.ts';
 import { validate } from './contract/json-schema.ts';
+import { instantMs } from '../src/model/compat.ts';
 
 type Json = Record<string, any>;
 const read = (rel: string): Json =>
@@ -46,6 +53,26 @@ const viewFixture = read('../fixtures/view.sample.json');
 const workFixture = read('../fixtures/work.sample.json');
 const acceptedFixture = read('../fixtures/work.accepted.sample.json');
 const harnessEmpty = read('./contract/harness/empty-state.view.json');
+const overviewSchema55 = read('./contract/harness-0.1.0-alpha.55/operator-view.schema.json');
+const detailSchema55 = read('./contract/harness-0.1.0-alpha.55/work-detail-view.schema.json');
+const harnessEmpty55 = read('./contract/harness-0.1.0-alpha.55/empty-state.view.json');
+
+/** The same document as harness alpha.55 would send it: revision 0, without the revision 1 fields. */
+function asAlpha55(doc: Json): Json {
+  const d = structuredClone(doc);
+  d.viewRevision = 0;
+  for (const q of d.questions ?? []) delete q.answerBasis;
+  if (d.history) delete d.history.totals;
+  return d;
+}
+const fixtures = (): [string, Json, Json][] => [
+  ['view.sample.json', viewFixture, overviewSchema],
+  ['ru/view.sample.json', read('../fixtures/ru/view.sample.json'), overviewSchema],
+  ['work.sample.json', workFixture, detailSchema],
+  ['work.accepted.sample.json', acceptedFixture, detailSchema],
+  ['ru/work.sample.json', read('../fixtures/ru/work.sample.json'), detailSchema],
+  ['ru/work.accepted.sample.json', read('../fixtures/ru/work.accepted.sample.json'), detailSchema],
+];
 
 test('both fixtures and a real harness document are valid under the harness schemas', () => {
   assert.deepEqual(validate(overviewSchema, viewFixture), []);
@@ -56,7 +83,69 @@ test('both fixtures and a real harness document are valid under the harness sche
   for (const f of ['work.sample.json', 'work.accepted.sample.json'])
     assert.deepEqual(validate(detailSchema, read('../fixtures/ru/' + f)), [], f);
   assert.equal(harnessEmpty.ok, true);
+  assert.equal(harnessEmpty.data.viewRevision, 1);
   assert.deepEqual(validate(overviewSchema, harnessEmpty.data), []);
+});
+
+test('alpha.55 documents (revision 0) stay valid under the alpha.56 schemas and pass the gate', () => {
+  // The real alpha.55 envelope, under both schema versions.
+  assert.equal(harnessEmpty55.data.viewRevision, 0);
+  assert.deepEqual(validate(overviewSchema55, harnessEmpty55.data), []);
+  assert.deepEqual(validate(overviewSchema, harnessEmpty55.data), []);
+  const real = checkView(harnessEmpty55.data);
+  assert.equal(real.ok, true, real.ok ? '' : real.message);
+  assert.equal(real.ok && real.view.history.totals, undefined);
+  for (const [name, doc, schema] of fixtures()) {
+    const old = asAlpha55(doc);
+    const old55 = schema === overviewSchema ? overviewSchema55 : detailSchema55;
+    // A 55-shaped copy is a real alpha.55 document: valid under the alpha.55 schema…
+    assert.deepEqual(validate(old55, old), [], name);
+    // …and still valid under the alpha.56 one: the revision 1 fields are optional.
+    assert.deepEqual(validate(schema, old), [], name);
+    const c = schema === overviewSchema ? checkView(old) : checkWorkDetail(old);
+    assert.equal(c.ok, true, `${name}: ${c.ok ? '' : c.message}`);
+    assert.equal(c.ok && c.newerRevision, false, name);
+  }
+});
+
+test('the 56-shaped fixtures really carry the revision 1 fields (the alpha.55 schema refuses them)', () => {
+  for (const [name, doc, schema] of fixtures()) {
+    assert.equal(doc.viewRevision, 1, name);
+    const old55 = schema === overviewSchema ? overviewSchema55 : detailSchema55;
+    const errors = validate(old55, doc).join();
+    assert.match(errors, /unknown field answerBasis/, name);
+    if (schema === overviewSchema) assert.match(errors, /unknown field totals/, name);
+  }
+  assert.match(validate(overviewSchema55, harnessEmpty.data).join(), /unknown field totals/);
+});
+
+test('fixture window totals follow the harness rules: series sums, buckets add up to failures', () => {
+  for (const doc of [viewFixture, read('../fixtures/ru/view.sample.json'), harnessEmpty.data]) {
+    const h = doc.history;
+    const t = h.totals as HistoryTotals;
+    const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
+    assert.equal(t.attemptsStarted, sum(h.attemptsStarted));
+    assert.equal(t.attemptsFailed, sum(h.attemptsFailed));
+    assert.equal(sum(Object.values(t.failuresByBucket)), t.attemptsFailed);
+    assert.equal(t.gatesPassed, sum(h.gatesPassed));
+    assert.equal(t.gatesFailed, sum(h.gatesFailed));
+    assert.equal(t.gatesReused, sum(h.gatesReused));
+    assert.equal(t.loadPeak, Math.max(0, ...h.load));
+    assert.ok(Math.abs(t.spendUsd.value - sum(h.spendUsd)) < 1e-9);
+    assert.equal(t.spendUsd.bound, h.spendBound);
+    assert.ok(t.wallMs <= t.attemptMs, 'parallel attempts add up only in attemptMs');
+    assert.ok(t.wallMs <= instantMs(h.to) - instantMs(h.from));
+  }
+  // Every answer basis line starts with who answered, as the harness writes it.
+  for (const [name, doc] of fixtures())
+    for (const q of doc.questions as OperatorQuestion[]) {
+      const b = q.answerBasis;
+      if (!b) continue;
+      assert.equal(b.by, q.answeredBy, name);
+      assert.equal(b.rule !== undefined, b.by === 'lead', `${name}: only the lead has a rule`);
+      assert.match(b.line, /^(answered by|ответил) /, name);
+      if (b.reason) assert.ok(b.line.endsWith(': ' + b.reason), name);
+    }
 });
 
 test('every schema-valid overview passes the compatibility gate', () => {
@@ -434,8 +523,21 @@ const shapes: [string, Json, Record<string, string>][] = [
       impact: 'opt:s',
       plain: 'opt:s',
       answeredBy: 'opt:s',
+      answerBasis: 'opt:o',
       title: 'opt:s',
       createdAt: 'req:s',
+    }),
+  ],
+  [
+    'questions[].answerBasis',
+    overviewSchema[ov].questions.items[ov].answerBasis,
+    shape<AnswerBasis>({
+      by: 'req:s',
+      rule: 'opt:s',
+      reason: 'opt:s',
+      impact: 'req:s',
+      at: 'req:s',
+      line: 'req:s',
     }),
   ],
   [
@@ -505,7 +607,40 @@ const shapes: [string, Json, Record<string, string>][] = [
       spendBound: 'req:s',
       spendOpeningUsd: 'req:o',
       budgetUsd: 'opt:n',
+      totals: 'opt:o',
     }),
+  ],
+  [
+    'history.totals',
+    overviewSchema[ov].history[ov].totals,
+    shape<HistoryTotals>({
+      attemptsStarted: 'req:n',
+      attemptsFailed: 'req:n',
+      failuresByBucket: 'req:o',
+      gatesPassed: 'req:n',
+      gatesFailed: 'req:n',
+      gatesReused: 'req:n',
+      reviewRounds: 'req:o',
+      spendUsd: 'req:o',
+      wallMs: 'req:n',
+      attemptMs: 'req:n',
+      loadPeak: 'req:n',
+    }),
+  ],
+  [
+    'history.totals.reviewRounds',
+    overviewSchema[ov].history[ov].totals[ov].reviewRounds,
+    shape<HistoryTotals['reviewRounds']>({
+      plan: 'req:n',
+      contract: 'req:n',
+      code: 'req:n',
+      attempt: 'req:n',
+    }),
+  ],
+  [
+    'history.totals.spendUsd',
+    overviewSchema[ov].history[ov].totals[ov].spendUsd,
+    shape<HistoryTotals['spendUsd']>({ value: 'req:n', bound: 'req:s' }),
   ],
   [
     'health',
@@ -760,6 +895,21 @@ const vocabularies: [string, Json, string[]][] = [
     vocab<NonNullable<OperatorQuestion['answeredBy']>>()(['operator', 'lead', 'host']),
   ],
   [
+    'questions[].answerBasis.by',
+    overviewSchema[ov].questions.items[ov].answerBasis[ov].by,
+    vocab<AnswerBasis['by']>()(['operator', 'lead', 'host']),
+  ],
+  [
+    'questions[].answerBasis.rule',
+    overviewSchema[ov].questions.items[ov].answerBasis[ov].rule,
+    vocab<NonNullable<AnswerBasis['rule']>>()(['technical', 'severity']),
+  ],
+  [
+    'history.totals.spendUsd.bound',
+    overviewSchema[ov].history[ov].totals[ov].spendUsd[ov].bound,
+    vocab<HistoryTotals['spendUsd']['bound']>()(['exact', 'lower', 'unknown']),
+  ],
+  [
     'history.spendBound',
     overviewSchema[ov].history[ov].spendBound,
     vocab<ViewHistory['spendBound']>()(['exact', 'lower', 'unknown']),
@@ -896,6 +1046,27 @@ test(
       assert.equal(checkView(view).ok, true);
       assert.equal(view.health.warnings[0].code, 'STATE_NOT_FOUND');
       assert.equal(existsSync(state), false, 'harness view never creates the state');
+      // From revision 1 the token is content-only: a second run over the same
+      // (absent) state, at another clock, gives the same token and digest.
+      if (view.viewRevision >= 1) {
+        const { digestOf } = await import('../src/server/serve.ts');
+        await new Promise((ok) => setTimeout(ok, 20));
+        const again = await harnessView(
+          {
+            bin,
+            state,
+            policy: join(src, 'examples', 'two-vendors', 'policy.json'),
+            timeoutMs: 60_000,
+          },
+          'en',
+        );
+        assert.equal(again.ok, true);
+        const second = (again as { view: Json }).view;
+        assert.notEqual(second.generatedAt, view.generatedAt, 'another projection clock');
+        assert.equal(second.source.token, view.source.token);
+        assert.equal(digestOf(second), digestOf(view));
+        assert.equal(digestOf(view), 'harness:' + view.source.token);
+      }
     } finally {
       if (dir.startsWith(join(tmpdir(), 'hui-live-harness-'))) rmSync(dir, { recursive: true });
     }

@@ -43,7 +43,14 @@ export type GlossaryId =
   | 'unknown'
   | 'controller'
   | 'stalled'
-  | 'waitsQueue';
+  | 'waitsQueue'
+  | 'answerBasis'
+  | 'failureBucket'
+  | 'reviewRound'
+  | 'wallTime'
+  | 'attemptTime'
+  | 'loadPeak'
+  | 'typical';
 
 const ruGlossary: Record<GlossaryId, { term: string; meaning: string }> = {
   lead: {
@@ -133,6 +140,41 @@ const ruGlossary: Record<GlossaryId, { term: string; meaning: string }> = {
     term: 'ждёт очереди',
     meaning:
       'Работа ждёт свободного места или окончания работ, от которых зависит. Ничего делать не нужно.',
+  },
+  answerBasis: {
+    term: 'кто и почему ответил',
+    meaning:
+      'Кто дал последний ответ на вопрос исполнителя: вы, ведущий или хост. Ведущий отвечает только по правилу из настроек — на технический вопрос или на вопрос ниже порога важности — и записывает причину; её показывает harness.',
+  },
+  failureBucket: {
+    term: 'причина неудачи',
+    meaning:
+      'Группа, к которой harness отнёс неудачную попытку: ошибка в коде, окружение, время вышло и другие. Число по группам складывается в число неудачных попыток.',
+  },
+  reviewRound: {
+    term: 'раунд ревью',
+    meaning:
+      'Одно прочтение плана, контракта или изменений reviewer и его ответ с замечаниями. Повтор вызова после сбоя отдельным раундом не считается.',
+  },
+  wallTime: {
+    term: 'время, когда шли попытки',
+    meaning:
+      'Сколько времени окна хотя бы одна попытка работала. Две попытки одновременно считаются один раз.',
+  },
+  attemptTime: {
+    term: 'сумма времени попыток',
+    meaning:
+      'Время всех попыток окна, сложенное: две попытки по часу одновременно дают 2 ч. Больше «времени, когда шли попытки», когда работы шли параллельно.',
+  },
+  loadPeak: {
+    term: 'пик нагрузки',
+    meaning:
+      'Наибольшее число попыток, которые шли одновременно в окне. Сравнивается с числом мест в настройках.',
+  },
+  typical: {
+    term: 'обычное время этапа',
+    meaning:
+      'Сколько этот этап занимал раньше в этом состоянии, по уже закончившимся этапам (не меньше пяти замеров): половина укладывалась в первое число, девять из десяти — во второе. Это наблюдение, а не обещание.',
   },
 };
 
@@ -225,6 +267,41 @@ const enGlossary: Record<GlossaryId, { term: string; meaning: string }> = {
     meaning:
       'The work waits for a free slot or for the works it depends on. Nothing needs to be done.',
   },
+  answerBasis: {
+    term: 'who answered and why',
+    meaning:
+      "Who gave the last answer to the writer's question: you, the lead or the host. The lead answers only under a rule from the settings — a technical question or one below the severity threshold — and records a reason; the harness shows it.",
+  },
+  failureBucket: {
+    term: 'failure reason',
+    meaning:
+      'The group the harness put a failed attempt in: a code defect, the environment, time ran out and others. The counts per group add up to the failed attempts.',
+  },
+  reviewRound: {
+    term: 'review round',
+    meaning:
+      'One reading of a plan, a contract or changes by the reviewer, and its answer with findings. A call repeated after a failure is not another round.',
+  },
+  wallTime: {
+    term: 'time attempts were running',
+    meaning:
+      'How much of the window at least one attempt was running. Two attempts at once count once.',
+  },
+  attemptTime: {
+    term: 'attempt time added up',
+    meaning:
+      'The durations of all attempts in the window, added: two one-hour attempts at once make 2 h. It exceeds "time attempts were running" when works ran in parallel.',
+  },
+  loadPeak: {
+    term: 'peak load',
+    meaning:
+      'The most attempts running at the same time in the window, compared with the slots in the settings.',
+  },
+  typical: {
+    term: 'usual stage time',
+    meaning:
+      'How long this stage took before in this state, over stages that already finished (at least five samples): half fit within the first number, nine in ten within the second. An observation, not a promise.',
+  },
 };
 
 /** A label table: known codes map to words; any other code is shown as is. */
@@ -290,7 +367,11 @@ const ru = {
         : `${s} с`,
   hours: (h: number) => `${h} ч`,
   days: (d: number) => rp(d, 'день', 'дня', 'дней'),
-  typicalRange: (lo: string, hi: string) => `обычно ${lo}–${hi}`,
+  typicalRange: (range: string) => `обычно ${range}`,
+  range: (lo: number, hi: number, unit: string) =>
+    lo === hi ? `${hi} ${unit}` : lo === 0 ? `до ${hi} ${unit}` : `${lo}–${hi} ${unit}`,
+  unitMin: 'мин',
+  unitSec: 'с',
   calls: (n: number) => rp(n, 'вызов', 'вызова', 'вызовов'),
   // Stages and actors.
   stage: {
@@ -392,6 +473,9 @@ const ru = {
     full: 'Полный вопрос:',
     version: (n: number) => `версия ${n}`,
     answeredBy: (who: string) => `ответил: ${who}`,
+    basis: (at: string, line: string) => `${at} — ${line}`,
+    cancelled: 'Вопрос снят: работу отменили.',
+    superseded: 'Вопрос заменён другим.',
   },
   // Overview.
   overview: {
@@ -727,6 +811,25 @@ const ru = {
     dataTable: (title: string) => `Данные графика: ${title}`,
     bucketHour: '1 ч',
     misaligned: 'Ряды истории разной длины — график не построен.',
+    totals: 'Итоги окна',
+    totalsMissing:
+      'Итогов окна нет в этой версии harness (они появились в 0.1.0-alpha.56); сводки под графиками сложены из рядов на экране.',
+    tStarted: 'Начато попыток',
+    tFailed: 'Неудачных попыток',
+    tByBucket: (parts: string) => `по причинам: ${parts}`,
+    tBucket: (bucket: string, n: number) => `${bucket} — ${n}`,
+    tGates: 'Проверки',
+    tGatesValue: (passed: number, failed: number, reused: number) =>
+      `пройдено ${passed}, не пройдено ${failed}, по прежнему доказательству ${reused}`,
+    tRounds: 'Раунды ревью',
+    tRoundsValue: (plan: number, contract: number, code: number, attempt: number) =>
+      `план ${plan}, контракт ${contract}, код ${code}, в попытках ${attempt}`,
+    tSpend: 'Расход за окно',
+    tWall: 'Время, когда шли попытки',
+    tAttemptMs: 'Сумма времени попыток',
+    tPeak: 'Пик нагрузки',
+    tPeakValue: (peak: number, slots: number) =>
+      `${peak} одновременно при ${slots} ${ruPlural(slots, ['месте', 'местах', 'местах'])}`,
   },
   // Health.
   health: {
@@ -827,7 +930,11 @@ const en: Dict = {
         : `${s}s`,
   hours: (h: number) => `${h} h`,
   days: (d: number) => ep(d, 'day', 'days'),
-  typicalRange: (lo: string, hi: string) => `usually ${lo}–${hi}`,
+  typicalRange: (range: string) => `usually ${range}`,
+  range: (lo: number, hi: number, unit: string) =>
+    lo === hi ? `${hi} ${unit}` : lo === 0 ? `up to ${hi} ${unit}` : `${lo}–${hi} ${unit}`,
+  unitMin: 'min',
+  unitSec: 's',
   calls: (n: number) => ep(n, 'call', 'calls'),
   stage: {
     queued: 'Queued',
@@ -920,6 +1027,9 @@ const en: Dict = {
     full: 'Full question:',
     version: (n: number) => `version ${n}`,
     answeredBy: (who: string) => `answered by: ${who}`,
+    basis: (at: string, line: string) => `${at} — ${line}`,
+    cancelled: 'Question withdrawn: the work was cancelled.',
+    superseded: 'Question replaced by another one.',
   },
   overview: {
     label: 'Harness overview',
@@ -1237,6 +1347,25 @@ const en: Dict = {
     dataTable: (title: string) => `Chart data: ${title}`,
     bucketHour: '1 h',
     misaligned: 'History series differ in length — the chart is not drawn.',
+    totals: 'Window totals',
+    totalsMissing:
+      'This harness version sends no window totals (they came in 0.1.0-alpha.56); the chart summaries add up the series on screen.',
+    tStarted: 'Attempts started',
+    tFailed: 'Attempts failed',
+    tByBucket: (parts: string) => `by reason: ${parts}`,
+    tBucket: (bucket: string, n: number) => `${bucket} — ${n}`,
+    tGates: 'Checks',
+    tGatesValue: (passed: number, failed: number, reused: number) =>
+      `${passed} passed, ${failed} failed, ${reused} from earlier evidence`,
+    tRounds: 'Review rounds',
+    tRoundsValue: (plan: number, contract: number, code: number, attempt: number) =>
+      `plan ${plan}, contract ${contract}, code ${code}, in attempts ${attempt}`,
+    tSpend: 'Spend in the window',
+    tWall: 'Time attempts were running',
+    tAttemptMs: 'Attempt time added up',
+    tPeak: 'Peak load',
+    tPeakValue: (peak: number, slots: number) =>
+      `${peak} at once with ${ep(slots, 'slot', 'slots')}`,
   },
   health: {
     label: 'Health',

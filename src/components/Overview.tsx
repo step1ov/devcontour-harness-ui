@@ -7,8 +7,8 @@ import type { OperatorView, ViewHealth } from '../model/view.ts';
 import {
   KNOWN_QUESTION_STATES,
   SLOT_STAGES,
-  formatDuration,
   formatElapsed,
+  formatTypical,
   formatUsd,
   questionStatus,
   stageLabel,
@@ -19,6 +19,7 @@ import { dict, label } from '../model/dict.ts';
 import { footerSentence, headerSentence } from '../model/i18n.ts';
 import {
   AcceptedLine,
+  AnswerBasisLine,
   BlockerLine,
   Clipped,
   Heading,
@@ -175,9 +176,15 @@ export function Overview({
               <li key={q.requestId} className="hui-item hui-muted">
                 <WorkRef id={q.workId} {...links} /> <code>{q.requestId}</code>:{' '}
                 {questionStatus(q, lang).text}
+                <AnswerBasisLine q={q} t={t} timeZone={timeZone} now={clock} />
               </li>
             ))}
           </ul>
+        ) : null}
+        {otherQuestions.some((q) => q.answerBasis) ? (
+          <div className="hui-terms">
+            <Term id="answerBasis" t={t} named />
+          </div>
         ) : null}
       </div>
 
@@ -201,12 +208,9 @@ export function Overview({
                   {w.stage.since ? (
                     <span className="hui-muted">{formatElapsed(w.stage.since, clock, lang)}</span>
                   ) : null}
-                  {w.stage.typical ? (
-                    <span className="hui-muted">
-                      {t.typicalRange(
-                        formatDuration(w.stage.typical.p50Ms, lang),
-                        formatDuration(w.stage.typical.p90Ms, lang),
-                      )}
+                  {formatTypical(w.stage.typical, lang) ? (
+                    <span className="hui-muted" data-testid="typical">
+                      {formatTypical(w.stage.typical, lang)}
                     </span>
                   ) : null}
                 </div>
@@ -219,6 +223,11 @@ export function Overview({
             ))}
           </ul>
         )}
+        {running.some((w) => formatTypical(w.stage.typical, lang)) ? (
+          <div className="hui-terms">
+            <Term id="typical" t={t} named />
+          </div>
+        ) : null}
         {progress.running > running.length ? (
           <p className="hui-muted" data-testid="running-truncated">
             {o.runningUnlisted(progress.running - running.length)}

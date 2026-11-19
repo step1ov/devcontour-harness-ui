@@ -1,8 +1,9 @@
 // Operator view: the read-only document the panel renders. The schema is
 // owned by devcontour-harness (`operatorViewSchema` in its
 // src/contracts/operator-view.ts, JSON Schema schemas/operator-view.schema.json
-// and schemas/work-detail-view.schema.json, harness 0.1.0-alpha.55, view
-// version 1). These types mirror it field by field; tests/contract.test.ts
+// and schemas/work-detail-view.schema.json, harness 0.1.0-alpha.56, view
+// version 1, revision 1; every revision 1 field is optional, so an alpha.55
+// document, revision 0, has the same type). These types mirror it field by field; tests/contract.test.ts
 // validates the fixtures against copies of the harness JSON Schemas. A host
 // adapter that builds a view from its own store follows the same schema.
 // Pure types: no node:*, no React.
@@ -158,6 +159,9 @@ export interface OperatorQuestion {
     | 'applied-awaiting-claim'
     | 'delivered'
     | 'carry-stale'
+    /** Detail of a closed work only (harness alpha.56): the request was cancelled or replaced. */
+    | 'cancelled'
+    | 'superseded'
     | (string & {});
   version: number;
   severity: number;
@@ -173,9 +177,25 @@ export interface OperatorQuestion {
   /** One plain line: what changes for the user. Masked and clipped (200). */
   plain?: string;
   answeredBy?: 'operator' | 'lead' | 'host';
+  /** Who answered last and on what grounds (revision 1, harness alpha.56). */
+  answerBasis?: AnswerBasis;
   /** Clipped and masked by the projection. */
   title?: string;
   createdAt: string;
+}
+
+/** Grounds of the last answer to a question (revision 1, harness alpha.56). */
+export interface AnswerBasis {
+  by: 'operator' | 'lead' | 'host';
+  /** Policy rule the lead answered under; absent for an operator or host answer. */
+  rule?: 'technical' | 'severity';
+  /** The lead's reason (required for a technical answer). Masked, clipped (200); absent with `--no-titles`. */
+  reason?: string;
+  /** Impact of the question when it was answered (`technical`, `user-visible`). */
+  impact: string;
+  at: string;
+  /** Ready line in the view language: «ответил ведущий (технический вопрос): <причина>». */
+  line: string;
 }
 
 export interface Escalation {
@@ -324,6 +344,29 @@ export interface ViewHistory {
   /** Spend before `from`, so the cumulative curve starts at the right height. */
   spendOpeningUsd: Bounded;
   budgetUsd?: number;
+  /** Window totals computed by the harness (revision 1, harness alpha.56); absent before. */
+  totals?: HistoryTotals;
+}
+
+/** Window totals (revision 1): the same rules as the series, summed by the harness. */
+export interface HistoryTotals {
+  attemptsStarted: number;
+  attemptsFailed: number;
+  /** Failed attempts by failure bucket; the values sum to `attemptsFailed`. */
+  failuresByBucket: Record<string, number>;
+  gatesPassed: number;
+  gatesFailed: number;
+  gatesReused: number;
+  /** Review rounds in the window: plan, contract, `review-code` and reviews inside attempts. */
+  reviewRounds: { plan: number; contract: number; code: number; attempt: number };
+  /** Spend of the window with an honest bound. */
+  spendUsd: Bounded;
+  /** Window time during which at least one attempt ran. */
+  wallMs: number;
+  /** Sum of attempt durations (parallel attempts add up). */
+  attemptMs: number;
+  /** Peak concurrent attempts. */
+  loadPeak: number;
 }
 
 export interface ViewHealth {

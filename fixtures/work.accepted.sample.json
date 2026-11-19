@@ -1,6 +1,6 @@
 {
   "viewVersion": 1,
-  "viewRevision": 0,
+  "viewRevision": 1,
   "generatedAt": "2026-11-19T12:00:00.000Z",
   "source": {
     "producer": "fixture",
@@ -174,7 +174,27 @@
       "line": "plan approved after 2 rounds, 1 note accepted as a limitation"
     }
   ],
-  "questions": [],
+  "questions": [
+    {
+      "requestId": "q-5",
+      "workId": "add-greeting",
+      "state": "delivered",
+      "version": 1,
+      "severity": 7,
+      "answerableBy": "operator",
+      "impact": "user-visible",
+      "plain": "Changes the text every visitor sees first.",
+      "answeredBy": "operator",
+      "answerBasis": {
+        "by": "operator",
+        "impact": "user-visible",
+        "at": "2026-11-19T09:20:00.000Z",
+        "line": "answered by the operator"
+      },
+      "title": "Should the greeting use the visitor name?",
+      "createdAt": "2026-11-19T09:05:00.000Z"
+    }
+  ],
   "drift": {
     "workId": "add-greeting",
     "repositoryId": "app",

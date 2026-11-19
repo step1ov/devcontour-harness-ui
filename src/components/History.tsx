@@ -2,13 +2,15 @@
 // and failed, cumulative spend against the budget — inline SVG without a
 // chart library. Every chart has a text summary and a data table for screen
 // readers. Regrouping buckets into hours is display work over the view's own
-// series, not new data (design §3.7).
+// series, not new data (design §3.7). Window totals come from the harness
+// (`history.totals`, revision 1); a view without them (alpha.55) says so and
+// its chart summaries add up the series on screen, as before.
 
 import type { ReactNode } from 'react';
 import { instantMs } from '../model/compat.ts';
-import { dict, type Dict } from '../model/dict.ts';
-import { formatUsd, formatWindow, usd } from '../model/format.ts';
-import type { OperatorView, ViewHistory } from '../model/view.ts';
+import { dict, label, type Dict, type GlossaryId, type Lang } from '../model/dict.ts';
+import { formatDuration, formatUsd, formatWindow, usd } from '../model/format.ts';
+import type { HistoryTotals, OperatorView, ViewHistory } from '../model/view.ts';
 import { Heading, Term, clockOf, type ScreenProps } from './common.tsx';
 
 export interface HistoryProps extends Pick<ScreenProps, 'lang' | 'timeZone' | 'now'> {
@@ -226,6 +228,80 @@ const Key = ({ cls, children, dashed }: { cls: string; children: ReactNode; dash
   </span>
 );
 
+/**
+ * Window totals from the harness (`history.totals`). Every row is a number
+ * the harness sent, with a «что это значит» disclosure; without totals the
+ * panel says the harness version has none instead of showing zeros.
+ */
+export function HistoryTotalsPanel({
+  totals,
+  slots,
+  lang,
+}: {
+  totals: HistoryTotals | undefined;
+  slots: number;
+  lang: Lang;
+}) {
+  const t = dict(lang);
+  const v = t.history;
+  if (!totals)
+    return (
+      <div className="hui-panel" data-testid="history-totals">
+        <Heading t={t}>{v.totals}</Heading>
+        <p className="hui-muted" data-testid="history-totals-missing">
+          {v.totalsMissing}
+        </p>
+      </div>
+    );
+  const buckets = Object.entries(totals.failuresByBucket).filter(([, n]) => n > 0);
+  const r = totals.reviewRounds;
+  const spendTerm: GlossaryId | undefined =
+    totals.spendUsd.bound === 'exact'
+      ? undefined
+      : totals.spendUsd.bound === 'lower'
+        ? 'lowerBound'
+        : 'unknown';
+  const rows: [string, string, GlossaryId | undefined, string][] = [
+    ['started', v.tStarted, 'attempt', String(totals.attemptsStarted)],
+    [
+      'failed',
+      v.tFailed,
+      'failureBucket',
+      String(totals.attemptsFailed) +
+        (buckets.length
+          ? ` (${v.tByBucket(buckets.map(([b, n]) => v.tBucket(label(t.bucket, b), n)).join(', '))})`
+          : ''),
+    ],
+    [
+      'gates',
+      v.tGates,
+      'gates',
+      v.tGatesValue(totals.gatesPassed, totals.gatesFailed, totals.gatesReused),
+    ],
+    ['rounds', v.tRounds, 'reviewRound', v.tRoundsValue(r.plan, r.contract, r.code, r.attempt)],
+    ['spend', v.tSpend, spendTerm, formatUsd(totals.spendUsd, lang)],
+    ['wall', v.tWall, 'wallTime', formatDuration(totals.wallMs, lang)],
+    ['attempt-ms', v.tAttemptMs, 'attemptTime', formatDuration(totals.attemptMs, lang)],
+    ['peak', v.tPeak, 'loadPeak', v.tPeakValue(totals.loadPeak, slots)],
+  ];
+  return (
+    <div className="hui-panel" data-testid="history-totals">
+      <Heading t={t}>{v.totals}</Heading>
+      <dl className="hui-grid hui-totals">
+        {rows.map(([id, name, term, value]) => (
+          <div key={id} data-testid={`total-${id}`}>
+            <dt>{name}</dt>
+            <dd>
+              <span className="hui-total-value">{value}</span>
+              {term ? <Term id={term} t={t} /> : null}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
+}
+
 export function History({ view, lang = 'ru', timeZone, now: nowProp }: HistoryProps) {
   const t = dict(lang);
   // Clocks of another day than the view's carry a date, so a 24 h window reads unambiguously.
@@ -263,6 +339,7 @@ export function History({ view, lang = 'ru', timeZone, now: nowProp }: HistoryPr
   const hourTimes = timesOf(started.values.length, started.groupMs);
   const spend = cumulativeSpend(h);
   const slots = view.settings.concurrency;
+  const tot = h.totals;
   return (
     <section className="hui hui-history" aria-labelledby="hui-history-title" lang={lang}>
       <Heading t={t} level={2} id="hui-history-title">
@@ -275,6 +352,7 @@ export function History({ view, lang = 'ru', timeZone, now: nowProp }: HistoryPr
           formatWindow(h.bucketMs, lang),
         )}
       </p>
+      <HistoryTotalsPanel totals={tot} slots={slots} lang={lang} />
       {!aligned ? (
         <p className="hui-panel hui-bad" data-testid="history-misaligned">
           {v.misaligned}
@@ -290,7 +368,7 @@ export function History({ view, lang = 'ru', timeZone, now: nowProp }: HistoryPr
             series={[{ name: v.peak, values: h.load, cls: 'hui-s1' }]}
             guide={slots}
             guideLabel={v.slotsLine(slots)}
-            summary={v.loadSummary(maxOf(h.load), slots)}
+            summary={v.loadSummary(tot ? tot.loadPeak : maxOf(h.load), slots)}
             legend={
               <>
                 <Key cls="hui-s1">{v.peak}</Key>
@@ -311,8 +389,8 @@ export function History({ view, lang = 'ru', timeZone, now: nowProp }: HistoryPr
               { name: v.failed, values: failed.values, cls: 'hui-s2' },
             ]}
             summary={(started.hourly ? v.attemptsSummary : v.attemptsSummaryBucket)(
-              sum(h.attemptsStarted),
-              sum(h.attemptsFailed),
+              tot ? tot.attemptsStarted : sum(h.attemptsStarted),
+              tot ? tot.attemptsFailed : sum(h.attemptsFailed),
               maxOf(started.values),
             )}
             legend={
@@ -334,7 +412,11 @@ export function History({ view, lang = 'ru', timeZone, now: nowProp }: HistoryPr
               { name: v.gateFailed, values: h.gatesFailed, cls: 'hui-s2' },
             ]}
             summary={
-              <>{v.gatesSummary(sum(h.gatesPassed), sum(h.gatesFailed), sum(h.gatesReused))} </>
+              <>
+                {tot
+                  ? v.gatesSummary(tot.gatesPassed, tot.gatesFailed, tot.gatesReused)
+                  : v.gatesSummary(sum(h.gatesPassed), sum(h.gatesFailed), sum(h.gatesReused))}{' '}
+              </>
             }
             legend={
               <>

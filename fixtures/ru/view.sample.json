@@ -1,6 +1,6 @@
 {
   "viewVersion": 1,
-  "viewRevision": 0,
+  "viewRevision": 1,
   "generatedAt": "2026-11-19T12:00:00.000Z",
   "source": {
     "producer": "fixture",
@@ -340,6 +340,14 @@
       "impact": "technical",
       "plain": "Для пользователя ничего не меняется: даты выглядят так же.",
       "answeredBy": "lead",
+      "answerBasis": {
+        "by": "lead",
+        "rule": "technical",
+        "reason": "хватает встроенного Intl.DateTimeFormat, без новой зависимости",
+        "impact": "technical",
+        "at": "2026-11-19T11:27:00.000Z",
+        "line": "ответил ведущий (технический вопрос): хватает встроенного Intl.DateTimeFormat, без новой зависимости"
+      },
       "title": "Какую библиотеку дат использовать для форматирования?",
       "createdAt": "2026-11-19T11:25:00.000Z"
     }
@@ -389,6 +397,29 @@
     "spendOpeningUsd": {
       "value": 1.2,
       "bound": "exact"
+    },
+    "totals": {
+      "attemptsStarted": 11,
+      "attemptsFailed": 1,
+      "failuresByBucket": {
+        "defect": 1
+      },
+      "gatesPassed": 27,
+      "gatesFailed": 1,
+      "gatesReused": 1,
+      "reviewRounds": {
+        "plan": 2,
+        "contract": 1,
+        "code": 1,
+        "attempt": 4
+      },
+      "spendUsd": {
+        "value": 6.3,
+        "bound": "lower"
+      },
+      "wallMs": 27600000,
+      "attemptMs": 33000000,
+      "loadPeak": 2
     }
   },
   "health": {
