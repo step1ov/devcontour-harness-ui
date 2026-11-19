@@ -20,7 +20,7 @@ import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import { digestOf, fileDigestOf, startServer, type RunningServer } from '../src/server/serve.ts';
 import { MAX_BUFFERED, MAX_STREAMS, writeEvent } from '../src/server/live.ts';
-import { MAX_RUNS } from '../src/server/serve.ts';
+import { MAX_RUNS, RECENT_MAX, RecentCache } from '../src/server/serve.ts';
 import { fakeHarness, runsIn } from './fake-harness.ts';
 
 const sample = fileURLToPath(new URL('../fixtures/view.sample.json', import.meta.url));
@@ -518,4 +518,30 @@ test('a stream that stops reading is dropped instead of buffering without bound'
   writeEvent(res as never, 'ping', {});
   assert.equal(written.length, 1, 'nothing more is queued');
   assert.ok(destroyed);
+});
+
+test('the reuse cache expires entries, forgets refusals and holds at most RECENT_MAX', () => {
+  let now = 1_000;
+  const c = new RecentCache<string>(1_500, RECENT_MAX, () => now);
+  c.set('a', 'A');
+  assert.equal(c.get('a'), 'A');
+  now += 1_499;
+  assert.equal(c.get('a'), 'A', 'still within the reuse time');
+  now += 1;
+  assert.equal(c.get('a'), undefined, 'expired at RECENT_MS');
+  // Expired entries go on any write, so idle keys never pile up.
+  c.set('b', 'B');
+  now += 2_000;
+  c.set('c', 'C');
+  assert.equal(c.size, 1);
+  // A refusal replaces and forgets the last good result of that key.
+  c.set('c', undefined);
+  assert.equal(c.get('c'), undefined);
+  assert.equal(c.size, 0);
+  // Arbitrary keys (work ids) cannot grow it: the oldest go first.
+  for (let i = 0; i <= RECENT_MAX; i++) c.set('w' + i, String(i));
+  assert.equal(c.size, RECENT_MAX);
+  assert.equal(c.get('w0'), undefined, 'the oldest was dropped');
+  assert.equal(c.get('w1'), '1');
+  assert.equal(c.get('w' + RECENT_MAX), String(RECENT_MAX));
 });

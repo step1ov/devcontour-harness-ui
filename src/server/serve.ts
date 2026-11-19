@@ -33,6 +33,43 @@ export const LIVE_ACTIVE_MAX_MS = 5_000;
 /** A request within this time after a watch check reuses its result instead of running harness again. */
 export const RECENT_MS = 1_500;
 
+/** Most results the reuse cache holds. */
+export const RECENT_MAX = 64;
+
+/**
+ * Last good result per key for `ttlMs`, at most `max` keys (oldest dropped
+ * first). Expired entries go on every write and on read; `set(key,
+ * undefined)` forgets a key (a refusal is never reused).
+ */
+export class RecentCache<V> {
+  private readonly map = new Map<string, { at: number; value: V }>();
+  constructor(
+    private readonly ttlMs: number,
+    private readonly max: number,
+    private readonly now: () => number = Date.now,
+  ) {}
+  get(key: string): V | undefined {
+    const e = this.map.get(key);
+    if (!e) return undefined;
+    if (this.now() - e.at >= this.ttlMs) {
+      this.map.delete(key);
+      return undefined;
+    }
+    return e.value;
+  }
+  set(key: string, value: V | undefined) {
+    const now = this.now();
+    for (const [k, e] of this.map) if (now - e.at >= this.ttlMs) this.map.delete(k);
+    this.map.delete(key);
+    if (value === undefined) return;
+    this.map.set(key, { at: now, value });
+    while (this.map.size > this.max) this.map.delete(this.map.keys().next().value!);
+  }
+  get size() {
+    return this.map.size;
+  }
+}
+
 export interface ServeOptions {
   /** File with an operator view JSON; re-read on every request. */
   viewFile?: string;
@@ -385,16 +422,7 @@ export async function startServer(options: ServeOptions): Promise<RunningServer>
   // after a pushed change does not run harness a second time. Entries expire
   // after RECENT_MS and the map holds at most RECENT_MAX: arbitrary work ids
   // cannot grow it.
-  const recent = new Map<string, { at: number; result: HarnessViewResult }>();
-  const RECENT_MAX = 64;
-  const remember = (key: string, result: HarnessViewResult) => {
-    const now = Date.now();
-    for (const [k, v] of recent) if (now - v.at >= RECENT_MS) recent.delete(k);
-    recent.delete(key);
-    if (!result.ok) return;
-    recent.set(key, { at: now, result });
-    while (recent.size > RECENT_MAX) recent.delete(recent.keys().next().value!);
-  };
+  const recent = new RecentCache<HarnessViewResult>(RECENT_MS, RECENT_MAX);
   const liveKey = (lang: 'ru' | 'en', workId?: string) =>
     (live!.lang ? lang : '') + (workId !== undefined ? '\0' + workId : '');
   // A run shared by several callers is wanted while any of them still wants it.
@@ -406,9 +434,8 @@ export async function startServer(options: ServeOptions): Promise<RunningServer>
     wanted: () => boolean = () => true,
   ) => {
     const key = liveKey(lang, workId);
-    const r = recent.get(key);
-    if (reuse && r && r.result.ok && Date.now() - r.at < RECENT_MS)
-      return Promise.resolve(r.result);
+    const r = reuse ? recent.get(key) : undefined;
+    if (r) return Promise.resolve(r);
     let p = inFlight.get(key);
     if (p) {
       inFlightWants.get(key)?.push(wanted);
@@ -421,7 +448,7 @@ export async function startServer(options: ServeOptions): Promise<RunningServer>
       () => wants.some((w) => w()),
     )
       .then((result) => {
-        if (result !== cancelled) remember(key, result);
+        if (result !== cancelled) recent.set(key, result.ok ? result : undefined);
         return result;
       })
       .finally(() => {

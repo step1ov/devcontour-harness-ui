@@ -73,6 +73,12 @@ interface Live {
 
 /** After a stream is lost, the page polls and tries the stream again after this long. */
 const RESUBSCRIBE_MS = 30_000;
+/**
+ * A load that has not answered by then is abandoned as a failure (and retried
+ * by polling): one stalled GET must not block every later load. Longer than
+ * the server's 30 s harness deadline.
+ */
+const LOAD_DEADLINE_MS = 40_000;
 
 /**
  * Loads a document and keeps it current (design §6, S3). With a stream
@@ -85,7 +91,7 @@ const RESUBSCRIBE_MS = 30_000;
  * document, keeps the last good document on screen with a banner (§5.9).
  */
 function useLive<T extends Checked & { digest?: string }>(
-  load: () => Promise<T>,
+  load: (signal: AbortSignal) => Promise<T>,
   key: string,
   workId?: string,
   active = true,
@@ -154,9 +160,18 @@ function useLive<T extends Checked & { digest?: string }>(
       let next: T | undefined;
       let error: string | undefined;
       try {
-        next = await load();
+        const ctl = new AbortController();
+        const deadline = window.setTimeout(() => ctl.abort(), LOAD_DEADLINE_MS);
+        try {
+          next = await load(ctl.signal);
+        } finally {
+          window.clearTimeout(deadline);
+        }
       } catch (err) {
-        error = (err as Error).message;
+        error =
+          (err as Error).name === 'AbortError'
+            ? `no answer in ${LOAD_DEADLINE_MS / 1000} s`
+            : (err as Error).message;
       }
       if (stopped || mine !== generation) return;
       loading = false;
@@ -378,7 +393,7 @@ function Note({ bad, children }: { bad?: boolean; children: ReactNode }) {
 
 function WorkScreen({ id, anchor }: { id: string; anchor: string | undefined }) {
   const { value, live } = useLive<WorkDetailCheck & Digested>(
-    () => source.loadWork!(id),
+    (signal) => source.loadWork!(id, signal),
     'work:' + id,
     id,
   );
@@ -416,7 +431,7 @@ function WorkScreen({ id, anchor }: { id: string; anchor: string | undefined }) 
 function App() {
   const route = useRoute();
   const { value: check, live } = useLive<ViewCheck & Digested>(
-    () => source.load(),
+    (signal) => source.load(signal),
     'view',
     undefined,
     // The work screen has its own stream; the overview one would only cost

@@ -166,15 +166,24 @@ test('a first load refused as unavailable is retried until the view comes', asyn
   writeView(file, 'cold-a', 'Вопрос после старта');
   const cli = await startCli(['--view', file]);
   try {
-    await page.route('**/api/view**', (r) =>
-      r.fulfill({
+    let refused = 0;
+    let streamOpen = false;
+    page.on('response', (r) => {
+      if (r.url().includes('/api/events') && r.status() === 200) streamOpen = true;
+    });
+    await page.route('**/api/view**', (r) => {
+      refused++;
+      return r.fulfill({
         status: 503,
         json: { error: { code: 'VIEW_UNAVAILABLE', message: 'harness view: timed out' } },
-      }),
-    );
+      });
+    });
     await page.goto(cli.url + '?lang=ru#/');
     await expect(page.locator('main')).toContainText('Представление сейчас недоступно');
-    // The stream is healthy and the file never changes again: only a retry helps.
+    // The first load and the one the stream's first event asks for are both
+    // refused; the file never changes again, so only the polling retry helps.
+    await expect.poll(() => streamOpen && refused >= 2, { timeout: 3000 }).toBe(true);
+    await page.waitForTimeout(300);
     await page.unroute('**/api/view**');
     await expect(page.locator('main')).toContainText('Вопрос после старта', { timeout: 7000 });
   } finally {
@@ -183,7 +192,7 @@ test('a first load refused as unavailable is retried until the view comes', asyn
   }
 });
 
-test('a hidden tab never polls, even after a load failed', async ({ page }) => {
+test('a hidden tab never polls, even when a pending load fails after hiding', async ({ page }) => {
   const s = scratch();
   const file = join(s.dir, 'view.json');
   writeView(file, 'hide-a', 'Скрытый вопрос');
@@ -192,20 +201,59 @@ test('a hidden tab never polls, even after a load failed', async ({ page }) => {
     await page.goto(cli.url + '?lang=ru#/');
     await expect(page.locator('main')).toContainText('Скрытый вопрос');
     let gets = 0;
-    await page.route('**/api/view**', (r) => {
+    let release: (() => void) | undefined;
+    const held = new Promise<void>((ok) => (release = ok));
+    await page.route('**/api/view**', async (r) => {
       gets++;
+      if (gets === 1) {
+        // Held while the tab hides, then failed: the late failure must not start polling.
+        await held;
+        return r.abort();
+      }
       return r.abort();
     });
     writeView(file, 'hide-b', 'Новый скрытый вопрос');
-    await expect(page.getByTestId('stale')).toBeVisible({ timeout: 3000 });
+    await expect.poll(() => gets, { timeout: 3000 }).toBe(1);
     await setHidden(page, true);
-    const before = gets;
-    await page.waitForTimeout(6000);
-    expect(gets, 'GETs while hidden').toBe(before);
+    release!();
+    await page.waitForTimeout(6500);
+    expect(gets, 'GETs while hidden').toBe(1);
+    await page.unroute('**/api/view**');
+    await setHidden(page, false);
+    await expect(page.locator('main')).toContainText('Новый скрытый вопрос', { timeout: 3000 });
   } finally {
     await cli.stop();
     s.remove();
   }
+});
+
+test('a GET that never answers is abandoned and retried by polling', async ({ page }) => {
+  await page.clock.install();
+  // The stream is blocked, so polling drives the loads under the fake clock.
+  await page.route('**/api/events**', (r) => r.abort());
+  await page.goto('./?lang=ru#/');
+  await expect(page.locator('main')).toContainText('Сейчас: в работе 1');
+  let held = true;
+  let gets = 0;
+  await page.route('**/api/view**', async (r) => {
+    gets++;
+    if (held) return; // never answers (until the page aborts it)
+    return r.fallback();
+  });
+  await page.clock.runFor(5_100);
+  await expect.poll(() => gets).toBe(1);
+  // Later poll ticks coalesce behind the stalled load: no pile-up.
+  await page.clock.runFor(20_000);
+  expect(gets).toBe(1);
+  // The server would answer now, but the stalled load still blocks: only
+  // abandoning it after the 40 s deadline lets the coalesced retry run.
+  held = false;
+  await page.clock.runFor(14_000);
+  expect(gets, 'still blocked before the deadline').toBe(1);
+  await page.clock.runFor(6_100);
+  await expect.poll(() => gets, { timeout: 3000 }).toBeGreaterThan(1);
+  await expect(page.locator('main')).toContainText('Сейчас: в работе 1');
+  await expect(page.getByTestId('stale')).toHaveCount(0, { timeout: 3000 });
 });
 
 test('the work screen holds one stream, the work detail one', async ({ page }) => {
