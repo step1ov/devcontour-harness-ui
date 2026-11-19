@@ -4,4 +4,11 @@
 export * from './view.ts';
 export { checkView, KNOWN_VIEW_REVISION, type ViewCheck } from './compat.ts';
 export { httpViewSource, staticViewSource, type ViewSource } from './source.ts';
-export { formatElapsed, formatUsd, stageLabel } from './format.ts';
+export {
+  SLOT_STAGES,
+  formatElapsed,
+  formatUsd,
+  questionStatus,
+  stageLabel,
+  type QuestionStatus,
+} from './format.ts';

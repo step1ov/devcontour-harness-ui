@@ -36,6 +36,13 @@ export type ReviewKind = 'plan' | 'contract' | 'code';
 
 export interface ReviewRuleView {
   kind: ReviewKind;
+  /**
+   * Where the effective rule comes from. Code review resolves
+   * role -> repository -> global (`codeReview` in the harness policy).
+   */
+  scope: 'global' | 'repository' | 'role';
+  repositoryId?: string;
+  role?: string;
   reviewer: Binding;
   alternates: Binding[];
   vendor: 'different-vendor' | 'same-vendor-allowed';
@@ -77,6 +84,8 @@ export interface ViewSettings {
   };
   /** Lean profile layer from the project manifest; `unknown` without a manifest. */
   lean: { state: 'on' | 'off' | 'unknown' };
+  /** Dotted paths of settings that came from harness defaults, not the policy file. */
+  defaulted: string[];
 }
 
 /** `status.works[].stage.name` (harness alpha.54). Unknown values are shown as is. */
@@ -130,7 +139,13 @@ export interface ReviewSubjectView {
 export interface OperatorQuestion {
   requestId: string;
   workId: string;
-  state: 'awaiting-answer' | 'answered-not-applied' | 'carry-stale' | (string & {});
+  state:
+    | 'awaiting-answer'
+    | 'answered-not-applied'
+    | 'applied-awaiting-claim'
+    | 'delivered'
+    | 'carry-stale'
+    | (string & {});
   version: number;
   severity: number;
   /** Who may answer under the policy: severity above `leadAnswersMaxSeverity` is operator-only. */
@@ -179,10 +194,14 @@ export interface WorkView {
     used: number;
     max: number;
     left: number;
+    /** Counted failures (`attemptSummaryOf`), shutdown interruptions excluded. */
     failed: number;
-    /** Gate rechecks and uncounted environment failures. */
-    rechecks: number;
+    /** Shutdown interruptions (`interruptedByShutdown`); they use no attempt. */
     interrupted: number;
+    /** Gate evidence records with `recheck: true` across the work's attempts. */
+    rechecks: number;
+    /** Uncounted (neutral) failures: `work.neutralFailures` against `MAX_NEUTRAL_FAILURES`. */
+    neutral: { used: number; max: number };
     /** One-line summary computed by the harness; never re-derived here. */
     line?: string;
   };
@@ -196,8 +215,11 @@ export interface WorkView {
 }
 
 export interface ViewProgress {
+  /** Counts over all works, never over the (possibly truncated) `works` list. */
   total: number;
   byStage: Record<string, number>;
+  /** Works in a stage that holds a worker slot (prepare, writer, gates, review, integration). */
+  running: number;
   done: number;
   waitingOperator: number;
   queue: {
@@ -218,11 +240,17 @@ export interface ViewHistory {
   load: number[];
   attemptsStarted: number[];
   attemptsFailed: number[];
+  /** Applicable gate results; skipped (not-applicable) gates are in neither series. */
   gatesPassed: number[];
   gatesFailed: number[];
-  /** Known spend per bucket; `spendBound` says whether unknown prices exist. */
+  /** Integration gates whose candidate evidence was reused (counted only here). */
+  gatesReused: number[];
+  /** Known spend of calls finished in the bucket (report cost rules). */
   spendUsd: number[];
+  /** Bound over the whole window: `lower` if any call in it has no known cost. */
   spendBound: Bounded['bound'];
+  /** Spend before `from`, so the cumulative curve starts at the right height. */
+  spendOpeningUsd: Bounded;
   budgetUsd?: number;
 }
 
@@ -231,7 +259,22 @@ export interface ViewHealth {
   stalledAttempts: number;
   quietAttempts: number;
   environmentFailures: number;
-  budget: { state: 'within' | 'exceeded' | 'undetermined'; scope?: string; spentUsd: Bounded };
+  /** `off` when the policy has no budgets (`budgetOverview` returns nothing). */
+  budgeting: 'on' | 'off';
+  /** One row per budgeted scope instance (total, each group, each work). */
+  budgets: {
+    scope: 'work' | 'group' | 'total';
+    id?: string;
+    state: 'within' | 'exceeded' | 'undetermined';
+    spentUsd: Bounded;
+    limitUsd?: number;
+    spentMs?: number;
+    limitMs?: number;
+  }[];
+  /** All known spend in the state, independent of budgets. */
+  spentTotalUsd: Bounded;
+  /** Drift counts over all accepted works, not over the `drift` list. */
+  drift: { checked: number; drifted: number; unavailable: number };
   warnings: { code: string; message: string }[];
 }
 
@@ -256,6 +299,51 @@ export interface OperatorView {
   progress: ViewProgress;
   history: ViewHistory;
   health: ViewHealth;
-  /** Counts cut by the projection's size limits. */
-  truncated?: Partial<Record<'works' | 'reviews' | 'questions' | 'findings', number>>;
+  /** Entries omitted by the projection's per-list limits, by list. */
+  truncated?: Partial<
+    Record<
+      | 'works'
+      | 'reviews'
+      | 'findings'
+      | 'questions'
+      | 'escalations'
+      | 'drift'
+      | 'roles'
+      | 'reviewRules'
+      | 'warnings',
+      number
+    >
+  >;
+}
+
+/** One attempt row of the work detail document. */
+export interface AttemptRow {
+  attempt: number;
+  status: string;
+  /** Report failure bucket (`failureBucketOf`), e.g. `defect`, `environment`. */
+  failureBucket?: string;
+  interrupted?: true;
+  runtime: Runtime;
+  model?: string;
+  startedAt: string;
+  finishedAt?: string;
+  stages: { stage: string; durationMs?: number; outcome?: 'passed' | 'failed' }[];
+}
+
+/**
+ * Work detail: a second document (`harness view --work <id>`, `/api/view?work=<id>`)
+ * so that per-attempt rows never inflate the overview document.
+ */
+export interface WorkDetailView {
+  viewVersion: typeof VIEW_VERSION;
+  viewRevision: number;
+  generatedAt: string;
+  source: OperatorView['source'];
+  work: WorkView;
+  /** Newest first, at most 20. */
+  attempts: AttemptRow[];
+  reviews: ReviewSubjectView[];
+  questions: OperatorQuestion[];
+  drift?: DriftView;
+  truncated?: Partial<Record<'attempts' | 'findings', number>>;
 }

@@ -1,7 +1,7 @@
 import { strict as assert } from 'node:assert';
 import { request } from 'node:http';
 import { createServer } from 'node:net';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -106,6 +106,53 @@ test('an incompatible view file is reported, not served', async () => {
     const res = await get(s.url + 'api/view');
     assert.equal(res.status, 409);
     assert.equal(JSON.parse(res.body).error.code, 'VIEW_VERSION_UNSUPPORTED');
+  } finally {
+    await s.close();
+  }
+});
+
+test('a malformed path is a 400 and the server keeps serving', async () => {
+  const s = await startServer({ viewFile, appDir, version: 'test' });
+  try {
+    assert.equal((await get(s.url + '%')).status, 400);
+    assert.equal((await get(s.url + '%E0%A4%A')).status, 400);
+    assert.equal((await get(s.url + 'a%00b')).status, 400);
+    assert.equal((await get(s.url + 'api/health')).status, 200);
+  } finally {
+    await s.close();
+  }
+});
+
+test('a symlink inside the app directory cannot reach files outside it', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'hui-link-'));
+  const app = join(dir, 'app');
+  mkdirSync(app);
+  writeFileSync(join(dir, 'secret.txt'), 'outside');
+  writeFileSync(join(app, 'inside.txt'), 'inside');
+  symlinkSync(join(dir, 'secret.txt'), join(app, 'leak.txt'));
+  symlinkSync(dir, join(app, 'up'));
+  const s = await startServer({ viewFile, appDir: app, version: 'test' });
+  try {
+    assert.equal((await get(s.url + 'inside.txt')).body, 'inside');
+    assert.equal((await get(s.url + 'leak.txt')).status, 404);
+    assert.equal((await get(s.url + 'up/secret.txt')).status, 404);
+  } finally {
+    await s.close();
+  }
+});
+
+test('a harness envelope file is unwrapped; an error envelope is refused', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'hui-env-'));
+  const file = join(dir, 'envelope.json');
+  const view = JSON.parse(readFileSync(viewFile, 'utf8'));
+  writeFileSync(file, JSON.stringify({ ok: true, data: view }));
+  const s = await startServer({ viewFile: file, appDir, version: 'test' });
+  try {
+    const res = await get(s.url + 'api/view');
+    assert.equal(res.status, 200);
+    assert.equal(JSON.parse(res.body).viewVersion, 1);
+    writeFileSync(file, JSON.stringify({ ok: false, error: { code: 'NOT_FOUND' } }));
+    assert.equal((await get(s.url + 'api/view')).status, 502);
   } finally {
     await s.close();
   }

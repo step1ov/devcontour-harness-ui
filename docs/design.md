@@ -89,82 +89,134 @@ OperatorView {
 
 ### 3.1 settings
 
-Source: the execution policy bound to the state (`binding.json`) or the one
-passed with `--policy`. The view carries `policyDigest`. If the two
+The source is the execution policy bound to the state (`binding.json`), or
+the one passed with `--policy`. The view carries `policyDigest`. If the two
 policies differ, `health.warnings` gets `POLICY_DIGEST_MISMATCH`.
 
-| View field                                                     | Harness source                                                                      |
-| -------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| `approvalMode`                                                 | `approvalMode` (`agent` \| `operator`, default `agent`)                             |
-| `mode`, `concurrency`                                          | `mode`, `concurrency` (1–4, default 2)                                              |
-| `roles[] {role, writer, repositoryId?}`                        | `roles.<id>.writer`, `repositories[].roles` overrides                               |
-| `reviews[] {kind, reviewer, alternates, vendor}`               | `review.plan / contract / code` (`ReviewRule`)                                      |
-| `thresholds.inputSeverity`                                     | `inputPolicy.threshold` (1–11, default 7; 11 = autonomous)                          |
-| `thresholds.leadAnswersMaxSeverity`                            | `inputPolicy.leadAnswers.maxSeverity` (alpha.54; absent = none)                     |
-| `thresholds.criticalPaths`                                     | `inputPolicy.criticalPaths.length` (count only, not the paths)                      |
-| `thresholds.maxAttempts / repairBudget`                        | `maxAttempts` (default 3), `repairBudget` (default 6)                               |
-| `thresholds.maxNeutralFailures`                                | `MAX_NEUTRAL_FAILURES`                                                              |
-| `thresholds.reviewRoundCap`                                    | `reviewRoundCap(policy)` (today `maxAttempts * 2`)                                  |
-| `thresholds.reviewEscalationRounds`                            | `REVIEW_ESCALATION_ROUNDS` (3)                                                      |
-| `budgets[] {scope, usd?, timeMs?}`                             | `budgets.work / group / total`                                                      |
-| `budgetOnUnknown`                                              | `budgets.onUnknown`                                                                 |
-| `timeouts {runTimeoutMs, leaseMs, gateTimeoutFloorMs?, stall}` | the same policy fields; `stallSweep` or `DEFAULT_STALL_SWEEP`                       |
-| `lean.state`                                                   | the project manifest `profile.layers` contains `lean`; `unknown` without a manifest |
+`settings.defaulted` lists the dotted paths whose value came from a harness
+default rather than the policy file. The Settings screen shows "default"
+only for those paths.
 
-Gate commands, `writePaths`, prompts, tool profiles and prices are not part
-of the view.
+| View field                                                                    | Harness source                                                                                  |
+| ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `approvalMode`                                                                | `approvalMode` (`agent` \| `operator`, default `agent`)                                         |
+| `mode`, `concurrency`                                                         | `mode`, `concurrency` (1–4, default 2)                                                          |
+| `roles[] {role, writer, repositoryId?}`                                       | `roles.<id>.writer`, overridden per repository by `repositories[].roles`                        |
+| `reviews[] {kind, scope, repositoryId?, role?, reviewer, alternates, vendor}` | the effective `ReviewRule` per scope (see below)                                                |
+| `thresholds.inputSeverity`                                                    | `inputPolicy.threshold` (1–11, default 7; 11 = autonomous)                                      |
+| `thresholds.leadAnswersMaxSeverity`                                           | `inputPolicy.leadAnswers.maxSeverity` (alpha.54; absent means none)                             |
+| `thresholds.criticalPaths`                                                    | `inputPolicy.criticalPaths.length`: the count only, not the paths                               |
+| `thresholds.maxAttempts / repairBudget`                                       | `maxAttempts` (default 3), `repairBudget` (default 6)                                           |
+| `thresholds.maxNeutralFailures`                                               | `MAX_NEUTRAL_FAILURES`                                                                          |
+| `thresholds.reviewRoundCap`                                                   | `reviewRoundCap(policy)` (today `maxAttempts * 2`)                                              |
+| `thresholds.reviewEscalationRounds`                                           | `REVIEW_ESCALATION_ROUNDS` (3)                                                                  |
+| `budgets[] {scope, usd?, timeMs?}`                                            | `budgets.work / group / total`                                                                  |
+| `budgetOnUnknown`                                                             | `budgets.onUnknown`                                                                             |
+| `timeouts {runTimeoutMs, leaseMs, gateTimeoutFloorMs?, stall}`                | the same policy fields; `stallSweep`, or `DEFAULT_STALL_SWEEP` when absent                      |
+| `lean.state`                                                                  | `on` when the project manifest's `profile.layers` contains `lean`; `unknown` without a manifest |
+
+Review rules have scopes:
+
+- Plan and contract rules are global.
+- A code review resolves role → repository → global, like `codeReview()` in
+  the harness. `reviews[]` therefore holds one global `code` rule plus one
+  entry for each repository or role that overrides it (`scope`,
+  `repositoryId`, `role`).
+- The Settings screen shows the effective reviewer for each role and
+  repository pair, and where that reviewer comes from.
+
+Gate commands, `writePaths`, prompts, tool profiles and prices are not
+part of the view.
 
 ### 3.2 works[]
 
-One entry per work order, ordered as `status` orders them. Limit: 500.
+One entry per work order, in the order `status` lists them. Limit: 500.
+Overview counts come from `progress`, not from this list (§3.6).
 
-| Field                                                             | Harness source                                                                                                                                         |
-| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `id, graphId, status, resultSha?`                                 | `status.works[]`                                                                                                                                       |
-| `title?`                                                          | graph node title, clipped to 120 chars; dropped with `--no-titles`                                                                                     |
-| `stage {name, step?, since?, next[], needs?}`                     | `status.works[].stage` (alpha.54: `queued, blocked, prepare, writer, gates, review, integration, input, stopped, done, cancelled`)                     |
-| `attempts {used, max, left, failed, rechecks, interrupted, line}` | `attemptSummary` (`attemptSummaryOf`): `rechecks` counts gate rechecks and uncounted environment failures; `interrupted` counts shutdown interruptions |
-| `liveness?`                                                       | `status.works[].liveness` (`quiet`, `stalled`; `active` when moving)                                                                                   |
-| `runtime?, model?`                                                | the active attempt                                                                                                                                     |
-| `blockers[]`                                                      | `engine.blockers` codes                                                                                                                                |
-| `question?`                                                       | `status.works[].input` (`requestId, state, severity`)                                                                                                  |
-| `spend {calls, usd: Bounded, durationMs}`                         | `stage.spend` (the work's own call records)                                                                                                            |
+| Field                                         | Harness source                                                                                                                     |
+| --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `id, graphId, status, resultSha?`             | `status.works[]`                                                                                                                   |
+| `title?`                                      | graph node title, masked and clipped to 120 chars (§9); dropped with `--no-titles`                                                 |
+| `stage {name, step?, since?, next[], needs?}` | `status.works[].stage` (alpha.54: `queued, blocked, prepare, writer, gates, review, integration, input, stopped, done, cancelled`) |
+| `attempts.used / max / left`                  | `attemptSummaryView()`: counted `work.attempt` against `maxAttempts`                                                               |
+| `attempts.failed`                             | `attemptSummaryOf()`: counted failures; shutdown interruptions excluded                                                            |
+| `attempts.interrupted`                        | attempts with `interruptedByShutdown`; they use no attempt                                                                         |
+| `attempts.rechecks`                           | evidence records with `recheck: true` across the work's attempts                                                                   |
+| `attempts.neutral {used, max}`                | `work.neutralFailures` against `MAX_NEUTRAL_FAILURES`                                                                              |
+| `attempts.line`                               | `attemptSummaryLine`                                                                                                               |
+| `liveness?`                                   | `status.works[].liveness` (`quiet`, `stalled`; `active` when moving)                                                               |
+| `runtime?, model?`                            | the active attempt                                                                                                                 |
+| `blockers[]`                                  | `engine.blockers` codes                                                                                                            |
+| `question?`                                   | `status.works[].input` (`requestId, state, severity`)                                                                              |
+| `spend {calls, usd: Bounded, durationMs}`     | `stage.spend`: the work's own call records, under the report's cost rules (§3.7)                                                   |
 
 `Bounded = {value, bound: exact | lower | unknown}` keeps the report rule:
-an unknown price shows as `unknown`, a partial sum as `≥ $x`, never as zero.
+
+- an unknown price shows as `unknown`;
+- a partial sum shows as `≥ $x`;
+- neither is ever shown as zero.
+
+Per-attempt rows are not in this document; they are in the work detail
+document (§3.10).
 
 ### 3.3 reviews[]
 
-One entry per review subject: plan, contract (alpha.54
-`reviewSubjectSummary`) and code (alpha.54 `review-code` records). Limit:
-50 subjects, 50 findings each.
+One entry per review subject: plan and contract (alpha.54
+`reviewSubjectSummary`), and code (alpha.54 `review-code` records). Limits:
+50 subjects, and 50 findings per subject.
 
 - `kind, subject, workId?, approved`
-- `rounds {used, max}`: `max` is `null` when the subject has no cap
-- `open {blocking, notes}`, `accepted` (findings accepted as limitations)
-- `reviewer`, `sameVendor`: the reviewer binding actually used
+- `rounds {used, max}`: `max` is `null` when the subject has no cap.
+- `open {blocking, notes}`, plus `accepted`: findings accepted as
+  limitations.
+- `reviewer`, `sameVendor`: the reviewer binding actually used.
 - `spend {calls, usd}`
 - `findings[] {id, severity, status, rounds?, disposition?, title?}`:
-  - `status` is one of `open`, `closed`, `withdrawn`, `accepted-limitation`.
+  - `status` is one of `open`, `closed`, `withdrawn` or
+    `accepted-limitation`.
   - `disposition` is `{decision: accepted-limitation | continue, by: lead | operator, round}`.
-  - The reason text is not included.
-  - `title` is the finding message clipped to 120 chars and masked (§9).
+    The reason text is not included.
+  - `title` is the finding message, masked and then clipped to 120 chars
+    (§9).
 - `escalation? {requestId, findings[], answered}`: an open blocking finding
-  that went past `reviewEscalationRounds`. The operator answers it.
+  that has gone past `reviewEscalationRounds`. Only the operator decides it.
 - `line`: the harness one-line summary.
 
 ### 3.4 questions[] and escalations[]
 
-`questions[]` lists open executor questions (`kind: question`) in the
-states `awaiting-answer`, `answered-not-applied` and `carry-stale`. Each
-entry has `requestId, workId, state, version, severity, createdAt`, plus:
+`questions[]` lists executor questions (`kind: question`) in every open
+input state of the harness (`inputStates`):
 
-- `answerableBy`: `operator` when `severity >
-leadAnswersMaxSeverity` or no `leadAnswers` is set. Otherwise it is
-  `operator-or-lead`. This follows `leadMayAnswer`.
+- `awaiting-answer`
+- `answered-not-applied`
+- `applied-awaiting-claim`
+- `delivered`
+- `carry-stale`
+
+Only `awaiting-answer` asks for an answer. The panel words the other states
+by who acts next:
+
+- `answered-not-applied`: the lead or the controller applies the answer.
+- `applied-awaiting-claim`: the answer waits for the next attempt.
+- `delivered`: nobody needs to act.
+- `carry-stale`: the lead carries the answer again or withdraws it.
+
+Each entry has `requestId, workId, state, version, severity, createdAt`,
+plus:
+
+- `answerableBy`: `operator-or-lead` only when `leadAnswers` is set and
+  `severity ≤ leadAnswersMaxSeverity`, the same rule as `leadMayAnswer`.
+  Otherwise it is `operator`. A reader that sees any other value treats it
+  as `operator`.
 - `answeredBy?`: alpha.54 `input.answeredBy`.
-- `title?`: the question text clipped to 200 chars and masked. Options and
-  attachments are left out. The full text stays behind `harness input-show`.
+- `title?`: the question text, masked and then clipped to 200 chars. Options
+  and attachments are left out. The full text is behind `harness input-show`
+  until S5, when an authenticated detail route serves it (§9).
+
+The existing `RequestLike` has neither `workId`, question text nor answer
+actor. The node loader therefore passes sanitized question summaries
+(`OperatorQuestionInput` in proposal P1). The pure projection never reads
+raw requests.
 
 `escalations[]` lists everything else that waits for a person or for the
 lead. Each entry is `{workId?, subject?, code, actor, action, since}`:
@@ -173,7 +225,7 @@ lead. Each entry is `{workId?, subject?, code, actor, action, since}`:
 - review escalations;
 - a queue pause by the operator or by the budget.
 
-The panel shows the actor and the action. It never acts on them.
+Limit: 50. The panel shows the actor and the action, and never acts on them.
 
 ### 3.5 drift[]
 
@@ -181,34 +233,48 @@ Accepted results whose target ref has moved since acceptance. The source is
 alpha.54 `acceptedTargetSchema`:
 
 - `workId, repositoryId, ref, acceptedSha, head?`
-- `commitsSinceAccepted?`, `filesSinceAccepted?`, `diverged?`
-- `unavailable?`: the reason when git could not be read.
+- `commitsSinceAccepted?, filesSinceAccepted?, diverged?`
+- `unavailable?`: the reason when git could not be read. It is masked and
+  clipped.
 
 Computing drift needs git, so the node loader computes it and passes it in;
 the pure projection only copies it. The list holds only rows with commits
-since acceptance, divergence, or `unavailable`. Limit: 50.
+since acceptance, divergence, or `unavailable`. Limit: 50. Totals over all
+accepted works are in `health.drift`.
 
 ### 3.6 progress
 
-- `total`, `done`, `waitingOperator`, `byStage: Record<stage, count>`
-- `queue {paused, reason?, detail?, actor?, action?}`: from `queueStop` and
-  `queuePause`, as in `status --detail`.
+All counts are over every work order in the state, never over the
+truncated `works` list:
+
+- `total`, `done`, `waitingOperator`
+- `byStage: Record<stage, count>`
+- `running`: works in a slot-holding stage (prepare, writer, gates, review,
+  integration).
+
+`queue {paused, reason?, detail?, actor?, action?}` comes from `queueStop`
+and `queuePause`, as in `status --detail`. `queue.detail` is free text
+derived from attempt errors, so it is masked and then clipped like a title
+(§9). With `--no-titles` it is dropped.
 
 ### 3.7 history
 
-The series behind the charts. Every series has one value per bucket.
+The series behind the charts. Every series has one value per bucket, and
 `from`, `to` and `bucketMs` are explicit. The default window is 24 h in
-15-minute buckets (96 values). The loader accepts other windows within
-the limits: up to 7 days and 500 buckets.
+15-minute buckets (96 values). The loader accepts other windows within the
+limits: up to 7 days and up to 500 buckets.
 
-| Series                       | Unit / rule                                                                                                               |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `load`                       | peak number of concurrent attempts in the bucket (from `startedAt` / `finishedAt`)                                        |
-| `attemptsStarted`            | attempts claimed in the bucket                                                                                            |
-| `attemptsFailed`             | attempts that finished `failed` / `expired` in the bucket; shutdown interruptions excluded (report rule)                  |
-| `gatesPassed`, `gatesFailed` | `attempt.gate` events in the bucket, rechecks included                                                                    |
-| `spendUsd`                   | known cost of call records finished in the bucket; `spendBound` is `lower` if any call in the window has an unknown price |
-| `budgetUsd?`                 | the `total` budget, for the "spend vs budget" line                                                                        |
+| Series                       | Unit and rule                                                                                                                                                                                                                            |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `load`                       | Peak number of concurrent attempts in the bucket, from `startedAt` / `finishedAt`.                                                                                                                                                       |
+| `attemptsStarted`            | Attempts claimed in the bucket.                                                                                                                                                                                                          |
+| `attemptsFailed`             | Attempts that finished `failed` or `expired` in the bucket. Shutdown interruptions are excluded (report rule).                                                                                                                           |
+| `gatesPassed`, `gatesFailed` | Applicable `attempt.gate` results in the bucket, rechecks included. A skipped or not-applicable gate is in neither series.                                                                                                               |
+| `gatesReused`                | Integration gates satisfied by reused candidate evidence. They are counted only here, not as passes.                                                                                                                                     |
+| `spendUsd`                   | Cost of calls finished in the bucket that the report counts as known.                                                                                                                                                                    |
+| `spendBound`                 | `exact` only if no call in the window has an unknown cost under the report rules. Those rules cover the call outcome, the cost source, usage completeness, and attempts with no call records (`callsRecorded`). Otherwise it is `lower`. |
+| `spendOpeningUsd`            | Spend before `from`, as a `Bounded`. The cumulative curve starts at this value, so earlier spend is not lost.                                                                                                                            |
+| `budgetUsd?`                 | The `total` budget, drawn as the "spend vs budget" line.                                                                                                                                                                                 |
 
 Attempts per hour on the History screen are summed from these buckets in
 the UI. Re-bucketing is display work, not derivation.
@@ -220,42 +286,127 @@ the UI. Re-bucketing is display work, not derivation.
 - `stalledAttempts`, `quietAttempts`: from attempt liveness.
 - `environmentFailures`: attempts in the history window whose failure
   bucket is `environment`.
-- `budget {state: within | exceeded | undetermined, scope?, spentUsd}`:
-  from `budgetOverview`.
-- `warnings[] {code, message}`: for example `POLICY_DIGEST_MISMATCH`,
-  `VIEW_TRUNCATED`, `DRIFT_UNAVAILABLE`, `STATE_NEWER_THAN_HARNESS`.
+- `budgeting`: `off` when `budgetOverview` returns nothing, meaning the
+  policy has no budgets.
+- `budgets[] {scope, id?, state, spentUsd, limitUsd?, spentMs?, limitMs?}`:
+  one row for each budgeted scope instance (total, each group, each work),
+  from `budgetOverview`. The Overview shows the worst state. A work budget
+  that is exceeded while the total is within limits shows as exceeded.
+- `spentTotalUsd`: all known spend in the state, independent of budgets.
+- `drift {checked, drifted, unavailable}`: counts over all accepted works.
+  `unavailable` is shown as "not checked", never as zero drift.
+- `warnings[] {code, message}`, for example `POLICY_DIGEST_MISMATCH`,
+  `VIEW_TRUNCATED`, `DRIFT_UNAVAILABLE` or `STATE_NEWER_THAN_HARNESS`.
+  Messages are fixed templates plus masked values. Limit: 20.
 
-### 3.9 Limits and determinism
+### 3.9 Limits, size and change token
 
-- The whole document is capped at 256 KB. Over a limit, lists are cut, and
-  `truncated` carries the number of omitted entries per list.
-- For the same state, policy, clock and options, the output is the same
-  bytes (sorted keys, no maps).
-- `source.token` is an opaque change token. It is `ExecutionView.dataVersion()`
-  when the store has one, otherwise a hash of the view. Equal tokens mean
-  an unchanged view, and the server uses the token for `ETag` and for SSE
-  change events.
+**Size.** Every list has a limit:
+
+| List                  | Limit |
+| --------------------- | ----- |
+| `works`               | 500   |
+| `reviews`             | 50    |
+| findings, per subject | 50    |
+| `questions`           | 50    |
+| `escalations`         | 50    |
+| `drift`               | 50    |
+| `settings.roles`      | 100   |
+| `settings.reviews`    | 100   |
+| `settings.budgets`    | 3     |
+| `warnings`            | 20    |
+| history buckets       | 500   |
+
+Every free string is masked, then clipped (§9). Settings strings are model
+names, ids and enums. Ids follow the graph and policy schemas, which bound
+their length. With these limits the largest possible document is
+computable. A test builds it with every list full and every string at its
+limit, and asserts that it is at most 256 KB of UTF-8.
+
+- When a list goes over its limit, the projection cuts it deterministically
+  (it keeps the first entries in harness order) and `truncated` counts the
+  omitted entries for that list.
+- If a document would still exceed the cap, the projection refuses it with
+  `VIEW_TOO_LARGE` (exit 4). It never returns a partial document.
+
+**Determinism.** For the same state, policy, clock and options, the output
+is the same bytes: keys are sorted and no maps are used.
+
+**Change token.** `source.token` is derived from content. It is the SHA-256
+of the canonical view bytes without `generatedAt` and `source.token`.
+
+- The store counter `ExecutionView.dataVersion()` is only an invalidation
+  hint for the server. Lease expiry, liveness, git drift, policy files and
+  window boundaries all change the view without a store write.
+- The server recomputes on a hint, and at least every 5 s while any work is
+  live.
+- `ETag` and SSE events use the content token, so equal tokens really mean
+  an equal view.
+
+### 3.10 Work detail document
+
+`harness view --work <id>` (route `/api/view?work=<id>`) returns a
+`WorkDetailView`. It shares `viewVersion` and `viewRevision` with the
+overview document, and has:
+
+- `work`: the same `WorkView`.
+- `attempts[]`: newest first, at most 20. Each row has:
+  - `attempt, status, failureBucket?, interrupted?`
+  - `runtime, model?, startedAt, finishedAt?`
+  - `stages[] {stage, durationMs?, outcome?}`
+- `reviews[]`, `questions[]` and `drift?` for that work.
+
+Per-attempt rows live only in this document, so they never inflate the
+overview.
 
 ## 4. Versioning and compatibility
 
-- **`viewVersion`** (integer major) changes only when a field is removed,
-  renamed or changes meaning. **`viewRevision`** grows on additive change:
-  a new optional field, a new enum value, a new section.
-- **Readers.** The UI accepts its own major and any revision. It ignores
-  unknown fields. It shows unknown enum values as raw text (for example, a
-  new stage name). When `viewRevision` is newer than the build knows, the UI
-  shows "newer data, update the panel for full detail". It refuses any other
-  major with `VIEW_VERSION_UNSUPPORTED` and a fix hint, and does not guess.
-  The tested rule is `checkView` in `src/model/compat.ts`.
-- **Producers.** The harness keeps a released major for the whole `0.1.x`
-  alpha line. When a new major appears, `harness view --view-version N`
-  keeps the previous major available for at least one minor release.
-- **Package versions.** The peer range `devcontour-harness
-  > =0.1.0-alpha.53 <0.2.0`is advisory. The view version decides
-compatibility.`devcontour-harness-ui --check`(slice S3) runs`harness
-  > --version`and`harness view --json`and prints`{harness, ui, viewVersion, compatible, fix?}`.
-- **`stateVersion`** is copied through so the panel can tell "old state,
-  new harness" (a warning) from "no state" (an empty view).
+**Version fields.**
+
+- `viewVersion` is the integer major. It changes only when a field is
+  removed, renamed, or changes meaning.
+- `viewRevision` grows on additive changes: a new optional field, a new
+  enum value or a new section.
+- A new enum value is additive only when the reader's fallback is safe.
+  When no safe fallback exists, the change is a new major.
+
+**Readers** (`checkView` in `src/model/compat.ts`, tested):
+
+- The UI accepts its own major and any revision, and ignores unknown
+  fields.
+- Every field a component reads is checked first. A malformed document is
+  refused with `NOT_A_VIEW` and the paths at fault, instead of throwing
+  during render.
+- Unknown values read conservatively:
+  - an unknown stage shows as raw text;
+  - an unknown cost bound shows as `unknown`;
+  - an unknown `answerableBy` means only the operator answers;
+  - an unknown question state means "inspect before acting";
+  - an unknown budget state counts as `undetermined`.
+- Lookups use own properties only, so `__proto__` and similar keys are
+  shown as text.
+- When `viewRevision` is newer than the build knows, the app shows "newer
+  data, update the panel for full detail".
+- Any other major is refused with `VIEW_VERSION_UNSUPPORTED` and a fix
+  hint. The UI does not guess.
+- An HTTP 409 keeps its code and message through `httpViewSource`.
+
+**Producers.** The harness keeps a released major for the whole `0.1.x`
+alpha line. When a new major appears, `harness view --view-version N` keeps
+the previous major available for at least one minor release.
+
+**Package versions.** The peer range for `devcontour-harness`
+(`>=0.1.0-alpha.53 <0.2.0`) is advisory; the view version decides
+compatibility. `devcontour-harness-ui --check` (slice S3) runs:
+
+- `harness --version`
+- `harness capabilities`, which must list `view`
+- `harness view`
+
+It then prints `{harness, ui, viewVersion, compatible, fix?}`.
+
+**`stateVersion`** is copied through, so the panel can tell "old state, new
+harness" (a warning) from "no state" (an empty view).
 
 ## 5. Screens
 
@@ -324,7 +475,8 @@ command the operator runs. It never offers a button that answers for them.
 └───────────────────────────────────────────────────────────────┘
 ```
 
-At 390 px the two columns stack: pipeline, attempts, spend and blockers,
+The attempt rows come from the work detail document (§3.10). At 390 px the
+two columns stack in this order: pipeline, attempts, spend and blockers,
 reviews, drift. The pipeline becomes a vertical list.
 
 ### 5.3 Reviews (`#/reviews`)
@@ -363,7 +515,9 @@ The screen has these groups:
   their action.
 - **Lean layer** and concurrency.
 
-Each value shows its unit, and "default" when it comes from the default.
+Each value shows its unit. A value shows "default" only when its path is in
+`settings.defaulted`. Each role and repository pair shows its effective
+code reviewer and where that reviewer comes from.
 At 390 px it is a single column of definition lists. The policy digest is
 in the footer.
 
@@ -412,35 +566,79 @@ At 390 px it is one column.
 ## 6. Standalone runtime
 
 ```sh
-npx devcontour-harness-ui --view view.json         # a file written by `harness view --json`
-npx devcontour-harness-ui --demo                   # bundled sample
+npx devcontour-harness-ui --view view.json          # bare view or the `harness view` envelope
+npx devcontour-harness-ui --demo                    # bundled sample
 npx devcontour-harness-ui --state <dir> --policy <file> [--port N]   # slice S3
 npx devcontour-harness-ui --from http://127.0.0.1:4791/              # slice S3, a running serve-view
 ```
 
-- **Output.** stdout gets one JSON line when the panel is listening:
-  `{"ok":true,"url":"http://127.0.0.1:4790/","port":4790,"readOnly":true,"version":…}`.
-  A refusal prints `{"ok":false,"error":{code,message}}`. Exit codes match
-  the harness: 2 invalid input, 3 refusal, 4 infrastructure. Human hints go
-  to stderr.
-- **Port.** With no `--port`, the CLI probes 4790–4809 and takes the first
-  free port. An explicit `--port` that is busy is the error `PORT_BUSY`; it
-  is never switched silently.
-- **Bind.** `127.0.0.1` by default. `::1` and `localhost` are allowed.
-  Any other host, including `0.0.0.0` and `::`, is the error
-  `HOST_NOT_LOOPBACK`, and there is no override flag.
-- **Read-only.** Only GET and HEAD are served; anything else gets 405.
-- **Data path.**
-  - `--view`: the file is re-read on each request, with a SHA-256 `ETag`.
-  - `--state` (S3): the CLI starts `harness serve-view` as a child process
-    on an ephemeral loopback port and proxies `/api/view` and
-    `/api/events` to it. The view is computed by the harness the user
-    installed, never by this package. The child is stopped with the panel.
-- **No telemetry.** No analytics, no font or CDN requests, and no update
-  check. The bundle is self-contained.
-- **Updates.** Polling every 5 s, paused while the tab is hidden, with
-  `If-None-Match`. From S3 the CLI also supports SSE `/api/events`, which
-  sends `{token}` on change, and the app reloads the view on each event.
+**Wire contract.** One contract covers both the UI CLI and the proposed
+`harness serve-view` (P3), so `httpViewSource` works against either.
+
+- `GET /api/view` returns the bare view, with a content `ETag` and
+  `cache-control: no-store`.
+- `GET /api/view?work=<id>` returns the work detail document (§3.10).
+- `GET /api/events` is the SSE stream. It sends `event: view`, with data
+  `{token}`, whenever the content token changes.
+- `GET /api/health` returns `{ok, version, readOnly}`.
+
+Refusals:
+
+- 409 `{error:{code,message}}` when the view is incompatible.
+- 503 `VIEW_UNAVAILABLE` when no view exists yet.
+
+`--view` accepts either the bare view or the envelope exactly as
+`harness view` prints it (`{ok:true,data}`). An error envelope is reported
+as `NOT_A_VIEW`.
+
+**Output.** When the panel is listening, stdout gets one JSON line:
+`{"ok":true,"url":"http://127.0.0.1:4790/","port":4790,"readOnly":true,"version":…}`.
+
+- A refusal prints `{"ok":false,"error":{code,message}}`.
+- Exit codes match the harness: 2 invalid input, 3 refusal, 4
+  infrastructure.
+- Human hints go to stderr.
+
+**Port.** With no `--port`, the CLI probes 4790–4809 and takes the first
+free port. A busy explicit `--port` is the error `PORT_BUSY`; it never
+switches silently.
+
+**Bind.** The CLI binds `127.0.0.1` by default; `::1` and `localhost` are
+also allowed. Any other host, including `0.0.0.0` and `::`, is the error
+`HOST_NOT_LOOPBACK`, and no flag overrides that.
+
+**Request handling.**
+
+- Only GET and HEAD are served; anything else gets 405.
+- A malformed path or a NUL byte gets 400.
+- A handler failure gets 500 without stopping the server.
+- Static files must stay inside the app directory, checked both on the
+  lexical path and on the real path, so symlinks cannot escape it.
+
+**Data path.**
+
+- `--view`: the file is re-read on each request.
+- `--state` (S3): the CLI starts `harness serve-view` as a child process on
+  an ephemeral loopback port and proxies `/api/*` to it.
+  - The view is always computed by the harness the user installed, never
+    by this package.
+  - The child is stopped together with the panel.
+- `--from <url>` (S3) proxies to a `serve-view` that is already running.
+  The URL is checked before any request:
+  - it must use `http:`;
+  - its host must be the literal `127.0.0.1` or `[::1]`, or `localhost`
+    resolved to a loopback address;
+  - it must carry no credentials;
+  - its path must be `/` or empty.
+- The proxy never follows redirects, and it rejects any response whose
+  socket peer is not a loopback address.
+
+**No telemetry.** No analytics, no font or CDN requests, and no update
+check. The bundle is self-contained.
+
+**Updates.** The app polls every 5 s with `If-None-Match`, and pauses
+polling while the tab is hidden. From S3 it also listens to
+`/api/events` and reloads the view on each event.
 
 ## 7. Embedding API (DevContour)
 
@@ -531,153 +729,293 @@ The coupling to cut on the way:
 
 ## 9. Security
 
-- **Network.** The panel listens on loopback only (§6), with no override.
-  Each request's `Host` header must name the loopback listener
-  (`127.0.0.1:<port>`, `localhost:<port>`, `[::1]:<port>`). Anything else
+**Network.**
+
+- The panel listens on loopback only (§6), and nothing overrides that.
+- Each request's `Host` header must name the loopback listener:
+  `127.0.0.1:<port>`, `localhost:<port>` or `[::1]:<port>`. Anything else
   gets 421, which guards against DNS rebinding.
-- **Response headers.**
-  - `Content-Security-Policy: default-src 'self'; script-src 'self';
-style-src 'self'; connect-src 'self'; frame-ancestors 'none';
-base-uri 'none'; form-action 'none'`
-  - `X-Content-Type-Options: nosniff`
-  - `Referrer-Policy: no-referrer`
-  - `X-Frame-Options: DENY`
-- **Static files.** Paths are resolved inside the app directory; anything
-  outside gets 404.
-- **No secrets in the view.** The projection includes no:
-  - prompts, executor output, logs or log paths;
-  - environment variables or tokens;
-  - gate commands or tool profiles;
-  - absolute paths (the home directory becomes `~`, other paths stay
-    relative to the repository);
-  - finding or question bodies beyond the clipped title.
-- **Masking.** Titles pass through `clipText`, then a masking step that
-  replaces token-like strings (provider key prefixes, `Bearer …`, long
-  base64 or hex runs, `user:pass@` in URLs) with `‹masked›`.
-  `--no-titles` drops all titles, as in `report --no-titles`. A test
-  plants known secrets in state and asserts they are absent from the view
-  bytes.
-- **Write path (S5).** Only `harness serve-view` accepts answers, and only
-  when started with `--allow-answers`. The CLI generates a per-start random
-  token and passes it to the browser in the URL fragment, so it is never
-  logged or sent as a Referer. A write must pass all of these checks:
-  - an `Authorization` header with the token;
-  - `Origin` equal to the panel origin;
-  - JSON only;
-  - the `request-version` it answers.
+- The `--from` proxy target is restricted to loopback, with no redirects
+  (§6).
 
-  The harness records the answer with `--actor operator`. Agents never use
-  this path. The skill forbids answering for the user.
+**Response headers.**
 
-- **Supply chain.** Dependencies are exact versions. The runtime bundle has
-  only React. The CLI imports only `node:*`.
+- `Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'`
+- `X-Content-Type-Options: nosniff`
+- `Referrer-Policy: no-referrer`
+- `X-Frame-Options: DENY`
+
+**Static files.** A file must stay inside the app directory on both its
+lexical path and its real path. A symlink that leaves the directory gets
+404, and a malformed path gets 400. Both rules are tested.
+
+**What the view never contains.**
+
+- prompts, executor output, logs or log paths;
+- environment variables or tokens;
+- gate commands or tool profiles;
+- absolute paths: the home directory becomes `~`, and other paths stay
+  relative to the repository;
+- finding or question bodies beyond the masked, clipped title.
+
+**Masking.** It applies to every free-text field of the view, not only
+titles:
+
+- titles;
+- `progress.queue.detail`;
+- `warnings[].message`;
+- `drift[].unavailable`;
+- `stage.step`;
+- `line` fields.
+
+A secret could be cut in half at the clip boundary and slip through, so
+masking runs **before** clipping. The masking step:
+
+1. Replaces token-like strings with `‹masked›`. These are provider key
+   prefixes, `Bearer …`, long base64 or hex runs, and `user:pass@` in URLs.
+2. Replaces the home directory with `~`.
+3. Clips the text to the field limit.
+
+`--no-titles` drops titles, `queue.detail` and finding titles, as
+`report --no-titles` does.
+
+The P1 tests plant a provider key, a bearer token, URL credentials and the
+home path into a work title, a question, a finding, an attempt error that
+feeds `queue.detail`, and a git error that feeds drift. One case places the
+key across the clip boundary. In every case the view bytes must not contain
+any of the planted values.
+
+**Write path (S5).**
+
+There is one origin. The browser only ever talks to the UI CLI. The UI CLI
+proxies `POST /api/answers` and `GET /api/questions/<id>` to its
+`serve-view` child. `connect-src 'self'` therefore holds, and the browser
+never makes a cross-port request.
+
+The browser is authenticated by a one-time code exchanged for a session
+cookie:
+
+- When writes are enabled, the UI CLI prints a URL that carries a one-time
+  code in the fragment (`#code=…`).
+- On first load, the app sends the code once in the body of `POST
+/api/session`.
+- The server answers with an `HttpOnly; SameSite=Strict; Path=/api` cookie
+  and invalidates the code.
+- The app removes the fragment with `history.replaceState`.
+- A code that leaked into a log or chat is useless after that first
+  exchange.
+- Codes expire after 10 minutes. Ordinary log lines never print the code;
+  only the one startup line does.
+
+The CLI and `serve-view` share a separate secret:
+
+- The UI CLI generates a random 32-byte secret.
+- It hands the secret to the `serve-view` child through the child's stdin,
+  never through argv, the environment or stdout.
+- It sends the secret as `Authorization: Bearer` on every proxied write.
+- `serve-view --allow-answers` reads the secret from stdin and accepts
+  writes only with it.
+
+Every write must also pass these checks:
+
+- the session cookie;
+- `Origin` equal to the panel origin;
+- `content-type: application/json`;
+- a body of at most 16 KB.
+
+What a failed check returns:
+
+| Failure                       | Response |
+| ----------------------------- | -------- |
+| missing or bad session cookie | 403      |
+| wrong `Origin`                | 403      |
+| body is not JSON              | 415      |
+| body over 16 KB               | 413      |
+
+**Answer contract.** The request body maps one to one onto `harness
+input-answer`:
+
+```
+{ requestId, requestVersion, kind: 'clarification' | 'requirement-change',
+  optionId?, text }
+```
+
+- `text` is required, because `answerInput` requires it.
+- `kind` defaults to `clarification` only when the user picks nothing.
+- The form shows the full decision context before it allows an answer:
+  - the unclipped (but masked) question text;
+  - the options with their consequences;
+  - the severity;
+  - who may answer.
+
+  It reads this context from the authenticated `GET /api/questions/<id>`.
+
+- The harness records the answer with `actor: operator`. A stale version
+  gets `REQUEST_VERSION_STALE` and is shown. Requests the operator may not
+  answer, and any lead path, are not exposed.
+- Agents never use this path, and the skill forbids answering for the user.
+
+**Supply chain.** Dependencies are exact versions. The runtime bundle
+contains only React, and the CLI imports only `node:*`.
 
 ## 10. Slices
 
-Every slice ends green on `npm test && npm run build`, has no network in
-tests, and leaves fixtures in `fixtures/`. A slice that touches the harness
-lands there first, under the harness rules: independent acceptance and a
-round limit.
+Every slice ends green on `npm test && npm run typecheck && npm run build`.
+Tests use no network beyond loopback, and their fixtures live in
+`fixtures/`. A slice that touches the harness lands there first, under the
+harness rules: independent acceptance and a round limit. Acceptance
+criteria check the meaning shown on screen, not just that rendering
+succeeds.
 
-**S0: scaffold (this commit).**
+**S0: scaffold (this repository's first commits).**
 
-- Contents: the view type, `checkView`, `ViewSource`, Overview, the
-  loopback CLI with `--view` and `--demo`, the sample fixture and the
-  skill.
-- Acceptance:
-  - `npm install && npm test && npm run build` pass.
-  - The CLI refuses `0.0.0.0`.
-  - An explicit busy port is an error.
-  - A foreign `Host` gets 421.
-  - POST gets 405.
-  - An incompatible view gets 409 with its code.
-  - Overview renders without forms.
+- Contents:
+  - the view type and `checkView`, which validates nested fields;
+  - `ViewSource`, with typed 409 refusals;
+  - Overview;
+  - the loopback CLI with `--view` (bare view or envelope) and `--demo`;
+  - the sample fixture and the skill.
+- Acceptance and tests (`tests/*.test.ts*`):
+  - Hosting refusals:
+    - `0.0.0.0`, `::` and LAN addresses are refused;
+    - a busy explicit port is an error;
+    - a foreign `Host` gets 421;
+    - POST gets 405;
+    - a malformed path gets 400, and the server keeps serving;
+    - a symlink escape gets 404.
+  - View handling:
+    - an incompatible view gets 409 and keeps its message through
+      `httpViewSource`;
+    - malformed sections are refused before render;
+    - unknown values read conservatively.
+  - Overview rendering:
+    - only `awaiting-answer` questions are asked;
+    - the running count comes from `progress`, with a truncation note;
+    - the worst budget scope is shown, and "no budget" when there are none;
+    - drift that could not be checked is not shown as zero;
+    - no form elements.
+  - `--hui-*` custom properties are declared only on `:root`.
 
 **S1: schema in the harness** (proposals P1, P2).
 
 - Contents:
-  - `operatorView` and `harness view --json` land in the harness.
+  - `operatorView` and `harness view` land in the harness.
   - The UI imports the type from `devcontour-harness/projections`.
-  - A contract test checks the local fixture set against
+  - A contract test checks every fixture against
     `schemas/operator-view.schema.json`.
-- Fixture set: empty state, busy, paused by operator, budget exceeded,
-  escalated review, drift, a question only the operator may answer,
-  truncated, and a newer revision.
+- The fixture set:
+  - empty state;
+  - busy, paused by the operator;
+  - work budget exceeded while the total is within limits;
+  - large spend before the window;
+  - escalated review;
+  - drift, including drift that could not be checked;
+  - a question in each input state, one of them only the operator may
+    answer;
+  - every list truncated;
+  - a newer revision;
+  - a worst-case size document.
 - Acceptance:
   - Every fixture passes the schema.
-  - The view of the harness `single-task` example equals
-    `harness view` output byte for byte.
-  - Numbers match `status` and `report` on the same state:
-    - attempts against `attemptSummary`;
-    - spend against the report;
-    - stage against `status.works[].stage`.
-  - The secret-planting test passes.
+  - The view of the harness `single-task` example equals `harness view`
+    output byte for byte.
+  - Numbers match `status` and `report` on the same state: attempts, the
+    neutral counter, rechecks, spend bounds, gates (skipped and reused
+    separately) and stage.
+  - The secret-planting test passes, including a key across the clip
+    boundary.
+  - The worst-case document is at most 256 KB.
+  - The content token changes when a lease expires with no store write.
 
 **S2: read-only screens.**
 
-- Contents: Work detail, Reviews, Settings, History, Health, hash routing,
-  empty, incompatible and lost states, and dark mode.
+- Contents:
+  - Work detail (using the `--work` document), Reviews, Settings (with
+    `defaulted` provenance and scoped review rules), History, Health;
+  - hash routing;
+  - empty, incompatible, lost and newer-revision states;
+  - dark mode.
 - Acceptance:
-  - Each screen renders every fixture without throwing.
-  - Each fixture has a snapshot of its key text.
+  - For each fixture, every screen shows the expected key text: counts,
+    bounds, actors and states.
   - Playwright at 1280 px and 390 px shows no horizontal scroll.
   - axe reports no serious violations.
   - Charts have text summaries.
-  - No `<form>` element anywhere.
+  - The cumulative spend chart starts at `spendOpeningUsd`.
+  - There is no `<form>` element anywhere.
+  - A browser test confirms that `--hui-*` set on a wrapper changes the
+    computed colours.
 - Tests:
-  - `renderToStaticMarkup` per screen and fixture;
-  - one Playwright smoke against `--demo`.
+  - `renderToStaticMarkup` for each screen and fixture;
+  - one Playwright smoke run against `--demo`.
 
 **S3: live runtime** (proposal P3).
 
-- Contents: `--state/--policy` through a `harness serve-view` child,
-  `--from <url>`, SSE, `--check`, and the skill updated to the live route.
+- Contents:
+  - `--state/--policy` through a `serve-view` child;
+  - `--from <url>`, with the loopback-only checks;
+  - SSE;
+  - `--check`;
+  - the skill updated to the live route.
 - Acceptance:
   - A change in state reaches the browser within 2 s.
   - Killing the panel stops the child.
   - A mismatched harness prints `compatible:false` with a fix.
-  - No state directory gives an empty view, not an error.
-- Tests: CLI integration on the harness fixture runtime (no live models).
+  - A missing state directory together with a policy gives an empty view.
+    Without a policy it gives `POLICY_REQUIRED`, and no directory is
+    created.
+  - `--from` refuses non-loopback, credentialed and redirecting targets.
+- Tests: CLI integration on the harness fixture runtime, with no live
+  models.
 
 **S4: DevContour embedding.**
 
 - Contents:
-  - A `labels` prop.
-  - DevContour adapter guidance.
-  - The parts in §8 replaced in DevContour.
+  - a `labels` prop;
+  - adapter guidance for DevContour;
+  - the parts listed in §8 replaced in DevContour.
 - Acceptance:
   - DevContour's e2e and visual checks stay green.
   - The token mapping covers every `--hui-*` variable.
-  - There is one implementation per screen, with no copies left in
-    DevContour.
+  - Each screen has one implementation, with no copies left in DevContour.
 
 **S5: operator answers** (proposal P4).
 
-- Contents: an answer form for the questions the operator may answer,
-  through `serve-view --allow-answers`.
+- Contents: an answer form for `awaiting-answer` questions the operator
+  may answer, through the single-origin proxy described in §9.
 - Acceptance:
-  - The answer is recorded with `actor: operator` and the request version.
+  - The answer is recorded with `actor: operator`, the request version and
+    `kind`.
+  - The full masked question and its options are shown before answering.
   - A stale version is refused and shown.
-  - Missing token, wrong `Origin` or a non-JSON body gets 403 or 415.
-  - The lead-only path is not exposed.
+  - Each refusal returns its status:
+    - missing or used code, or missing cookie: 403;
+    - wrong `Origin`: 403;
+    - non-JSON body: 415;
+    - body over 16 KB: 413.
+  - The code and the shared secret never appear in logs, view responses or
+    argv.
 - Tests:
   - server tests for each refusal;
-  - a component test showing that the form does nothing without
-    `onAnswer`.
+  - a browser test that answers end to end on the fixture runtime;
+  - a component test showing the form does nothing without `onAnswer`.
 
 ## 11. Open decisions
 
-1. **Language.** Labels are English, with Russian through `labels` (S4).
-   Alternatively, labels could be bilingual from S2.
-2. **Who computes drift for `serve-view`.** Drift needs git on each
-   recompute. One option is to cache it per target head, recomputing only
-   when `rev-parse` changes. The other is to compute it only on explicit
-   refresh.
+1. **Language.** Labels are English, with Russian supplied through `labels`
+   (S4). The alternative is bilingual labels from S2.
+2. **Drift cost in `serve-view`.** Drift needs git. The proposal caches it
+   per target head and recomputes at most every 30 s. The alternative is to
+   compute it only on explicit refresh.
 3. **CheckPanel.** It could move as a view revision with a check section.
    Or it could stay in DevContour while the property-check contract is
    still changing.
-4. **History windows.** The proposal is 24 h by default and 7 d on
+4. **History windows.** The proposal is 24 h by default and 7 days on
    request. Longer windows would need pre-aggregation in the harness.
-5. **Package home.** This could be a separate repository, as now, or a
-   workspace of the harness repository. A separate repository keeps React
-   out of the harness. A workspace keeps the schema and the UI in one PR.
+5. **Package home.** This package could stay a separate repository, as now,
+   or become a workspace of the harness repository. A separate repository
+   keeps React out of the harness. A workspace puts the schema and the UI in
+   one PR.
+6. **First write.** S5 needs the owner's approval of the single-origin
+   design. That design covers the one-time code, the cookie, and the secret
+   piped to the child over stdin.

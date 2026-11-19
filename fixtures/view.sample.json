@@ -33,6 +33,7 @@
     "reviews": [
       {
         "kind": "code",
+        "scope": "global",
         "reviewer": {
           "runtime": "codex",
           "model": "example-reviewer"
@@ -42,6 +43,7 @@
       },
       {
         "kind": "plan",
+        "scope": "global",
         "reviewer": {
           "runtime": "codex"
         },
@@ -82,7 +84,8 @@
     },
     "lean": {
       "state": "off"
-    }
+    },
+    "defaulted": ["repairBudget", "timeouts.runTimeoutMs", "timeouts.leaseMs", "timeouts.stall"]
   },
   "works": [
     {
@@ -99,8 +102,12 @@
         "max": 3,
         "left": 2,
         "failed": 0,
-        "rechecks": 0,
         "interrupted": 0,
+        "rechecks": 0,
+        "neutral": {
+          "used": 0,
+          "max": 3
+        },
         "line": "1 attempt, accepted on the first"
       },
       "blockers": [],
@@ -130,8 +137,12 @@
         "max": 3,
         "left": 1,
         "failed": 1,
-        "rechecks": 1,
         "interrupted": 0,
+        "rechecks": 1,
+        "neutral": {
+          "used": 0,
+          "max": 3
+        },
         "line": "2 attempts: 1 failed (check), 1 running; 1 left"
       },
       "liveness": "active",
@@ -165,8 +176,12 @@
         "max": 3,
         "left": 2,
         "failed": 0,
+        "interrupted": 0,
         "rechecks": 0,
-        "interrupted": 0
+        "neutral": {
+          "used": 0,
+          "max": 3
+        }
       },
       "blockers": ["INPUT_REQUIRED"],
       "question": {
@@ -197,8 +212,12 @@
         "max": 3,
         "left": 3,
         "failed": 0,
+        "interrupted": 0,
         "rechecks": 0,
-        "interrupted": 0
+        "neutral": {
+          "used": 0,
+          "max": 3
+        }
       },
       "blockers": ["DEPENDENCY_INCOMPLETE"],
       "spend": {
@@ -285,6 +304,7 @@
       "input": 1,
       "queued": 1
     },
+    "running": 1,
     "done": 1,
     "waitingOperator": 1,
     "queue": {
@@ -304,7 +324,12 @@
       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7
     ],
     "spendBound": "lower",
-    "budgetUsd": 40
+    "budgetUsd": 40,
+    "gatesReused": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0],
+    "spendOpeningUsd": {
+      "value": 1.2,
+      "bound": "exact"
+    }
   },
   "health": {
     "controller": {
@@ -314,13 +339,36 @@
     "stalledAttempts": 0,
     "quietAttempts": 0,
     "environmentFailures": 0,
-    "budget": {
-      "state": "within",
-      "scope": "total",
-      "spentUsd": {
-        "value": 6.02,
-        "bound": "lower"
+    "budgeting": "on",
+    "budgets": [
+      {
+        "scope": "total",
+        "state": "within",
+        "spentUsd": {
+          "value": 6.02,
+          "bound": "lower"
+        },
+        "limitUsd": 40
+      },
+      {
+        "scope": "work",
+        "id": "locale-format",
+        "state": "within",
+        "spentUsd": {
+          "value": 3.4,
+          "bound": "lower"
+        },
+        "limitUsd": 8
       }
+    ],
+    "spentTotalUsd": {
+      "value": 6.02,
+      "bound": "lower"
+    },
+    "drift": {
+      "checked": 1,
+      "drifted": 1,
+      "unavailable": 0
     },
     "warnings": []
   }

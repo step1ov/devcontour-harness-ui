@@ -32,8 +32,7 @@ Open the printed URL. To show a real project, write the view with a harness
 that has `harness view` and serve the file:
 
 ```sh
-harness view --state <state> --policy .harness/policy.json > envelope.json
-# take `data` from the envelope into view.json
+harness view --state <state> --policy .harness/policy.json > view.json   # envelope is accepted
 node dist/lib/cli.js --view view.json
 ```
 

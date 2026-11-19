@@ -3,7 +3,7 @@
 // telemetry, no outbound requests. No React import: the CLI runs without it.
 
 import { createHash } from 'node:crypto';
-import { readFile, stat } from 'node:fs/promises';
+import { readFile, realpath, stat } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { extname, join, resolve, sep } from 'node:path';
 import { checkView } from '../model/compat.ts';
@@ -83,67 +83,75 @@ function hostAllowed(req: IncomingMessage, port: number): boolean {
   return [`127.0.0.1:${port}`, `localhost:${port}`, `[::1]:${port}`].includes(host.toLowerCase());
 }
 
+const jsonError = (res: ServerResponse, status: number, code: string, message: string) =>
+  send(res, status, JSON.stringify({ error: { code, message } }), types['.json']!);
+
+/**
+ * The view file holds either a bare view or the harness envelope
+ * `{ ok: true, data: <view> }` exactly as `harness view` prints it.
+ */
+export function unwrapView(parsed: unknown): unknown {
+  if (
+    typeof parsed === 'object' &&
+    parsed !== null &&
+    (parsed as { ok?: unknown }).ok === true &&
+    'data' in parsed
+  ) {
+    return (parsed as { data: unknown }).data;
+  }
+  return parsed;
+}
+
 async function serveView(req: IncomingMessage, res: ServerResponse, file: string) {
   let bytes: Buffer;
   try {
     bytes = await readFile(file);
   } catch {
-    return send(
-      res,
-      503,
-      JSON.stringify({
-        error: { code: 'VIEW_UNAVAILABLE', message: 'View file is not readable yet.' },
-      }),
-      types['.json']!,
-    );
+    return jsonError(res, 503, 'VIEW_UNAVAILABLE', 'View file is not readable yet.');
   }
   let parsed: unknown;
   try {
     parsed = JSON.parse(bytes.toString('utf8'));
   } catch {
-    return send(
-      res,
-      502,
-      JSON.stringify({ error: { code: 'NOT_A_VIEW', message: 'View file is not JSON.' } }),
-      types['.json']!,
-    );
+    return jsonError(res, 502, 'NOT_A_VIEW', 'View file is not JSON.');
   }
-  const check = checkView(parsed);
-  if (!check.ok) {
-    return send(
-      res,
-      409,
-      JSON.stringify({ error: { code: check.code, message: check.message } }),
-      types['.json']!,
-    );
+  if (typeof parsed === 'object' && parsed !== null && (parsed as { ok?: unknown }).ok === false) {
+    return jsonError(res, 502, 'NOT_A_VIEW', 'View file holds a harness error envelope.');
   }
-  const etag = '"' + createHash('sha256').update(bytes).digest('hex').slice(0, 32) + '"';
+  const view = unwrapView(parsed);
+  const check = checkView(view);
+  if (!check.ok) return jsonError(res, 409, check.code, check.message);
+  // The ETag is derived from the content, never from a store counter.
+  const body = Buffer.from(JSON.stringify(view));
+  const etag = '"' + createHash('sha256').update(body).digest('hex').slice(0, 32) + '"';
   const headers = { etag, 'cache-control': 'no-store' };
   if (req.headers['if-none-match'] === etag) return send(res, 304, '', types['.json']!, headers);
-  return send(res, 200, bytes, types['.json']!, headers);
+  return send(res, 200, body, types['.json']!, headers);
 }
 
+const inside = (root: string, file: string) => file === root || file.startsWith(root + sep);
+
 async function serveStatic(res: ServerResponse, appDir: string, pathname: string) {
-  const root = resolve(appDir);
-  const wanted = pathname === '/' ? '/index.html' : decodeURIComponent(pathname);
-  const file = resolve(join(root, wanted));
-  if (file !== root && !file.startsWith(root + sep)) {
-    return send(res, 404, 'Not found', 'text/plain; charset=utf-8');
-  }
+  const notFound = () => send(res, 404, 'Not found', 'text/plain; charset=utf-8');
+  const wanted = pathname === '/' ? '/index.html' : pathname;
+  let root: string;
   try {
-    if ((await stat(file)).isFile()) {
-      return send(
-        res,
-        200,
-        await readFile(file),
-        types[extname(file)] ?? 'application/octet-stream',
-      );
-    }
+    root = await realpath(resolve(appDir));
   } catch {
-    // fall through
+    return wanted === '/index.html' ? send(res, 200, fallbackPage, types['.html']!) : notFound();
   }
-  if (wanted === '/index.html') return send(res, 200, fallbackPage, types['.html']!);
-  return send(res, 404, 'Not found', 'text/plain; charset=utf-8');
+  const lexical = resolve(join(root, wanted));
+  if (!inside(root, lexical)) return notFound();
+  try {
+    // Containment is checked on the real path too: a symlink inside the app
+    // directory must not reach files outside it.
+    const real = await realpath(lexical);
+    if (!inside(root, real) || !(await stat(real)).isFile()) return notFound();
+    return send(res, 200, await readFile(real), types[extname(real)] ?? 'application/octet-stream');
+  } catch {
+    if (wanted === '/index.html') return send(res, 200, fallbackPage, types['.html']!);
+    return notFound();
+  }
 }
 
 function listen(server: Server, host: string, port: number): Promise<boolean> {
@@ -179,6 +187,17 @@ export async function startServer(options: ServeOptions): Promise<RunningServer>
   }
   let port = 0;
   const server = createServer((req, res) => {
+    const failed = () => {
+      if (!res.headersSent) send(res, 500, 'Internal error', 'text/plain; charset=utf-8');
+      else res.destroy();
+    };
+    try {
+      handle(req, res).catch(failed);
+    } catch {
+      failed();
+    }
+  });
+  async function handle(req: IncomingMessage, res: ServerResponse) {
     if (!hostAllowed(req, port))
       return send(res, 421, 'Misdirected request', 'text/plain; charset=utf-8');
     if (req.method !== 'GET' && req.method !== 'HEAD') {
@@ -186,8 +205,14 @@ export async function startServer(options: ServeOptions): Promise<RunningServer>
         allow: 'GET, HEAD',
       });
     }
-    const { pathname } = new URL(req.url ?? '/', 'http://local');
-    if (pathname === '/api/view') return void serveView(req, res, options.viewFile);
+    let pathname: string;
+    try {
+      pathname = decodeURIComponent(new URL(req.url ?? '/', 'http://local').pathname);
+    } catch {
+      return send(res, 400, 'Bad request', 'text/plain; charset=utf-8');
+    }
+    if (pathname.includes('\0')) return send(res, 400, 'Bad request', 'text/plain; charset=utf-8');
+    if (pathname === '/api/view') return serveView(req, res, options.viewFile);
     if (pathname === '/api/health') {
       return send(
         res,
@@ -196,8 +221,8 @@ export async function startServer(options: ServeOptions): Promise<RunningServer>
         types['.json']!,
       );
     }
-    return void serveStatic(res, options.appDir, pathname);
-  });
+    return serveStatic(res, options.appDir, pathname);
+  }
   const candidates =
     options.port !== undefined
       ? [options.port]

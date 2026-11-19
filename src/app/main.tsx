@@ -42,6 +42,12 @@ function App() {
       {error ? (
         <p className="app-note app-bad">Connection lost: {error}. Showing the last view.</p>
       ) : null}
+      {check.newerRevision ? (
+        <p className="app-note">
+          The harness sends newer data than this panel knows; update devcontour-harness-ui for full
+          detail.
+        </p>
+      ) : null}
       <Overview view={check.view} now={Date.now()} />
     </>
   );

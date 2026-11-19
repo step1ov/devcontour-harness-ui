@@ -1,8 +1,9 @@
 /* devcontour-harness-ui styles. Every colour, size and font is a `--hui-*`
-   variable on `.hui`; a host (DevContour) themes the components by setting
-   these variables on an ancestor, no class overrides needed. */
+   variable. Defaults are declared on :root only, so a host (DevContour)
+   overrides them on any ancestor wrapper of the components; rules on `.hui`
+   only consume the variables and never declare them. */
 
-:where(.hui) {
+:where(:root) {
   --hui-bg: #ffffff;
   --hui-surface: #f6f7f9;
   --hui-border: #d9dde3;
@@ -21,7 +22,7 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :where(:root:not([data-theme='light'])) :where(.hui) {
+  :where(:root:not([data-theme='light'])) {
     --hui-bg: #14171b;
     --hui-surface: #1d2126;
     --hui-border: #333a42;
@@ -35,7 +36,7 @@
     --hui-bad: #ff8a80;
   }
 }
-:where(:root[data-theme='dark']) :where(.hui) {
+:where(:root[data-theme='dark']) {
   --hui-bg: #14171b;
   --hui-surface: #1d2126;
   --hui-border: #333a42;
@@ -92,6 +93,9 @@
 }
 .hui-item {
   min-width: 0;
+}
+.hui-secondary {
+  margin-top: 8px;
 }
 .hui-muted {
   color: var(--hui-muted);

@@ -5,6 +5,8 @@ import {
   checkView,
   formatElapsed,
   formatUsd,
+  httpViewSource,
+  questionStatus,
   stageLabel,
   staticViewSource,
 } from '../src/model/index.ts';
@@ -62,6 +64,7 @@ test('history series are aligned to the bucket count', () => {
     'attemptsFailed',
     'gatesPassed',
     'gatesFailed',
+    'gatesReused',
     'spendUsd',
   ]) {
     assert.equal(h[key].length, buckets, key);
@@ -71,4 +74,52 @@ test('history series are aligned to the bucket count', () => {
 test('staticViewSource returns the checked view', async () => {
   const check = await staticViewSource(fixture).load();
   assert.equal(check.ok, true);
+});
+
+test('empty or malformed sections are refused before render', () => {
+  for (const broken of [
+    { ...fixture, progress: {} },
+    { ...fixture, health: { ...fixture.health, budgets: [{}] } },
+    { ...fixture, works: [{ id: 'x' }] },
+    { ...fixture, questions: [{ requestId: 'q' }] },
+    { ...fixture, viewRevision: -1 },
+    { ...fixture, source: {} },
+  ]) {
+    const check = checkView(broken);
+    assert.equal(check.ok, false);
+    assert.equal(check.ok ? '' : check.code, 'NOT_A_VIEW');
+  }
+});
+
+test('unknown values from a newer producer read conservatively', () => {
+  assert.equal(formatUsd({ value: 5, bound: 'estimated' as never }), 'unknown');
+  assert.equal(stageLabel('__proto__'), '__proto__');
+  assert.equal(stageLabel('toString'), 'toString');
+  const q = { state: 'awaiting-answer', answerableBy: 'someone-new' as never };
+  assert.match(questionStatus(q).text, /Only you/);
+  assert.equal(questionStatus({ state: 'mystery', answerableBy: 'operator' }).needsAnswer, false);
+});
+
+test('only awaiting-answer asks the operator for an answer', () => {
+  const states = ['answered-not-applied', 'applied-awaiting-claim', 'delivered', 'carry-stale'];
+  for (const state of states) {
+    assert.equal(questionStatus({ state, answerableBy: 'operator' }).needsAnswer, false, state);
+  }
+  assert.equal(
+    questionStatus({ state: 'awaiting-answer', answerableBy: 'operator' }).needsAnswer,
+    true,
+  );
+});
+
+test('httpViewSource keeps a typed 409 refusal and its message', async () => {
+  const fake = (async () =>
+    new Response(
+      JSON.stringify({ error: { code: 'VIEW_VERSION_UNSUPPORTED', message: 'install 0.2' } }),
+      { status: 409 },
+    )) as typeof fetch;
+  const check = await httpViewSource('http://127.0.0.1:1/', fake).load();
+  assert.equal(check.ok, false);
+  assert.equal(check.ok ? '' : check.message, 'install 0.2');
+  const down = (async () => new Response('x', { status: 500 })) as typeof fetch;
+  await assert.rejects(httpViewSource('http://127.0.0.1:1/', down).load());
 });
