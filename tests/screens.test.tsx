@@ -768,11 +768,11 @@ test('questions of a closed work: cancelled and superseded are said, never "need
   d.questions[0]!.state = 'cancelled';
   d.questions.push({ ...d.questions[0]!, requestId: 'q-6', state: 'superseded' });
   const ru = text(html(<WorkDetail detail={d} lang="ru" timeZone={TZ} />));
-  assert.match(ru, /q-5.*Вопрос снят: работу отменили\./s);
-  assert.match(ru, /q-6.*Вопрос заменён другим\./s);
+  assert.match(ru, /q-5.*Вопрос снят\./s);
+  assert.match(ru, /q-6.*Вопрос заменён\./s);
   const en = text(html(<WorkDetail detail={d} lang="en" timeZone={TZ} />));
-  assert.match(en, /Question withdrawn: the work was cancelled\./);
-  assert.match(en, /Question replaced by another one\./);
+  assert.match(en, /Question withdrawn\./);
+  assert.match(en, /Question replaced\./);
   for (const state of ['cancelled', 'superseded'])
     assert.equal(questionStatus({ state, answerableBy: 'operator' }).needsAnswer, false);
 });
@@ -861,6 +861,19 @@ test('history totals drive the chart summaries; alpha.55 says it has none instea
   const exact = structuredClone(view);
   exact.history.totals!.spendUsd = { value: 6.3, bound: 'exact' };
   assert.deepEqual(terms(spendRow(exact)), ['расход за окно']);
+  // A window where no call has a known cost: zero series, unknown total. The
+  // cumulative curve is not drawn at zero and the data table says unknown.
+  const noCost = structuredClone(view);
+  noCost.history.spendUsd = noCost.history.spendUsd.map(() => 0);
+  noCost.history.totals!.spendUsd = { value: 0, bound: 'unknown' };
+  const noneHtml = html(<History view={noCost} lang="ru" timeZone={TZ} />);
+  const chart = noneHtml.slice(noneHtml.indexOf('data-testid="chart-spend"'));
+  assert.doesNotMatch(chart, /<polyline/, 'no curve claims a cost');
+  assert.doesNotMatch(chart, /<td>\$/, 'no dollar cell in the data table');
+  assert.equal(chart.match(/<td>неизвестно<\/td>/g)?.length, noCost.history.spendUsd.length + 1);
+  assert.match(text(chart), /К концу окна потрачено неизвестно/);
+  // The known windows still draw their curve.
+  assert.match(html(<History view={view} lang="ru" />), /<polyline/);
   const value = (row: string) => /<span class="hui-total-value">([^<]*)<\/span>/.exec(row)?.[1];
   assert.equal(value(spendRow(exact)), '$6.30');
   assert.equal(value(spendRow(view)), '≥ $6.30');

@@ -175,7 +175,7 @@ const ruGlossary: Record<GlossaryId, { term: string; meaning: string }> = {
   windowSpend: {
     term: 'расход за окно',
     meaning:
-      'Стоимость вызовов агентов, закончившихся в окне, по правилам отчёта harness. «≥» — часть цен неизвестна, и настоящая сумма может быть больше; «неизвестно» — цена ни одного вызова не известна.',
+      'Стоимость вызовов агентов, которые harness относит к окну, по правилам своего отчёта. «≥» — у части вызовов цена или учёт неизвестны или неполны, и настоящая сумма может быть больше; «неизвестно» — ни у одного вызова окна нет известной цены.',
   },
   typical: {
     term: 'обычное время этапа',
@@ -306,7 +306,7 @@ const enGlossary: Record<GlossaryId, { term: string; meaning: string }> = {
   windowSpend: {
     term: 'spend in the window',
     meaning:
-      'The cost of agent calls that finished in the window, by the harness report rules. "≥" means some prices are unknown and the real sum may be higher; "unknown" means no call in it has a known price.',
+      'The cost of agent calls the harness assigns to the window, by its report rules. "≥" means the price or accounting of some calls is unknown or incomplete, so the real sum may be higher; "unknown" means no call in the window has a known price.',
   },
   typical: {
     term: 'usual stage time',
@@ -485,8 +485,8 @@ const ru = {
     version: (n: number) => `версия ${n}`,
     answeredBy: (who: string) => `ответил: ${who}`,
     basis: (at: string, line: string) => `${at} — ${line}`,
-    cancelled: 'Вопрос снят: работу отменили.',
-    superseded: 'Вопрос заменён другим.',
+    cancelled: 'Вопрос снят.',
+    superseded: 'Вопрос заменён.',
   },
   // Overview.
   overview: {
@@ -1039,8 +1039,8 @@ const en: Dict = {
     version: (n: number) => `version ${n}`,
     answeredBy: (who: string) => `answered by: ${who}`,
     basis: (at: string, line: string) => `${at} — ${line}`,
-    cancelled: 'Question withdrawn: the work was cancelled.',
-    superseded: 'Question replaced by another one.',
+    cancelled: 'Question withdrawn.',
+    superseded: 'Question replaced.',
   },
   overview: {
     label: 'Harness overview',

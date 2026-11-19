@@ -87,6 +87,7 @@ function Chart({
   t,
   format = String,
   legend,
+  unknown,
 }: {
   id: string;
   title: string;
@@ -95,6 +96,8 @@ function Chart({
   stacked?: boolean;
   /** Draw the first series as a line (cumulative), dashed when `line.dashed`. */
   line?: { dashed: boolean };
+  /** The values are not known: no marks, and the data table says "unknown" (never $0.00). */
+  unknown?: boolean;
   /** Horizontal dashed guide: concurrency or budget. */
   guide?: number;
   guideLabel?: string;
@@ -114,7 +117,9 @@ function Chart({
   const y = (v: number) => H - (v / max) * H;
   const slot = n ? W / n : W;
   const marks: ReactNode[] = [];
-  if (line) {
+  if (unknown) {
+    // Nothing to draw: a flat line at zero would claim a cost.
+  } else if (line) {
     // Boundary values: the first point is the opening balance at the window start.
     const step = n > 1 ? W / (n - 1) : W;
     const pts = series[0]!.values.map((v, i) => `${i * step},${y(v)}`);
@@ -213,7 +218,7 @@ function Chart({
               <tr key={i}>
                 <th scope="row">{time}</th>
                 {series.map((s) => (
-                  <td key={s.name}>{format(s.values[i] ?? 0)}</td>
+                  <td key={s.name}>{unknown ? t.unknown : format(s.values[i] ?? 0)}</td>
                 ))}
               </tr>
             ))}
@@ -445,6 +450,7 @@ export function History({ view, lang = 'ru', timeZone, now: nowProp }: HistoryPr
             t={t}
             axis={axis}
             line={{ dashed: spend.lower }}
+            unknown={spend.end.bound === 'unknown'}
             times={timesOf(n + 1, h.bucketMs)}
             series={[
               {
