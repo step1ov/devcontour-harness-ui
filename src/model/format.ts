@@ -1,44 +1,54 @@
-// Small display helpers shared by components. Pure, locale-independent.
-// Unknown values from a newer producer get the conservative reading: an
-// unknown bound is "unknown", an unknown answer rule is "only you".
+// Small display helpers shared by components. Pure; words come from the
+// dictionary (dict.ts). These helpers default to English for API stability;
+// the components default to Russian. Unknown values from a newer producer get
+// the conservative reading: an unknown bound is "unknown", an unknown answer
+// rule is "only you".
 
 import { instantMs } from './compat.ts';
+import { dict, label, type Lang } from './dict.ts';
 import type { Bounded, OperatorQuestion } from './view.ts';
 
-export function formatUsd(amount: Bounded | undefined): string {
-  if (!amount || (amount.bound !== 'exact' && amount.bound !== 'lower')) return 'unknown';
+/** `$1.50`, `≥ $3.40` for a lower bound, "unknown" for anything else — never `$0.00`. */
+export function formatUsd(amount: Bounded | undefined, lang: Lang = 'en'): string {
+  if (
+    !amount ||
+    (amount.bound !== 'exact' && amount.bound !== 'lower') ||
+    !Number.isFinite(amount.value)
+  )
+    return dict(lang).usdUnknown;
   const text = '$' + amount.value.toFixed(2);
   return amount.bound === 'lower' ? '≥ ' + text : text;
 }
 
-const pad = (n: number) => String(n).padStart(2, '0');
+/** A plain dollar amount the producer gave as a number (limits, budgets). */
+export const usd = (n: number): string => '$' + n.toFixed(2);
 
-/** Elapsed time between an ISO instant and `nowMs` as `1h 05m`, `4m 12s` or `9s`. */
-export function formatElapsed(fromIso: string, nowMs: number): string {
-  const s = Math.max(0, Math.floor((nowMs - instantMs(fromIso)) / 1000));
-  if (!Number.isFinite(s)) return 'unknown';
-  if (s >= 3600) return `${Math.floor(s / 3600)}h ${pad(Math.floor((s % 3600) / 60))}m`;
-  if (s >= 60) return `${Math.floor(s / 60)}m ${pad(s % 60)}s`;
-  return `${s}s`;
+/** A duration as `1h 05m`, `4m 12s`, `9s` (en) or `1 ч 05 мин`, `4 мин 12 с` (ru). */
+export function formatDuration(ms: number, lang: Lang = 'en'): string {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  if (!Number.isFinite(s)) return dict(lang).unknown;
+  return dict(lang).duration(Math.floor(s / 3600), Math.floor((s % 3600) / 60), s % 60);
 }
 
-const stageLabels: Record<string, string> = {
-  queued: 'Queued',
-  blocked: 'Blocked',
-  prepare: 'Preparing',
-  writer: 'Writing',
-  gates: 'Checks',
-  review: 'Review',
-  integration: 'Integrating',
-  input: 'Waiting for an answer',
-  stopped: 'Stopped',
-  done: 'Accepted',
-  cancelled: 'Cancelled',
-};
+/** A window length: `24 ч`, `7 дней` (ru) or `24 h`, `7 days` (en); other lengths as a duration. */
+export function formatWindow(ms: number, lang: Lang = 'en'): string {
+  const t = dict(lang);
+  if (Number.isFinite(ms) && ms > 0 && ms % 3_600_000 === 0 && ms <= 48 * 3_600_000)
+    return t.hours(ms / 3_600_000);
+  if (Number.isFinite(ms) && ms > 0 && ms % 86_400_000 === 0) return t.days(ms / 86_400_000);
+  return formatDuration(ms, lang);
+}
+
+/** Elapsed time between an ISO instant and `nowMs`. */
+export function formatElapsed(fromIso: string, nowMs: number, lang: Lang = 'en'): string {
+  const ms = nowMs - instantMs(fromIso);
+  if (!Number.isFinite(ms)) return dict(lang).unknown;
+  return formatDuration(ms, lang);
+}
 
 /** Label for a stage; an unknown stage from a newer harness is shown as is. */
-export const stageLabel = (stage: string): string =>
-  Object.hasOwn(stageLabels, stage) ? stageLabels[stage]! : String(stage);
+export const stageLabel = (stage: string, lang: Lang = 'en'): string =>
+  label(dict(lang).stage, stage);
 
 /** Stages that hold a worker slot. */
 export const SLOT_STAGES: ReadonlySet<string> = new Set([
@@ -79,30 +89,21 @@ export function leadMayAnswer(q: Pick<OperatorQuestion, 'answerableBy' | 'impact
 
 export function questionStatus(
   q: Pick<OperatorQuestion, 'state' | 'answerableBy' | 'impact'>,
+  lang: Lang = 'en',
 ): QuestionStatus {
+  const t = dict(lang).question;
   switch (q.state) {
     case 'awaiting-answer':
-      return {
-        needsAnswer: true,
-        text: leadMayAnswer(q)
-          ? 'You or the lead agent can answer this question.'
-          : 'Only you can answer this question.',
-      };
+      return { needsAnswer: true, text: leadMayAnswer(q) ? t.youOrLead : t.onlyYou };
     case 'answered-not-applied':
-      return {
-        needsAnswer: false,
-        text: 'Answered; the lead agent or controller still has to apply the answer.',
-      };
+      return { needsAnswer: false, text: t.answeredNotApplied };
     case 'carry-stale':
-      return {
-        needsAnswer: false,
-        text: 'The carried-over answer of a replaced question went stale; the lead carries it again or withdraws it.',
-      };
+      return { needsAnswer: false, text: t.carryStale };
     case 'applied-awaiting-claim':
-      return { needsAnswer: false, text: 'Answer applied; waiting for the next attempt to start.' };
+      return { needsAnswer: false, text: t.appliedAwaitingClaim };
     case 'delivered':
-      return { needsAnswer: false, text: 'Answer delivered to the executor.' };
+      return { needsAnswer: false, text: t.delivered };
     default:
-      return { needsAnswer: false, text: `State ${String(q.state)}; inspect it before acting.` };
+      return { needsAnswer: false, text: t.unknownState(String(q.state)) };
   }
 }

@@ -99,6 +99,17 @@ test('--demo prints one JSON line with a loopback URL and serves the view', asyn
     const res = await fetch(started.url + 'api/view');
     assert.equal(res.status, 200);
     assert.equal((await res.json()).viewVersion, 1);
+    for (const id of ['locale-format', 'add-greeting']) {
+      const work = await fetch(started.url + 'api/work/' + id);
+      assert.equal(work.status, 200, id);
+      assert.equal((await work.json()).work.id, id);
+    }
+    assert.equal((await fetch(started.url + 'api/work/docs-page')).status, 503);
+    // The demo answers ?lang=ru with Russian harness texts, like `harness view --lang ru`.
+    const ru = await (await fetch(started.url + 'api/view?lang=ru')).json();
+    assert.equal(ru.questions[0].title, 'Какой разделитель использовать в CSV?');
+    const ruWork = await (await fetch(started.url + 'api/work/locale-format?lang=ru')).json();
+    assert.match(ruWork.work.attempts.lastFailure.plain, /lint нашёл лишний импорт/);
   } finally {
     child.kill('SIGTERM');
   }

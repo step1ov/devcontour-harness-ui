@@ -13,7 +13,7 @@ if (!check.ok) throw new Error(check.message);
 const view: OperatorView = check.view;
 
 test('overview shows the waiting question, the running work and health', () => {
-  const html = renderToStaticMarkup(<Overview view={view} />);
+  const html = renderToStaticMarkup(<Overview lang="en" view={view} />);
   assert.match(html, /Queue running/);
   assert.match(html, /1 of 4 accepted/);
   assert.match(html, /Which delimiter should the CSV use\?/);
@@ -23,7 +23,10 @@ test('overview shows the waiting question, the running work and health', () => {
   assert.match(html, /7m 50s/); // stage since 11:52:10, view at 12:00:00
   assert.match(html, /≥ \$6\.02 of \$40\.00 \(total: within\)/);
   // Accepted, queued and answer-waiting work does not hold a slot.
-  const now = html.slice(html.indexOf('data-testid="now"'), html.indexOf('data-testid="accepted"'));
+  const now = html.slice(
+    html.indexOf('data-testid="now"'),
+    html.indexOf('data-testid="decisions"'),
+  );
   assert.match(now, /Working now \(1 of 2 slots\)/);
   assert.doesNotMatch(now, /add-greeting|docs-page|export-csv/);
 });
@@ -34,13 +37,13 @@ test('overview without questions and with a paused queue', () => {
     questions: [],
     progress: { ...view.progress, queue: { paused: true, reason: 'operator' } },
   };
-  const html = renderToStaticMarkup(<Overview view={paused} />);
+  const html = renderToStaticMarkup(<Overview lang="en" view={paused} />);
   assert.match(html, /Paused \(operator\)/);
   assert.match(html, /No questions are waiting for you\./);
 });
 
 test('the component renders no form or write control', () => {
-  const html = renderToStaticMarkup(<Overview view={view} onOpenWork={() => {}} />);
+  const html = renderToStaticMarkup(<Overview lang="en" view={view} onOpenWork={() => {}} />);
   assert.doesNotMatch(html, /<form|<input|<textarea|method="post"/i);
 });
 
@@ -49,7 +52,7 @@ test('questions in other states are not asked as needing an answer', () => {
     ...view,
     questions: view.questions.map((q) => ({ ...q, state: 'answered-not-applied' })),
   };
-  const html = renderToStaticMarkup(<Overview view={applied} />);
+  const html = renderToStaticMarkup(<Overview lang="en" view={applied} />);
   assert.match(html, /Needs your answer \(0\)/);
   assert.match(html, /still has to apply the answer/);
 });
@@ -61,7 +64,7 @@ test('running count comes from progress, and a truncated list says so', () => {
     progress: { ...view.progress, running: 2 },
     truncated: { works: 4 },
   };
-  const html = renderToStaticMarkup(<Overview view={truncated} />);
+  const html = renderToStaticMarkup(<Overview lang="en" view={truncated} />);
   assert.match(html, /Working now \(2 of 2 slots\)/);
   assert.match(html, /2 more running work orders are not listed/);
   assert.doesNotMatch(html, /Nothing is running/);
@@ -85,14 +88,17 @@ test('budgets: the worst scope is shown; no budgets says so', () => {
     },
   };
   assert.match(
-    renderToStaticMarkup(<Overview view={exceeded} />),
+    renderToStaticMarkup(<Overview lang="en" view={exceeded} />),
     /\$9\.00 of \$8\.00 \(work locale-format: exceeded\)/,
   );
   const none: OperatorView = {
     ...view,
     health: { ...view.health, budgeting: 'off', budgets: [] },
   };
-  assert.match(renderToStaticMarkup(<Overview view={none} />), /no budget; spent ≥ \$6\.02/);
+  assert.match(
+    renderToStaticMarkup(<Overview lang="en" view={none} />),
+    /no budget; spent ≥ \$6\.02/,
+  );
 });
 
 test('unavailable drift checks are not shown as zero drift', () => {
@@ -100,14 +106,14 @@ test('unavailable drift checks are not shown as zero drift', () => {
     ...view,
     health: { ...view.health, drift: { checked: 2, drifted: 0, unavailable: 2 } },
   };
-  assert.match(renderToStaticMarkup(<Overview view={unknown} />), /0 \(2 not checked\)/);
+  assert.match(renderToStaticMarkup(<Overview lang="en" view={unknown} />), /0 \(2 not checked\)/);
 });
 
 test('header sentence and footer: Russian first-class, English fallback', () => {
   const ru = renderToStaticMarkup(<Overview view={view} lang="ru" timeZone="UTC" />);
   assert.match(ru, /Сейчас: в работе 1, в очереди 1\. От вас: ответить на 1 вопрос\./);
   assert.match(ru, /Данные harness на 12:00; панель ничего не меняет\./);
-  const en = renderToStaticMarkup(<Overview view={view} timeZone="UTC" />);
+  const en = renderToStaticMarkup(<Overview lang="en" view={view} timeZone="UTC" />);
   assert.match(en, /Now: 1 working, 1 waiting in the queue\. From you: answer 1 question\./);
   assert.match(en, /Harness data as of 12:00; the panel changes nothing\./);
   const idle: OperatorView = {
@@ -130,8 +136,12 @@ test('header never says "nothing is needed" while the harness counts work waitin
   };
   const ru = renderToStaticMarkup(<Overview view={hidden} lang="ru" timeZone="UTC" />);
   assert.match(ru, /От вас: 2 работы ждут вашего действия\./);
-  assert.doesNotMatch(ru, /ничего не нужно/);
-  const en = renderToStaticMarkup(<Overview view={hidden} timeZone="UTC" />);
+  const sentence = ru.slice(
+    ru.indexOf('data-testid="sentence"'),
+    ru.indexOf('</p>', ru.indexOf('data-testid="sentence"')),
+  );
+  assert.doesNotMatch(sentence, /ничего не нужно/);
+  const en = renderToStaticMarkup(<Overview lang="en" view={hidden} timeZone="UTC" />);
   assert.match(en, /From you: 2 work orders wait for your action\./);
 
   // A clipped question list makes the count a floor, and an empty clipped list unknown.
@@ -146,7 +156,7 @@ test('header never says "nothing is needed" while the harness counts work waitin
     truncated: { escalations: 1 },
   };
   assert.match(
-    renderToStaticMarkup(<Overview view={clippedEmpty} timeZone="UTC" />),
+    renderToStaticMarkup(<Overview lang="en" view={clippedEmpty} timeZone="UTC" />),
     /From you: unknown — the list is clipped\./,
   );
 });
@@ -171,7 +181,7 @@ test('header lists pause, stopped work and operator decisions with plurals', () 
     /Сейчас: очередь на паузе, в работе 2, в очереди 5, остановлено 21\. От вас: ответить на 1 вопрос и принять 2 решения\./,
   );
   assert.match(
-    renderToStaticMarkup(<Overview view={busy} timeZone="UTC" />),
+    renderToStaticMarkup(<Overview lang="en" view={busy} timeZone="UTC" />),
     /Now: the queue is paused, 2 working, 5 waiting in the queue, 21 stopped\. From you: answer 1 question and take 2 decisions\./,
   );
 });
@@ -184,7 +194,7 @@ test('footer: viewer time zone, a date for another day, unknown instead of a cra
   );
   const nextDay = Date.parse(view.generatedAt) + 24 * 3600_000;
   assert.match(
-    renderToStaticMarkup(<Overview view={view} timeZone="UTC" now={nextDay} />),
+    renderToStaticMarkup(<Overview lang="en" view={view} timeZone="UTC" now={nextDay} />),
     /Harness data as of 19\.11\.2026 12:00;/,
   );
   const html = renderToStaticMarkup(<Overview view={view} lang="ru" timeZone="Not/AZone" />);
@@ -198,26 +208,29 @@ test('an unknown question state or unknown budgeting is never read as "nothing" 
     progress: { ...view.progress, waitingOperator: 0 },
   };
   assert.match(
-    renderToStaticMarkup(<Overview view={odd} timeZone="UTC" />),
+    renderToStaticMarkup(<Overview lang="en" view={odd} timeZone="UTC" />),
     /From you: unknown — the list is clipped\./,
   );
   const noFlag = {
     ...view,
     health: { ...view.health, budgeting: undefined, budgets: [] },
   } as unknown as OperatorView;
-  const html = renderToStaticMarkup(<Overview view={noFlag} />);
+  const html = renderToStaticMarkup(<Overview lang="en" view={noFlag} />);
   assert.match(html, /budget unknown; spent/);
   assert.doesNotMatch(html, /no budget/);
   // A budget row is shown even when the producer says budgeting is off.
   const offWithRow: OperatorView = { ...view, health: { ...view.health, budgeting: 'off' } };
-  assert.match(renderToStaticMarkup(<Overview view={offWithRow} />), /\(total: within\)/);
+  assert.match(renderToStaticMarkup(<Overview lang="en" view={offWithRow} />), /\(total: within\)/);
 });
 
 test('footer defaults to the viewer time zone (TZ), not UTC', () => {
   const saved = process.env.TZ;
   try {
     process.env.TZ = 'Asia/Tokyo';
-    assert.match(renderToStaticMarkup(<Overview view={view} />), /Harness data as of 21:00;/);
+    assert.match(
+      renderToStaticMarkup(<Overview lang="en" view={view} />),
+      /Harness data as of 21:00;/,
+    );
   } finally {
     if (saved === undefined) delete process.env.TZ;
     else process.env.TZ = saved;
@@ -225,7 +238,7 @@ test('footer defaults to the viewer time zone (TZ), not UTC', () => {
 });
 
 test('accepted work: an unknown remote state is shown as unknown with the harness reason', () => {
-  const html = renderToStaticMarkup(<Overview view={view} />);
+  const html = renderToStaticMarkup(<Overview lang="en" view={view} />);
   const accepted = html.slice(html.indexOf('data-testid="accepted"'));
   assert.match(accepted, /add-greeting/);
   assert.match(
@@ -239,6 +252,7 @@ test('accepted work: an unknown remote state is shown as unknown with the harnes
   assert.match(accepted, /Accepted \(1\)/);
   const many = renderToStaticMarkup(
     <Overview
+      lang="en"
       view={{
         ...view,
         progress: { ...view.progress, done: 10 },
@@ -249,12 +263,13 @@ test('accepted work: an unknown remote state is shown as unknown with the harnes
   assert.match(many, /Accepted \(10\)/);
   assert.match(many, /9 accepted work orders have no location in this view \(view limit\)\./);
   const unlisted = renderToStaticMarkup(
-    <Overview view={{ ...view, works: view.works.map(({ target: _t, ...w }) => w) }} />,
+    <Overview lang="en" view={{ ...view, works: view.works.map(({ target: _t, ...w }) => w) }} />,
   );
   assert.match(unlisted, /Accepted \(1\)/);
   assert.match(unlisted, /1 accepted work order has no location in this view\./);
   const nothing = renderToStaticMarkup(
     <Overview
+      lang="en"
       view={{
         ...view,
         works: view.works.map(({ target: _t, ...w }) => w),
@@ -276,9 +291,12 @@ test('health warnings from the harness are listed with their code and message', 
       ],
     },
   };
-  const html = renderToStaticMarkup(<Overview view={warned} />);
+  const html = renderToStaticMarkup(<Overview lang="en" view={warned} />);
   const list = html.slice(html.indexOf('data-testid="warnings"'));
   assert.match(list, /STATE_NOT_FOUND<\/code> there is no state yet/);
   assert.match(list, /POLICY_DIGEST_MISMATCH<\/code> the policy differs/);
-  assert.doesNotMatch(renderToStaticMarkup(<Overview view={view} />), /data-testid="warnings"/);
+  assert.doesNotMatch(
+    renderToStaticMarkup(<Overview lang="en" view={view} />),
+    /data-testid="warnings"/,
+  );
 });

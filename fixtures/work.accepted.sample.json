@@ -1,0 +1,187 @@
+{
+  "viewVersion": 1,
+  "viewRevision": 0,
+  "generatedAt": "2026-11-19T12:00:00.000Z",
+  "source": {
+    "producer": "fixture",
+    "producerVersion": "0.0.0",
+    "stateVersion": 1,
+    "token": "fixture-1"
+  },
+  "work": {
+    "id": "add-greeting",
+    "graphId": "g1",
+    "title": "Add greet(name)",
+    "status": "done",
+    "stage": {
+      "name": "done",
+      "next": []
+    },
+    "attempts": {
+      "used": 1,
+      "max": 3,
+      "left": 2,
+      "failed": 0,
+      "interrupted": 0,
+      "rechecks": 0,
+      "neutral": {
+        "used": 0,
+        "max": 3
+      },
+      "line": "1 attempt, accepted on the first"
+    },
+    "blockers": [],
+    "spend": {
+      "calls": 3,
+      "usd": {
+        "value": 1.92,
+        "bound": "exact"
+      },
+      "durationMs": 840000
+    },
+    "resultSha": "3b1f9e0c2a7d",
+    "target": {
+      "repositoryId": "app",
+      "ref": "refs/heads/harness/accepted",
+      "acceptedSha": "3b1f9e0c2a7d",
+      "remote": {
+        "state": "unknown",
+        "reason": "the remote-tracking ref is not read by this harness version"
+      }
+    }
+  },
+  "attempts": [
+    {
+      "attempt": 1,
+      "status": "succeeded",
+      "runtime": "claude",
+      "model": "example-writer",
+      "startedAt": "2026-11-19T11:00:00.000Z",
+      "finishedAt": "2026-11-19T11:14:00.000Z",
+      "stages": [
+        {
+          "stage": "prepare",
+          "durationMs": 20000,
+          "outcome": "passed"
+        },
+        {
+          "stage": "writer",
+          "durationMs": 540000,
+          "outcome": "passed"
+        },
+        {
+          "stage": "gates",
+          "durationMs": 90000,
+          "outcome": "passed"
+        },
+        {
+          "stage": "review",
+          "durationMs": 150000,
+          "outcome": "passed"
+        },
+        {
+          "stage": "integration",
+          "durationMs": 40000,
+          "outcome": "passed"
+        }
+      ]
+    }
+  ],
+  "verification": [
+    {
+      "gate": "lint",
+      "kind": "gate",
+      "phase": "candidate",
+      "result": "passed",
+      "how": "executed",
+      "by": "harness",
+      "attempt": 1,
+      "at": "2026-11-19T11:10:30.000Z"
+    },
+    {
+      "gate": "unit",
+      "kind": "gate",
+      "phase": "candidate",
+      "result": "passed",
+      "how": "executed",
+      "by": "harness",
+      "attempt": 1,
+      "at": "2026-11-19T11:11:00.000Z"
+    },
+    {
+      "gate": "unit",
+      "kind": "gate",
+      "phase": "integration",
+      "result": "reused",
+      "how": "reused",
+      "attempt": 1,
+      "at": "2026-11-19T11:13:40.000Z"
+    },
+    {
+      "gate": "add-greeting",
+      "kind": "review",
+      "result": "passed",
+      "how": "read",
+      "by": "codex",
+      "attempt": 1,
+      "at": "2026-11-19T11:13:00.000Z"
+    }
+  ],
+  "reviews": [
+    {
+      "kind": "plan",
+      "subject": "g1",
+      "approved": true,
+      "rounds": {
+        "used": 2,
+        "max": 6
+      },
+      "open": {
+        "blocking": 0,
+        "notes": 0
+      },
+      "accepted": 1,
+      "reviewer": {
+        "runtime": "codex"
+      },
+      "sameVendor": false,
+      "spend": {
+        "calls": 2,
+        "usd": {
+          "value": 0.6,
+          "bound": "exact"
+        }
+      },
+      "findings": [
+        {
+          "id": "F1",
+          "severity": "high",
+          "status": "closed",
+          "rounds": 1
+        },
+        {
+          "id": "F2",
+          "severity": "note",
+          "status": "accepted-limitation",
+          "rounds": 2,
+          "disposition": {
+            "decision": "accepted-limitation",
+            "by": "lead",
+            "round": 2
+          }
+        }
+      ],
+      "line": "plan approved after 2 rounds, 1 note accepted as a limitation"
+    }
+  ],
+  "questions": [],
+  "drift": {
+    "workId": "add-greeting",
+    "repositoryId": "app",
+    "ref": "refs/heads/harness/accepted",
+    "acceptedSha": "3b1f9e0c2a7d",
+    "head": "9c04d1aa77e2",
+    "commitsSinceAccepted": 2,
+    "filesSinceAccepted": 3
+  }
+}

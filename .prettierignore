@@ -3,3 +3,5 @@ node_modules
 .private
 package-lock.json
 tests/contract/harness
+test-results
+playwright-report

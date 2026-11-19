@@ -4,21 +4,62 @@
 body {
   margin: 0;
   padding: 16px;
-  background: #ffffff;
-}
-@media (prefers-color-scheme: dark) {
-  body {
-    background: #14171b;
-  }
+  background: var(--hui-bg);
+  color: var(--hui-text);
+  font-family: var(--hui-font);
 }
 #root {
   max-width: 1100px;
   margin: 0 auto;
 }
+main:focus {
+  outline: none;
+}
 .app-note {
-  font-family: system-ui, sans-serif;
-  color: #5b6470;
+  color: var(--hui-muted);
 }
 .app-bad {
-  color: #b3261e;
+  color: var(--hui-bad);
+}
+.app-skip {
+  position: absolute;
+  left: -9999px;
+}
+.app-skip:focus {
+  left: 16px;
+  top: 8px;
+  background: var(--hui-bg);
+  padding: 4px 8px;
+  z-index: 1;
+}
+.app-nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--hui-border);
+  padding-bottom: 8px;
+}
+.app-nav ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+}
+.app-nav a {
+  color: var(--hui-accent);
+}
+.app-nav a[aria-current='page'] {
+  color: var(--hui-text);
+  font-weight: 700;
+  text-decoration: none;
+}
+.app-nav a:focus-visible,
+.app-skip:focus-visible {
+  outline: 2px solid var(--hui-focus);
+  outline-offset: 2px;
 }

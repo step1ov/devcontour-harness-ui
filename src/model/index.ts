@@ -2,7 +2,13 @@
 // adapters without React. Hosts import this to build or check a view.
 
 export * from './view.ts';
-export { checkView, KNOWN_VIEW_REVISION, type ViewCheck } from './compat.ts';
+export {
+  checkView,
+  checkWorkDetail,
+  KNOWN_VIEW_REVISION,
+  type ViewCheck,
+  type WorkDetailCheck,
+} from './compat.ts';
 export {
   httpViewSource,
   staticViewSource,
@@ -12,9 +18,12 @@ export {
 export {
   KNOWN_QUESTION_STATES,
   SLOT_STAGES,
+  formatDuration,
   formatElapsed,
   leadMayAnswer,
   formatUsd,
+  formatWindow,
+  usd,
   questionStatus,
   stageLabel,
   type QuestionStatus,
@@ -30,3 +39,4 @@ export {
   type HeaderCounts,
   type Lang,
 } from './i18n.ts';
+export { dict, dictionaries, label, type Dict, type GlossaryId } from './dict.ts';

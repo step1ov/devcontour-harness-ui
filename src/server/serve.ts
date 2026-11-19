@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto';
 import { readFile, realpath, stat } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { extname, join, resolve, sep } from 'node:path';
-import { checkView } from '../model/compat.ts';
+import { checkView, checkWorkDetail } from '../model/compat.ts';
 import {
   harnessView,
   stopHarnessRuns,
@@ -22,6 +22,18 @@ export const PORT_PROBE_SPAN = 20;
 export interface ServeOptions {
   /** File with an operator view JSON; re-read on every request. */
   viewFile?: string;
+  /**
+   * Work detail documents of a file view, by work id (the demo); re-read on
+   * every request. A file view without one has no detail route (503).
+   */
+  workFiles?: Record<string, string>;
+  /**
+   * File views written in another language (the demo): a request with
+   * `?lang=<lang>` gets these files instead of `viewFile` / `workFiles`.
+   */
+  localized?: Partial<
+    Record<'ru' | 'en', { viewFile: string; workFiles?: Record<string, string> }>
+  >;
   /**
    * Live route instead of a file: `harness view` runs on every request
    * (concurrent requests for one language share a run).
@@ -118,7 +130,19 @@ export function unwrapView(parsed: unknown): unknown {
   return parsed;
 }
 
-async function serveViewFile(req: IncomingMessage, res: ServerResponse, file: string) {
+/** Work ids as the harness graph schema allows them (`[A-Za-z0-9_-]{1,80}`). */
+export const WORK_ID = /^[A-Za-z0-9_-]{1,80}$/;
+
+type Gate = (v: unknown) => { ok: true } | { ok: false; code: string; message: string };
+const viewGate: Gate = checkView;
+const detailGate: Gate = checkWorkDetail;
+
+async function serveViewFile(
+  req: IncomingMessage,
+  res: ServerResponse,
+  file: string,
+  gate: Gate = viewGate,
+) {
   let bytes: Buffer;
   try {
     bytes = await readFile(file);
@@ -134,11 +158,11 @@ async function serveViewFile(req: IncomingMessage, res: ServerResponse, file: st
   if (typeof parsed === 'object' && parsed !== null && (parsed as { ok?: unknown }).ok === false) {
     return jsonError(res, 502, 'NOT_A_VIEW', 'View file holds a harness error envelope.');
   }
-  return sendView(req, res, unwrapView(parsed));
+  return sendView(req, res, unwrapView(parsed), gate);
 }
 
-function sendView(req: IncomingMessage, res: ServerResponse, view: unknown) {
-  const check = checkView(view);
+function sendView(req: IncomingMessage, res: ServerResponse, view: unknown, gate: Gate = viewGate) {
+  const check = gate(view);
   if (!check.ok) return jsonError(res, 409, check.code, check.message);
   // The ETag is derived from the content, never from a store counter.
   const body = Buffer.from(JSON.stringify(view));
@@ -209,14 +233,22 @@ export async function startServer(options: ServeOptions): Promise<RunningServer>
   const live = options.harness;
   // One `harness view` run per language at a time; later requests share it.
   const inFlight = new Map<string, Promise<HarnessViewResult>>();
-  const liveView = (lang: 'ru' | 'en') => {
-    const key = live!.lang ? lang : '';
+  const liveView = (lang: 'ru' | 'en', workId?: string) => {
+    const key = (live!.lang ? lang : '') + (workId !== undefined ? '\0' + workId : '');
     let p = inFlight.get(key);
     if (!p) {
-      p = harnessView(live!, live!.lang ? lang : undefined).finally(() => inFlight.delete(key));
+      p = harnessView(live!, live!.lang ? lang : undefined, workId).finally(() =>
+        inFlight.delete(key),
+      );
       inFlight.set(key, p);
     }
     return p;
+  };
+  /** The file view for a request: the localized files of `?lang=`, else the defaults. */
+  const fileSource = (params: URLSearchParams) => {
+    const asked = params.get('lang');
+    const l = asked === 'ru' || asked === 'en' ? options.localized?.[asked] : undefined;
+    return l ?? { viewFile: options.viewFile, workFiles: options.workFiles };
   };
   let port = 0;
   const server = createServer((req, res) => {
@@ -245,14 +277,43 @@ export async function startServer(options: ServeOptions): Promise<RunningServer>
       return send(res, 400, 'Bad request', 'text/plain; charset=utf-8');
     }
     if (pathname.includes('\0')) return send(res, 400, 'Bad request', 'text/plain; charset=utf-8');
+    const params = new URL(req.url ?? '/', 'http://local').searchParams;
+    // Work detail: `/api/work/<id>`, or `/api/view?work=<id>` as in the design contract.
+    const workId = pathname.startsWith('/api/work/')
+      ? pathname.slice('/api/work/'.length)
+      : pathname === '/api/view' && params.has('work')
+        ? (params.get('work') ?? '')
+        : undefined;
+    if (workId !== undefined) {
+      if (!WORK_ID.test(workId))
+        return jsonError(res, 404, 'VIEW_UNAVAILABLE', 'There is no such work order id.');
+      if (live) {
+        const asked = params.get('lang');
+        const lang = asked === 'ru' || asked === 'en' ? asked : live.defaultLang;
+        const r = await liveView(lang, workId);
+        return r.ok
+          ? sendView(req, res, r.view, detailGate)
+          : jsonError(res, 503, r.code, r.message);
+      }
+      const files = fileSource(params).workFiles;
+      const file = files && Object.hasOwn(files, workId) ? files[workId] : undefined;
+      if (!file)
+        return jsonError(
+          res,
+          503,
+          'VIEW_UNAVAILABLE',
+          `No work detail for ${workId} in this file view; the live route (--state) computes it with \`harness view --work\`.`,
+        );
+      return serveViewFile(req, res, file, detailGate);
+    }
     if (pathname === '/api/view') {
       if (live) {
-        const asked = new URL(req.url ?? '/', 'http://local').searchParams.get('lang');
+        const asked = params.get('lang');
         const lang = asked === 'ru' || asked === 'en' ? asked : live.defaultLang;
         const r = await liveView(lang);
         return r.ok ? sendView(req, res, r.view) : jsonError(res, 503, r.code, r.message);
       }
-      return serveViewFile(req, res, options.viewFile!);
+      return serveViewFile(req, res, fileSource(params).viewFile!);
     }
     if (pathname === '/api/health') {
       return send(

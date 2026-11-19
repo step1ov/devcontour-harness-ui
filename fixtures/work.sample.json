@@ -59,7 +59,7 @@
   "attempts": [
     {
       "attempt": 2,
-      "status": "running",
+      "status": "active",
       "runtime": "claude",
       "model": "example-writer",
       "startedAt": "2026-11-19T11:41:00.000Z",

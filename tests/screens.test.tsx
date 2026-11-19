@@ -1,0 +1,540 @@
+// S2 screens rendered with renderToStaticMarkup for each fixture and both
+// languages: the key text (counts, bounds, actors, states) must be on the
+// screen, and the honest-wording rules of design §5.9 hold line by line.
+
+import { strict as assert } from 'node:assert';
+import { readFileSync } from 'node:fs';
+import { test } from 'node:test';
+import type { ReactElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import {
+  Activity,
+  Decisions,
+  Health,
+  History,
+  Overview,
+  Reviews,
+  Settings,
+  WorkDetail,
+  checkView,
+  checkWorkDetail,
+  cumulativeSpend,
+  effectiveCodeReview,
+  perHour,
+  type Lang,
+  type OperatorView,
+  type ReviewRuleView,
+  type WorkDetailView,
+} from '../src/index.ts';
+
+const read = (rel: string) => JSON.parse(readFileSync(new URL(rel, import.meta.url), 'utf8'));
+const vc = checkView(read('../fixtures/view.sample.json'));
+if (!vc.ok) throw new Error(vc.message);
+const view: OperatorView = vc.view;
+const detailOf = (rel: string): WorkDetailView => {
+  const c = checkWorkDetail(read(rel));
+  if (!c.ok) throw new Error(c.message);
+  return c.detail;
+};
+const running = detailOf('../fixtures/work.sample.json');
+const accepted = detailOf('../fixtures/work.accepted.sample.json');
+const workHref = (id: string) => '#/work/' + id;
+const html = (el: ReactElement) => renderToStaticMarkup(el);
+const TZ = 'UTC';
+
+/** Every screen of the panel for a view, a detail and a language. */
+function allScreens(v: OperatorView, details: WorkDetailView[], lang: Lang): string[] {
+  const common = { view: v, lang, timeZone: TZ, workHref };
+  return [
+    html(<Overview {...common} />),
+    html(<Reviews {...common} />),
+    html(<Decisions {...common} />),
+    html(<Activity {...common} filterHref={() => '#/activity'} />),
+    html(<Settings view={v} lang={lang} />),
+    html(<History view={v} lang={lang} timeZone={TZ} />),
+    html(<Health {...common} uiVersion="0.1.0-alpha.1" />),
+    ...details.map((d) =>
+      html(<WorkDetail detail={d} lang={lang} timeZone={TZ} workHref={workHref} />),
+    ),
+  ];
+}
+
+/** Inner text of every element carrying `data-status="<status>"` (nested markup flattened). */
+function statusElements(markup: string, status: string): string[] {
+  const out: string[] = [];
+  const open = new RegExp(`<(\\w+)[^>]*data-status="${status}"[^>]*>`, 'g');
+  for (const m of markup.matchAll(open)) {
+    const tag = m[1]!;
+    // Find the matching close tag, counting nested tags of the same name.
+    let depth = 1;
+    const re = new RegExp(`<${tag}\\b[^>]*>|</${tag}>`, 'g');
+    re.lastIndex = m.index! + m[0].length;
+    let end = markup.length;
+    for (let x; (x = re.exec(markup));) {
+      depth += x[0].startsWith('</') ? -1 : 1;
+      if (depth === 0) {
+        end = x.index;
+        break;
+      }
+    }
+    out.push(markup.slice(m.index!, end));
+  }
+  return out;
+}
+const text = (s: string) => s.replace(/<[^>]+>/g, '');
+
+test('work detail (RU): now, stages, why a retry, what was checked and how', () => {
+  const ru = html(<WorkDetail detail={running} lang="ru" timeZone={TZ} workHref={workHref} />);
+  assert.match(
+    ru,
+    /Проверки \(<code>candidate-test:unit<\/code>\) с 11:52, 7 мин 50 с; обычно 5 мин–12 мин\./,
+  );
+  assert.match(ru, /Дальше: ревью, интеграция\./);
+  assert.match(ru, /Подготовка<\/span> <span class="hui-muted">— пройден, 20 с/);
+  assert.match(ru, /Проверки<\/span> <span class="hui-muted">— идёт сейчас/);
+  assert.match(ru, /Ревью<\/span> <span class="hui-muted">— впереди/);
+  assert.match(ru, /Попытка 2 из 3 \(осталось 1\)\./);
+  assert.match(ru, /Попытка 1 остановлена: a check failed: lint found an unused import\./);
+  assert.match(ru, /Группа сбоя: ошибка в коде\./);
+  assert.match(ru, /Перепроверок: 1\. Нейтральных сбоев: 0 из 3\./);
+  const checks = text(ru.slice(ru.indexOf('data-testid="work-verification"')));
+  assert.match(
+    checks,
+    /lint \(проверка, кандидат\) — пройдено · запущено в попытке 2 · кем: harness/,
+  );
+  assert.match(
+    checks,
+    /typecheck \(проверка, интеграция\) — засчитано по прежнему результату · взято прежнее доказательство \(для попытки 2\) · кем — неизвестно/,
+  );
+  assert.match(checks, /unit \(проверка, кандидат\) — ещё не запускалось · не проверялось/);
+  assert.match(checks, /g1 \(ревью\) — пройдено · прочитал diff, ничего не запускал · кем: codex/);
+  assert.match(checks, /e2e \(проверка, кандидат\) — не применяется · не проверялось/);
+  assert.match(ru, /≥ \$3\.40 · 5 вызовов · 31 мин 40 с/);
+  assert.match(ru, /Ещё не принято\./);
+  assert.match(ru, /Работа ещё не принята — дрейфа быть не может\./);
+  assert.match(ru, /q-12.*Ответ передан исполнителю.*ответил: ведущий/s);
+});
+
+test('work detail (EN) and the accepted work: where it is, drift and the checks link', () => {
+  const en = html(<WorkDetail detail={running} lang="en" timeZone={TZ} />);
+  assert.match(en, /Why a retry/);
+  assert.match(text(en), /lint \(check, candidate\) — passed · ran in attempt 2 · by: harness/);
+  assert.match(text(en), /read the diff, ran nothing · by: codex/);
+  const ok = html(<WorkDetail detail={accepted} lang="ru" timeZone={TZ} workHref={workHref} />);
+  assert.match(
+    ok,
+    /Принято локально; в удалённом репозитории — неизвестно: the remote-tracking ref is not read by this harness version\./,
+  );
+  assert.match(ok, /href="#\/work\/add-greeting#verification"/);
+  assert.match(
+    ok,
+    /refs\/heads\/harness\/accepted: принято 3b1f9e0c2a7d → сейчас 9c04d1aa77e2; коммитов после: 2; файлов: 3/,
+  );
+  assert.doesNotMatch(ok, /data-testid="why-retry"/, 'no failures: no retry section');
+  const okEn = html(<WorkDetail detail={accepted} lang="en" timeZone={TZ} />);
+  assert.match(okEn, /Accepted locally; remote state unknown: /);
+});
+
+test('work detail: no verification is "no data", an unknown method is not "checked"', () => {
+  const { verification: _v, ...rest } = running;
+  const none = html(<WorkDetail detail={rest as WorkDetailView} lang="ru" />);
+  assert.match(none, /Нет сведений о проверках\./);
+  const odd: WorkDetailView = {
+    ...running,
+    verification: [{ gate: 'lint', kind: 'gate', result: 'passed', how: 'telepathy' }],
+  };
+  const ru = html(<WorkDetail detail={odd} lang="ru" />);
+  assert.match(ru, /способ неизвестен \(telepathy\) · <\/span>|способ неизвестен \(telepathy\)/);
+  assert.match(ru, /кем — неизвестно/);
+  const lost: WorkDetailView = {
+    ...running,
+    work: {
+      ...running.work,
+      attempts: { ...running.work.attempts, lastFailure: undefined },
+    } as never,
+  };
+  assert.match(
+    html(<WorkDetail detail={lost} lang="ru" />),
+    /Причина прошлой остановки неизвестна\./,
+  );
+  const noTarget: WorkDetailView = {
+    ...accepted,
+    work: { ...accepted.work, target: undefined } as never,
+    drift: undefined,
+  } as never;
+  const nt = html(<WorkDetail detail={noTarget} lang="ru" />);
+  assert.match(
+    nt,
+    /Принято локально \(результат 3b1f9e0c2a7d\); в удалённом репозитории — неизвестно: harness не сообщил цель\./,
+  );
+  assert.match(nt, /Нет сведений о дрейфе: harness не сообщил цель\./);
+});
+
+test('reviews: rounds against the cap, findings with who decided, escalation and vendor flag', () => {
+  const ru = html(<Reviews view={view} lang="ru" />);
+  assert.match(ru, /раунды 2 из 6/);
+  assert.match(ru, /открыто: блокирующих 0, заметок 0/);
+  assert.match(ru, /F2.*принято как ограничение · решил: ведущий, раунд 2/s);
+  assert.match(ru, /F1.*закрыто/s);
+  assert.match(ru, /Эскалаций и остановок, ждущих решения, нет\./);
+  const escalated: OperatorView = {
+    ...view,
+    reviews: [
+      {
+        ...view.reviews[0]!,
+        approved: false,
+        sameVendor: true,
+        rounds: { used: 4, max: null },
+        escalation: { requestId: 'q-21', findings: ['F9'], answered: false },
+      },
+    ],
+    escalations: [
+      {
+        subject: 'g1',
+        code: 'REVIEW_ESCALATED',
+        actor: 'operator',
+        action: 'decide F9',
+        since: view.generatedAt,
+      },
+    ],
+  };
+  const e = html(<Reviews view={escalated} lang="ru" timeZone={TZ} />);
+  assert.match(e, /раундов 4, без предела/);
+  assert.match(e, /Эскалация q-21: F9 — решает оператор \(ответа ещё нет\)/);
+  assert.match(e, /тот же вендор, что у исполнителя/);
+  assert.match(e, /действует: вы — decide F9/);
+  const en = html(<Reviews view={escalated} lang="en" />);
+  assert.match(en, /Escalation q-21: F9 — the operator decides \(not answered yet\)/);
+  assert.match(en, /4 rounds, no limit/);
+});
+
+test('settings: plain thresholds, the technical-questions line, defaults and the effective reviewer', () => {
+  const ru = html(<Settings view={view} lang="ru" />);
+  assert.match(ru, /Вопросы важности 7 и выше ждут ответа\./);
+  assert.match(ru, /Ведущий может ответить на вопросы важности до 4\./);
+  assert.match(
+    ru,
+    /Технические вопросы решает ведущий: да; вопросы, меняющие результат для пользователя, — всегда вам\./,
+  );
+  assert.match(ru, /Критических путей: 2\./);
+  assert.match(ru, /роль backend: codex · example-reviewer \(откуда: общее правило\)/);
+  assert.match(ru, /общий: \$40\.00/);
+  assert.match(ru, /Если цена неизвестна<\/dt><dd>остановиться/);
+  // "default" only for the paths in settings.defaulted.
+  const marks = [...ru.matchAll(/data-testid="default-([^"]+)"/g)].map((m) => m[1]);
+  assert.deepEqual(marks.sort(), [
+    'thresholds.repairBudget',
+    'timeouts.leaseMs',
+    'timeouts.runTimeoutMs',
+    'timeouts.stall',
+  ]);
+  const off: OperatorView = {
+    ...view,
+    settings: {
+      ...view.settings,
+      thresholds: { ...view.settings.thresholds, leadAnswersTechnical: undefined } as never,
+      budgetOnUnknown: undefined,
+    } as never,
+  };
+  const o = html(<Settings view={off} lang="ru" />);
+  assert.match(o, /Технические вопросы решает ведущий: нет;/);
+  assert.match(o, /Если цена неизвестна<\/dt><dd>нет сведений/);
+  assert.match(
+    html(<Settings view={view} lang="en" />),
+    /The lead agent decides technical questions: yes;/,
+  );
+});
+
+test('effective code reviewer: role, then repository, then global', () => {
+  const g = {
+    kind: 'code',
+    scope: 'global',
+    reviewer: { runtime: 'codex' },
+    alternates: [],
+    vendor: 'different-vendor',
+  } as const;
+  const repo = {
+    ...g,
+    scope: 'repository',
+    repositoryId: 'web',
+    reviewer: { runtime: 'r-repo' },
+  } as const;
+  const role = { ...g, scope: 'role', role: 'backend', reviewer: { runtime: 'r-role' } } as const;
+  const rules = [g, repo, role] as unknown as ReviewRuleView[];
+  assert.equal(
+    effectiveCodeReview(rules, { role: 'backend', repositoryId: 'web' })?.reviewer.runtime,
+    'r-role',
+  );
+  assert.equal(
+    effectiveCodeReview(rules, { role: 'frontend', repositoryId: 'web' })?.reviewer.runtime,
+    'r-repo',
+  );
+  assert.equal(effectiveCodeReview(rules, { role: 'frontend' })?.reviewer.runtime, 'codex');
+  assert.equal(effectiveCodeReview([], { role: 'frontend' }), undefined);
+});
+
+test('history: summaries, per-hour regrouping, spend starts at the opening balance', () => {
+  const ru = html(<History view={view} lang="ru" timeZone={TZ} />);
+  assert.match(ru, /Окно: с 18\.11\.2026 12:00 по 12:00, интервал 1 ч\./);
+  assert.match(ru, /Наибольшая нагрузка за окно: 2 одновременно при 2 местах\./);
+  assert.match(ru, /За окно начато попыток: 11, неудачных: 1; больше всего начато за час: 2\./);
+  assert.match(ru, /За окно пройдено: 27, не пройдено: 1; засчитано по прежнему доказательству: 1/);
+  assert.match(
+    ru,
+    /К концу окна потрачено ≥ \$7\.50 из бюджета \$40\.00\. До начала окна: \$1\.20\./,
+  );
+  assert.match(ru, /накоплено — нижняя граница/);
+  assert.match(ru, /class="hui-line hui-s1 hui-dashed"/);
+  // Each chart has a data table for screen readers.
+  assert.equal(ru.match(/<div class="hui-sr"><table>/g)?.length, 4);
+  const c = cumulativeSpend(view.history);
+  assert.equal(c.start, 1.2);
+  assert.equal(c.values[0], 1.2);
+  assert.ok(Math.abs(c.values.at(-1)! - 7.5) < 1e-9);
+  // The polyline starts at the height of the opening balance, not at zero.
+  const first = /points="0,([\d.]+)/.exec(ru)!;
+  assert.notEqual(Number(first[1]), 160);
+  assert.deepEqual(perHour({ bucketMs: 900_000 }, [1, 1, 0, 2, 3, 0, 0, 0]).values, [4, 3]);
+  const unknownOpening: OperatorView = {
+    ...view,
+    history: { ...view.history, spendOpeningUsd: { value: 0, bound: 'unknown' } },
+  };
+  assert.match(
+    html(<History view={unknownOpening} lang="ru" />),
+    /Расходы до начала окна неизвестны: кривая показывает только расходы внутри окна\./,
+  );
+  const misaligned: OperatorView = { ...view, history: { ...view.history, load: [1] } };
+  assert.match(html(<History view={misaligned} lang="en" />), /History series differ in length/);
+  assert.match(
+    html(<History view={view} lang="en" />),
+    /Highest load in the window: 2 at once with 2 slots\./,
+  );
+});
+
+test('health: plain words with codes; not-checked drift is never zero drift', () => {
+  const ru = html(<Health view={view} lang="ru" timeZone={TZ} uiVersion="0.1.0-alpha.1" />);
+  assert.match(ru, /Контроллер работает, аренда до 12:00\./);
+  assert.match(ru, /Зависших попыток нет\. Тихих попыток: 0\./);
+  assert.match(ru, /Сбоев окружения за 24 ч: 0\./);
+  assert.match(ru, /общий: потрачено ≥ \$6\.02 из \$40\.00, в пределах\./);
+  assert.match(ru, /работа locale-format: потрачено ≥ \$3\.40 из \$8\.00, в пределах\./);
+  assert.match(ru, /Изменено после приёмки: 1; не проверено: 0; проверено принятых: 1\./);
+  assert.match(ru, /панель: 0\.1\.0-alpha\.1/);
+  const sick: OperatorView = {
+    ...view,
+    works: view.works.map((w) => (w.id === 'locale-format' ? { ...w, liveness: 'stalled' } : w)),
+    health: {
+      ...view.health,
+      controller: { present: false },
+      stalledAttempts: 2,
+      drift: { checked: 3, drifted: 0, unavailable: 2 },
+      warnings: [{ code: 'DRIFT_UNAVAILABLE', message: 'target ref not read' }],
+    },
+  };
+  const s = html(<Health view={sick} lang="ru" workHref={workHref} />);
+  assert.match(s, /Контроллер не запущен — работа не продвигается\./);
+  assert.match(s, /Зависли 2 попытки\./);
+  assert.match(s, /не проверено: 2/);
+  assert.match(s, /target ref not read <code class="hui-muted">DRIFT_UNAVAILABLE<\/code>/);
+  assert.match(s, /href="#\/work\/locale-format"/);
+  assert.match(html(<Health view={view} lang="en" />), /panel: no data/);
+});
+
+test('decisions and activity: shown when the view carries them, "no data in this harness" otherwise', () => {
+  const ru = html(<Decisions view={view} lang="ru" timeZone={TZ} />);
+  assert.match(ru, /Временные \(1\)/);
+  assert.match(
+    ru,
+    /11:10.*ведущий.*принял ограничение по.*F2, g1.*вернуться: перед|вернуться: before the release/s,
+  );
+  assert.match(ru, /ответил на технический вопрос по <code>q-12<\/code>/);
+  const a = html(
+    <Activity view={view} lang="ru" timeZone={TZ} filterHref={(f) => JSON.stringify(f)} />,
+  );
+  assert.match(a, /11:52.*harness.*harness started check candidate-test:unit/s);
+  assert.match(a, /исполнитель<\/strong> the writer asked a question/);
+  const f = html(
+    <Activity view={view} lang="ru" filter={{ actor: 'lead' }} filterHref={() => '#'} />,
+  );
+  assert.match(f, /показано 1 из 3/);
+  assert.doesNotMatch(f, /the writer asked/);
+  const { decisions: _d, activity: _a, ...old } = view;
+  for (const lang of ['ru', 'en'] as const) {
+    const d = html(<Decisions view={old as OperatorView} lang={lang} />);
+    const act = html(<Activity view={old as OperatorView} lang={lang} />);
+    const words =
+      lang === 'ru' ? /нет данных в этой версии harness/ : /no data in this harness version/;
+    assert.match(d, words);
+    assert.match(act, words);
+    assert.doesNotMatch(d, /\(0\)/);
+  }
+  const noReason: OperatorView = {
+    ...view,
+    decisions: [{ ...view.decisions![1]!, revisit: undefined, reason: undefined }],
+  };
+  const nr = html(<Decisions view={noReason} lang="ru" />);
+  assert.match(nr, /условие пересмотра неизвестно/);
+  assert.match(nr, /причина не записана/);
+});
+
+test('overview: plan strip, waiting with who acts, plain question lines (RU)', () => {
+  const ru = html(<Overview view={view} lang="ru" timeZone={TZ} workHref={workHref} />);
+  assert.match(
+    ru,
+    /export-csv<\/code><\/a> <span class="hui-badge">Ждёт ответа<\/span><span class="hui-muted"> после add-greeting/,
+  );
+  assert.match(ru, /Что изменится: Changes how the exported file opens/);
+  assert.match(ru, /Ответить можете только вы\./);
+  assert.match(
+    ru,
+    /just waits for export-csv to be accepted; nothing is needed<\/span> — <span class="hui-who">никто — просто ждёт очереди, ничего не нужно/,
+  );
+  assert.match(ru, /обычно 5 мин–12 мин/);
+});
+
+const variants = (): { name: string; v: OperatorView; d: WorkDetailView[] }[] => {
+  const blockers = (b: unknown) =>
+    ({ ...view, works: view.works.map((w) => ({ ...w, blockers: b })) }) as OperatorView;
+  return [
+    { name: 'fixture', v: view, d: [running, accepted] },
+    { name: 'blocker without plain', v: blockers([{ code: 'X_CODE', actor: 'lead' }]), d: [] },
+    {
+      name: 'blocker with an unknown actor',
+      v: blockers([{ code: 'Y', plain: 'p', actor: 'robot' }]),
+      d: [],
+    },
+    {
+      name: 'stopped without blockers',
+      v: {
+        ...view,
+        works: view.works.map((w) => ({
+          ...w,
+          blockers: [],
+          stage: { ...w.stage, name: 'stopped', needs: undefined },
+        })),
+      } as OperatorView,
+      d: [],
+    },
+    {
+      name: 'remote states',
+      v: {
+        ...view,
+        works: view.works.map((w, i) =>
+          w.target
+            ? {
+                ...w,
+                target: {
+                  ...w.target,
+                  remote: { state: ['pushed', 'not-pushed', 'mystery'][i % 3]! },
+                },
+              }
+            : w,
+        ),
+      } as OperatorView,
+      d: [
+        {
+          ...accepted,
+          work: {
+            ...accepted.work,
+            target: { ...accepted.work.target!, remote: { state: 'pushed' } },
+          },
+        },
+        {
+          ...accepted,
+          work: {
+            ...accepted.work,
+            target: { ...accepted.work.target!, remote: { state: 'what' } },
+          },
+        },
+      ],
+    },
+    {
+      name: 'verification without by and with unknown how',
+      v: view,
+      d: [
+        {
+          ...running,
+          verification: [
+            { gate: 'a', kind: 'gate', result: 'passed', how: 'executed', attempt: 2 },
+            { gate: 'b', kind: 'gate', result: 'failed', how: 'mystery' },
+            { gate: 'c', kind: 'review', result: 'passed', how: 'read' },
+          ],
+        },
+      ],
+    },
+  ];
+};
+
+test('words with grounds (§5.9): every checked, accepted and blocked element says how, where and who', () => {
+  const how = {
+    ru: /запущено|взято прежнее доказательство|прочитал diff, ничего не запускал|способ неизвестен/,
+    en: /ran |earlier evidence reused|read the diff, ran nothing|method unknown/,
+  };
+  const by = { ru: /кем: \S|кем — неизвестно/, en: /by: \S|by whom — unknown/ };
+  const where = {
+    ru: /в удалённом репозитории — (да|ещё нет|неизвестно)|где — неизвестно/,
+    en: /on the remote|not on the remote yet|remote state unknown|where is unknown/,
+  };
+  const who = {
+    ru: /действует: \S|никто — просто ждёт очереди|кто действует — неизвестно/,
+    en: /acts: \S|nobody — it just waits its turn|who acts is unknown/,
+  };
+  let counts = { checked: 0, accepted: 0, blocked: 0 };
+  for (const { name, v, d } of variants())
+    for (const lang of ['ru', 'en'] as const)
+      for (const page of allScreens(v, d, lang)) {
+        for (const el of statusElements(page, 'checked')) {
+          counts.checked++;
+          assert.match(text(el), how[lang], `${name}/${lang} checked without how: ${text(el)}`);
+          assert.match(text(el), by[lang], `${name}/${lang} checked without by: ${text(el)}`);
+        }
+        for (const el of statusElements(page, 'accepted')) {
+          counts.accepted++;
+          assert.match(
+            text(el),
+            where[lang],
+            `${name}/${lang} accepted without where: ${text(el)}`,
+          );
+          assert.match(
+            el,
+            /href="[^"]*#verification"/,
+            `${name}/${lang} accepted without checks link`,
+          );
+        }
+        for (const el of statusElements(page, 'blocked')) {
+          counts.blocked++;
+          assert.match(text(el), who[lang], `${name}/${lang} blocked without who: ${text(el)}`);
+          assert.ok(text(el).replace(who[lang], '').trim().length > 0, 'blocked without reason');
+        }
+      }
+  assert.ok(
+    counts.checked > 10 && counts.accepted > 5 && counts.blocked > 10,
+    JSON.stringify(counts),
+  );
+});
+
+test('no bare "checked / done / blocked" word, no form, no unknown shown as $0.00', () => {
+  const bare =
+    /^\s*(проверено|готово|заблокировано|принято|checked|done|blocked|accepted)\s*[.!]?\s*$/i;
+  for (const { name, v, d } of variants())
+    for (const lang of ['ru', 'en'] as const)
+      for (const page of allScreens(v, d, lang)) {
+        // Glossary disclosures name the term itself; they are definitions, not statuses.
+        const shown = page.replace(/<details class="hui-term">[\s\S]*?<\/details>/g, '');
+        for (const piece of shown.split(/<[^>]+>/))
+          assert.doesNotMatch(piece, bare, `${name}/${lang}: «${piece}»`);
+        assert.doesNotMatch(page, /<form|<input|<textarea|<select|method="post"/i);
+      }
+  const unknownSpend: OperatorView = {
+    ...view,
+    health: {
+      ...view.health,
+      spentTotalUsd: { value: 0, bound: 'unknown' },
+      budgets: [],
+      budgeting: 'off',
+    },
+  };
+  const h = html(<Health view={unknownSpend} lang="ru" />);
+  assert.match(h, /Бюджетов нет; всего потрачено неизвестно\./);
+  assert.doesNotMatch(h, /\$0\.00/);
+});

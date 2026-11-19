@@ -9,7 +9,7 @@
 // It is not a full schema validator: the harness owns the schema, and
 // tests/contract.test.ts checks that every schema-valid fixture passes here.
 
-import { VIEW_VERSION, type OperatorView } from './view.ts';
+import { VIEW_VERSION, type OperatorView, type WorkDetailView } from './view.ts';
 
 export type ViewCheck =
   | { ok: true; view: OperatorView; newerRevision: boolean }
@@ -23,17 +23,7 @@ export type ViewCheck =
 export const KNOWN_VIEW_REVISION = 0;
 
 type Obj = Record<string, unknown>;
-const isStr = (v: unknown) => typeof v === 'string';
-const optStr = (v: unknown) => v === undefined || typeof v === 'string';
-const isNum = (v: unknown) => typeof v === 'number' && Number.isFinite(v);
-const optNum = (v: unknown) => v === undefined || isNum(v);
 const isObject = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
-const isCount = (v: unknown) => Number.isSafeInteger(v) && (v as number) >= 0;
-const isBounded = (v: unknown) =>
-  isObject(v) &&
-  typeof v.value === 'number' &&
-  Number.isFinite(v.value) &&
-  typeof v.bound === 'string';
 
 const INSTANT =
   /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(\.\d+)?)?(Z|[+-](\d{2}):(\d{2}))$/;
@@ -78,125 +68,308 @@ export function instantMs(v: string): number {
   return Date.parse(`${y}-${mo}-${d}T${h}:${mi}:${s}${frac}${m[8]}`);
 }
 
-/** Path -> predicate for every field the components dereference. */
-function problems(v: Obj): string[] {
-  const out: string[] = [];
-  const need = (ok: boolean, path: string) => {
-    if (!ok) out.push(path);
+// A small declarative shape checker: each check pushes the path of every
+// field that does not have the type the harness schema gives it. Unknown
+// fields are ignored; enumerations are read as strings (unknown values get
+// the conservative reading at render time).
+type Check = (v: unknown, path: string, out: string[]) => void;
+const leaf =
+  (ok: (v: unknown) => boolean): Check =>
+  (v, path, out) => {
+    if (!ok(v)) out.push(path);
   };
-  const obj = (o: unknown, path: string): Obj | undefined => {
-    need(isObject(o), path);
-    return isObject(o) ? o : undefined;
+const S = leaf((v) => typeof v === 'string');
+const N = leaf((v) => typeof v === 'number' && Number.isFinite(v));
+const C = leaf((v) => Number.isSafeInteger(v) && (v as number) >= 0);
+const B = leaf((v) => typeof v === 'boolean');
+const I = leaf(isInstant);
+const opt =
+  (c: Check): Check =>
+  (v, path, out) => {
+    if (v !== undefined) c(v, path, out);
   };
-  need(isCount(v.viewRevision), 'viewRevision');
-  need(isInstant(v.generatedAt), 'generatedAt');
-  const source = obj(v.source, 'source');
-  if (source) need(typeof source.token === 'string', 'source.token');
-  const settings = obj(v.settings, 'settings');
-  if (settings) need(isCount(settings.concurrency), 'settings.concurrency');
-  // `truncated` counts decide whether the header may say "nothing is needed".
-  if (v.truncated !== undefined) {
-    const t = obj(v.truncated, 'truncated');
-    if (t) for (const [k, n] of Object.entries(t)) need(isCount(n), `truncated.${k}`);
-  }
-  const progress = obj(v.progress, 'progress');
-  if (progress) {
-    for (const k of ['total', 'done', 'running', 'waitingOperator'])
-      need(isCount(progress[k]), `progress.${k}`);
-    const byStage = obj(progress.byStage, 'progress.byStage');
-    if (byStage)
-      for (const [k, n] of Object.entries(byStage)) need(isCount(n), `progress.byStage.${k}`);
-    const queue = obj(progress.queue, 'progress.queue');
-    if (queue) {
-      need(typeof queue.paused === 'boolean', 'progress.queue.paused');
-      need(optStr(queue.reason), 'progress.queue.reason');
-    }
-  }
-  obj(v.history, 'history');
-  const health = obj(v.health, 'health');
-  if (health) {
-    const controller = obj(health.controller, 'health.controller');
-    if (controller) need(typeof controller.present === 'boolean', 'health.controller.present');
-    need(isCount(health.stalledAttempts), 'health.stalledAttempts');
-    need(isStr(health.budgeting), 'health.budgeting');
-    need(isBounded(health.spentTotalUsd), 'health.spentTotalUsd');
-    need(Array.isArray(health.budgets), 'health.budgets');
-    if (Array.isArray(health.budgets))
-      health.budgets.forEach((b, i) => {
-        const p = `health.budgets[${i}]`;
-        if (!isObject(b)) return need(false, p);
-        need(isStr(b.state), `${p}.state`);
-        need(isStr(b.scope), `${p}.scope`);
-        need(optStr(b.id), `${p}.id`);
-        need(isBounded(b.spentUsd), `${p}.spentUsd`);
-        need(optNum(b.limitUsd), `${p}.limitUsd`);
-      });
-    const drift = obj(health.drift, 'health.drift');
-    if (drift)
-      for (const k of ['drifted', 'unavailable']) need(isCount(drift[k]), `health.drift.${k}`);
-    need(Array.isArray(health.warnings), 'health.warnings');
-    if (Array.isArray(health.warnings))
-      health.warnings.forEach((w, i) =>
-        need(
-          isObject(w) && typeof w.code === 'string' && typeof w.message === 'string',
-          `health.warnings[${i}]`,
-        ),
-      );
-  }
-  for (const key of ['works', 'reviews', 'questions', 'escalations', 'drift']) {
-    need(Array.isArray(v[key]), key);
-  }
-  if (Array.isArray(v.works))
-    v.works.forEach((w, i) => {
-      const p = `works[${i}]`;
-      if (!isObject(w)) return need(false, p);
-      need(typeof w.id === 'string', `${p}.id`);
-      need(isObject(w.stage) && typeof w.stage.name === 'string', `${p}.stage.name`);
-      if (isObject(w.stage)) {
-        if (w.stage.since !== undefined) need(isInstant(w.stage.since), `${p}.stage.since`);
-        need(optStr(w.stage.step), `${p}.stage.step`);
-      }
-      need(optStr(w.liveness), `${p}.liveness`);
-      const a = w.attempts;
-      need(
-        isObject(a) && isCount(a.used) && isCount(a.max) && isCount(a.left) && optStr(a.line),
-        `${p}.attempts`,
-      );
-      if (w.target !== undefined) {
-        const t = w.target;
-        need(
-          isObject(t) &&
-            typeof t.ref === 'string' &&
-            isObject(t.remote) &&
-            typeof t.remote.state === 'string' &&
-            (t.remote.reason === undefined || typeof t.remote.reason === 'string'),
-          `${p}.target`,
-        );
-      }
-    });
-  if (Array.isArray(v.escalations))
-    v.escalations.forEach((e, i) =>
-      need(isObject(e) && typeof e.actor === 'string', `escalations[${i}].actor`),
-    );
-  if (Array.isArray(v.questions))
-    v.questions.forEach((q, i) => {
-      const p = `questions[${i}]`;
-      if (!isObject(q)) return need(false, p);
-      need(typeof q.requestId === 'string' && typeof q.workId === 'string', `${p}.requestId`);
-      need(typeof q.state === 'string', `${p}.state`);
-      need(isCount(q.severity) && isCount(q.version), `${p}.severity`);
-      need(isStr(q.answerableBy), `${p}.answerableBy`);
-      need(optStr(q.impact), `${p}.impact`);
-      need(optStr(q.title), `${p}.title`);
-    });
-  return out;
-}
+const nul =
+  (c: Check): Check =>
+  (v, path, out) => {
+    if (v !== null) c(v, path, out);
+  };
+const arr =
+  (c: Check): Check =>
+  (v, path, out) => {
+    if (!Array.isArray(v)) return void out.push(path);
+    v.forEach((x, i) => c(x, `${path}[${i}]`, out));
+  };
+const rec =
+  (c: Check): Check =>
+  (v, path, out) => {
+    if (!isObject(v)) return void out.push(path);
+    for (const [k, x] of Object.entries(v)) c(x, `${path}.${k}`, out);
+  };
+const obj =
+  (shape: Record<string, Check>): Check =>
+  (v, path, out) => {
+    if (!isObject(v)) return void out.push(path);
+    for (const [k, c] of Object.entries(shape))
+      c(Object.hasOwn(v, k) ? v[k] : undefined, path ? `${path}.${k}` : k, out);
+  };
+const bounded = obj({ value: N, bound: S });
 
-export function checkView(value: unknown): ViewCheck {
-  if (!isObject(value) || typeof value.viewVersion !== 'number') {
+const binding = obj({ runtime: S, model: opt(S), effort: opt(S) });
+const source = obj({ producer: S, producerVersion: S, stateVersion: N, token: S });
+const settings = obj({
+  policyDigest: S,
+  approvalMode: S,
+  mode: S,
+  concurrency: C,
+  roles: arr(obj({ role: S, writer: binding, repositoryId: opt(S) })),
+  reviews: arr(
+    obj({
+      kind: S,
+      scope: S,
+      repositoryId: opt(S),
+      role: opt(S),
+      reviewer: binding,
+      alternates: arr(binding),
+      vendor: S,
+    }),
+  ),
+  thresholds: obj({
+    inputSeverity: N,
+    leadAnswersMaxSeverity: opt(N),
+    leadAnswersTechnical: opt(B),
+    criticalPaths: N,
+    maxAttempts: N,
+    repairBudget: N,
+    maxNeutralFailures: N,
+    reviewRoundCap: N,
+    reviewEscalationRounds: N,
+  }),
+  budgets: arr(obj({ scope: S, usd: opt(N), timeMs: opt(N) })),
+  budgetOnUnknown: opt(S),
+  timeouts: obj({
+    runTimeoutMs: N,
+    leaseMs: N,
+    gateTimeoutFloorMs: opt(N),
+    stall: obj({ intervalMs: N, quietMs: N, stalledMs: N, action: S }),
+  }),
+  lean: obj({ state: S }),
+  defaulted: arr(S),
+});
+const work = obj({
+  id: S,
+  graphId: S,
+  title: opt(S),
+  status: S,
+  stage: obj({
+    name: S,
+    step: opt(S),
+    since: opt(I),
+    next: arr(S),
+    needs: opt(obj({ actor: nul(S), action: S })),
+    typical: opt(obj({ p50Ms: N, p90Ms: N, samples: N })),
+  }),
+  attempts: obj({
+    used: C,
+    max: C,
+    left: C,
+    failed: C,
+    interrupted: C,
+    rechecks: C,
+    neutral: obj({ used: C, max: C }),
+    line: opt(S),
+    lastFailure: opt(obj({ attempt: C, bucket: S, plain: S, at: opt(I) })),
+  }),
+  liveness: opt(S),
+  runtime: opt(S),
+  model: opt(S),
+  blockers: arr(obj({ code: S, plain: opt(S), actor: nul(S) })),
+  dependsOn: opt(arr(S)),
+  target: opt(
+    obj({
+      repositoryId: S,
+      ref: S,
+      acceptedSha: opt(S),
+      remote: obj({ state: S, trackingRef: opt(S), reason: opt(S) }),
+    }),
+  ),
+  question: opt(obj({ requestId: S, state: S, severity: N })),
+  spend: obj({ calls: N, usd: bounded, durationMs: N }),
+  resultSha: opt(S),
+});
+const review = obj({
+  kind: S,
+  subject: S,
+  workId: opt(S),
+  approved: B,
+  rounds: obj({ used: N, max: nul(N) }),
+  open: obj({ blocking: N, notes: N }),
+  accepted: N,
+  reviewer: opt(binding),
+  sameVendor: opt(B),
+  spend: obj({ calls: N, usd: bounded }),
+  findings: arr(
+    obj({
+      id: S,
+      severity: S,
+      status: S,
+      rounds: opt(N),
+      disposition: opt(obj({ decision: S, by: S, round: N })),
+      title: opt(S),
+    }),
+  ),
+  escalation: opt(obj({ requestId: S, findings: arr(S), answered: B })),
+  line: opt(S),
+});
+const question: Check = (v, path, out) => {
+  obj({
+    state: S,
+    answerableBy: S,
+    impact: opt(S),
+    plain: opt(S),
+    answeredBy: opt(S),
+    title: opt(S),
+    createdAt: I,
+  })(v, path, out);
+  if (!isObject(v)) return;
+  // Paths kept from the first gate: ids and counts are reported together.
+  if (typeof v.requestId !== 'string' || typeof v.workId !== 'string')
+    out.push(`${path}.requestId`);
+  if (!Number.isSafeInteger(v.severity) || !Number.isSafeInteger(v.version))
+    out.push(`${path}.severity`);
+  else if ((v.severity as number) < 0 || (v.version as number) < 0) out.push(`${path}.severity`);
+};
+const drift = obj({
+  workId: S,
+  repositoryId: S,
+  ref: S,
+  acceptedSha: S,
+  head: opt(S),
+  commitsSinceAccepted: opt(N),
+  filesSinceAccepted: opt(N),
+  diverged: opt(B),
+  unavailable: opt(S),
+});
+const overview = obj({
+  viewRevision: C,
+  generatedAt: I,
+  source,
+  settings,
+  works: arr(work),
+  reviews: arr(review),
+  questions: arr(question),
+  escalations: arr(
+    obj({ workId: opt(S), subject: opt(S), code: S, actor: S, action: S, since: I }),
+  ),
+  drift: arr(drift),
+  progress: obj({
+    total: C,
+    byStage: rec(C),
+    running: C,
+    done: C,
+    waitingOperator: C,
+    queue: obj({ paused: B, reason: opt(S), detail: opt(S), actor: opt(S), action: opt(S) }),
+  }),
+  history: obj({
+    from: I,
+    to: I,
+    bucketMs: N,
+    load: arr(N),
+    attemptsStarted: arr(N),
+    attemptsFailed: arr(N),
+    gatesPassed: arr(N),
+    gatesFailed: arr(N),
+    gatesReused: arr(N),
+    spendUsd: arr(N),
+    spendBound: S,
+    spendOpeningUsd: bounded,
+    budgetUsd: opt(N),
+  }),
+  health: obj({
+    controller: obj({ present: B, leaseUntil: opt(I) }),
+    stalledAttempts: C,
+    quietAttempts: C,
+    environmentFailures: C,
+    budgeting: S,
+    budgets: arr(
+      obj({
+        scope: S,
+        id: opt(S),
+        state: S,
+        spentUsd: bounded,
+        limitUsd: opt(N),
+        spentMs: opt(N),
+        limitMs: opt(N),
+      }),
+    ),
+    spentTotalUsd: bounded,
+    drift: obj({ checked: C, drifted: C, unavailable: C }),
+    warnings: arr(obj({ code: S, message: S })),
+  }),
+  activity: opt(
+    arr(obj({ at: I, actor: S, action: S, workId: opt(S), subject: opt(S), plain: S })),
+  ),
+  decisions: opt(
+    arr(
+      obj({
+        id: S,
+        kind: S,
+        by: S,
+        at: I,
+        workId: opt(S),
+        subject: opt(S),
+        findingId: opt(S),
+        requestId: opt(S),
+        temporary: B,
+        revisit: opt(S),
+        title: opt(S),
+        reason: opt(S),
+      }),
+    ),
+  ),
+  truncated: opt(rec(C)),
+});
+const detail = obj({
+  viewRevision: C,
+  generatedAt: I,
+  source,
+  work,
+  attempts: arr(
+    obj({
+      attempt: C,
+      status: S,
+      failureBucket: opt(S),
+      interrupted: opt(B),
+      runtime: S,
+      model: opt(S),
+      startedAt: I,
+      finishedAt: opt(I),
+      stages: arr(obj({ stage: S, durationMs: opt(N), outcome: opt(S) })),
+    }),
+  ),
+  verification: opt(
+    arr(
+      obj({
+        gate: S,
+        kind: S,
+        phase: opt(S),
+        result: S,
+        how: S,
+        by: opt(S),
+        attempt: opt(N),
+        at: opt(I),
+      }),
+    ),
+  ),
+  reviews: arr(review),
+  questions: arr(question),
+  drift: opt(drift),
+  truncated: opt(rec(C)),
+});
+
+function versionRefusal(value: unknown): Extract<ViewCheck, { ok: false }> | undefined {
+  if (!isObject(value) || typeof value.viewVersion !== 'number')
     return { ok: false, code: 'NOT_A_VIEW', message: 'The document has no numeric viewVersion.' };
-  }
-  if (value.viewVersion !== VIEW_VERSION) {
+  if (value.viewVersion !== VIEW_VERSION)
     return {
       ok: false,
       code: 'VIEW_VERSION_UNSUPPORTED',
@@ -204,18 +377,44 @@ export function checkView(value: unknown): ViewCheck {
         `View version ${value.viewVersion} is not supported by this panel ` +
         `(expects ${VIEW_VERSION}). Install a matching devcontour-harness-ui.`,
     };
-  }
-  const bad = problems(value);
-  if (bad.length) {
-    return {
-      ok: false,
-      code: 'NOT_A_VIEW',
-      message: `The view is malformed: ${bad.slice(0, 5).join(', ')}${bad.length > 5 ? ', …' : ''}.`,
-    };
-  }
+  return undefined;
+}
+
+function shapeRefusal(
+  shape: Check,
+  value: unknown,
+  what: string,
+): Extract<ViewCheck, { ok: false }> | undefined {
+  const bad: string[] = [];
+  shape(value, '', bad);
+  if (!bad.length) return undefined;
+  return {
+    ok: false,
+    code: 'NOT_A_VIEW',
+    message: `The ${what} is malformed: ${bad.slice(0, 5).join(', ')}${bad.length > 5 ? ', …' : ''}.`,
+  };
+}
+
+export type WorkDetailCheck =
+  { ok: true; detail: WorkDetailView; newerRevision: boolean } | Extract<ViewCheck, { ok: false }>;
+
+/** The same gate for the work detail document (`harness view --work <id>`). */
+export function checkWorkDetail(value: unknown): WorkDetailCheck {
+  const refused = versionRefusal(value) ?? shapeRefusal(detail, value, 'work detail');
+  if (refused) return refused;
+  return {
+    ok: true,
+    detail: value as unknown as WorkDetailView,
+    newerRevision: ((value as Obj).viewRevision as number) > KNOWN_VIEW_REVISION,
+  };
+}
+
+export function checkView(value: unknown): ViewCheck {
+  const refused = versionRefusal(value) ?? shapeRefusal(overview, value, 'view');
+  if (refused) return refused;
   return {
     ok: true,
     view: value as unknown as OperatorView,
-    newerRevision: (value.viewRevision as number) > KNOWN_VIEW_REVISION,
+    newerRevision: ((value as Obj).viewRevision as number) > KNOWN_VIEW_REVISION,
   };
 }

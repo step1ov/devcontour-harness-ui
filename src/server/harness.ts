@@ -176,14 +176,20 @@ export async function probeHarness(bin: string): Promise<HarnessSupport> {
 export type HarnessViewResult =
   { ok: true; view: unknown } | { ok: false; code: string; message: string };
 
-/** Runs `harness view` once; a harness refusal comes back as `{ ok: false }`. */
+/**
+ * Runs `harness view` once (`--work <id>` for the work detail document); a
+ * harness refusal comes back as `{ ok: false }`. The work id is passed as
+ * `--work=<id>` so an id can never be read as another flag.
+ */
 export async function harnessView(
   o: HarnessViewOptions,
   lang: 'ru' | 'en' | undefined,
+  workId?: string,
 ): Promise<HarnessViewResult> {
   const args = ['view', '--state', o.state];
   if (o.policy !== undefined) args.push('--policy', o.policy);
   if (lang !== undefined) args.push('--lang', lang);
+  if (workId !== undefined) args.push(`--work=${workId}`);
   const r = await run(o.bin, args, o.timeoutMs);
   if (r.exit === undefined)
     return { ok: false, code: 'VIEW_UNAVAILABLE', message: `harness view: ${r.spawnError}.` };

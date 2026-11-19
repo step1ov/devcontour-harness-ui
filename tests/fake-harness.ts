@@ -9,6 +9,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const fixture = fileURLToPath(new URL('../fixtures/view.sample.json', import.meta.url));
+const workFixture = fileURLToPath(new URL('../fixtures/work.sample.json', import.meta.url));
 
 export interface FakeHarness {
   bin: string;
@@ -58,8 +59,16 @@ if (${Boolean(o.hang)}) {
       error: { code: refuse.code, class: 'input', message: refuse.message, issues: [] } });
     process.exit(2);
   }
-  const view = JSON.parse(fs.readFileSync(${JSON.stringify(fixture)}, 'utf8'));
-  view.health.warnings = [{ code: 'ARGS', message: JSON.stringify(argv) }];
+  const work = argv.find((a) => a.startsWith('--work='));
+  if (work && work !== '--work=locale-format') {
+    out({ apiVersion: 'devcontour-harness/v1alpha1', command: 'view', ok: false,
+      error: { code: 'INVALID_INPUT', class: 'input', message: 'no work ' + work.slice(7), issues: [] } });
+    process.exit(2);
+  }
+  const view = JSON.parse(fs.readFileSync(work ? ${JSON.stringify(workFixture)} : ${JSON.stringify(fixture)}, 'utf8'));
+  // The argv is recorded where each document has free text: a warning or the producer.
+  if (work) view.source.producer = JSON.stringify(argv);
+  else view.health.warnings = [{ code: 'ARGS', message: JSON.stringify(argv) }];
   out({ apiVersion: 'devcontour-harness/v1alpha1', command: 'view', ok: true, data: view });
   process.exitCode = ${o.exitCode ?? 0};
 } else {

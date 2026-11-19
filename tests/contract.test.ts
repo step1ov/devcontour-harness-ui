@@ -13,6 +13,7 @@ import { join, resolve } from 'node:path';
 import { test } from 'node:test';
 import {
   checkView,
+  checkWorkDetail,
   type ActivityEntry,
   type AttemptRow,
   type BlockerView,
@@ -43,17 +44,27 @@ const overviewSchema = read('./contract/harness/operator-view.schema.json');
 const detailSchema = read('./contract/harness/work-detail-view.schema.json');
 const viewFixture = read('../fixtures/view.sample.json');
 const workFixture = read('../fixtures/work.sample.json');
+const acceptedFixture = read('../fixtures/work.accepted.sample.json');
 const harnessEmpty = read('./contract/harness/empty-state.view.json');
 
 test('both fixtures and a real harness document are valid under the harness schemas', () => {
   assert.deepEqual(validate(overviewSchema, viewFixture), []);
   assert.deepEqual(validate(detailSchema, workFixture), []);
+  assert.deepEqual(validate(detailSchema, acceptedFixture), []);
+  // The Russian demo copies: the same documents with harness texts in Russian.
+  assert.deepEqual(validate(overviewSchema, read('../fixtures/ru/view.sample.json')), []);
+  for (const f of ['work.sample.json', 'work.accepted.sample.json'])
+    assert.deepEqual(validate(detailSchema, read('../fixtures/ru/' + f)), [], f);
   assert.equal(harnessEmpty.ok, true);
   assert.deepEqual(validate(overviewSchema, harnessEmpty.data), []);
 });
 
 test('every schema-valid overview passes the compatibility gate', () => {
   assert.equal(checkView(viewFixture).ok, true);
+  for (const d of [workFixture, acceptedFixture]) {
+    const c = checkWorkDetail(d);
+    assert.equal(c.ok, true, c.ok ? '' : c.message);
+  }
   const real = checkView(harnessEmpty.data);
   assert.equal(real.ok, true, real.ok ? '' : real.message);
 });
@@ -71,7 +82,10 @@ test('the validator really refuses what the harness schema refuses', () => {
 test('fixture verification rows follow the harness rules the JSON Schema cannot state', () => {
   const results = new Set(['passed', 'failed', 'reused', 'skipped', 'not-run']);
   const hows = new Set(['executed', 'reused', 'read', 'not-checked']);
-  for (const r of workFixture.verification as VerificationRow[]) {
+  for (const r of [
+    ...workFixture.verification,
+    ...acceptedFixture.verification,
+  ] as VerificationRow[]) {
     assert.ok(results.has(r.result), `result ${r.result}`);
     assert.ok(hows.has(r.how), `how ${r.how}`);
     if (r.how === 'executed') {

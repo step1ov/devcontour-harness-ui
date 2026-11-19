@@ -95,7 +95,7 @@ async function main() {
             (v) => typeof v === 'string' && v.trim() !== '',
           ),
         );
-  let source: Pick<ServeOptions, 'viewFile' | 'harness'>;
+  let source: Pick<ServeOptions, 'viewFile' | 'harness' | 'workFiles' | 'localized'>;
   if (args.state !== undefined) {
     const bin = args.harness ?? 'harness';
     let support;
@@ -128,9 +128,22 @@ async function main() {
       },
     };
   } else {
-    source = {
-      viewFile: args.view ? resolve(args.view) : join(root, 'fixtures', 'view.sample.json'),
-    };
+    if (args.view) source = { viewFile: resolve(args.view) };
+    else {
+      // The demo: the checkout's fixtures, or their copy in the package (dist/demo).
+      const demo = existsSync(join(root, 'fixtures', 'view.sample.json'))
+        ? join(root, 'fixtures')
+        : join(root, 'dist', 'demo');
+      // English files by default; Russian ones (harness texts in Russian) for `?lang=ru`.
+      const files = (dir: string) => ({
+        viewFile: join(dir, 'view.sample.json'),
+        workFiles: {
+          'locale-format': join(dir, 'work.sample.json'),
+          'add-greeting': join(dir, 'work.accepted.sample.json'),
+        },
+      });
+      source = { ...files(demo), localized: { ru: files(join(demo, 'ru')) } };
+    }
   }
   const port = args.port === undefined ? undefined : Number(args.port);
   try {

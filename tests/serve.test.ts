@@ -321,3 +321,100 @@ test('live route: a success envelope with a nonzero exit is not a view', async (
     fake.remove();
   }
 });
+
+const workFile = fileURLToPath(new URL('../fixtures/work.sample.json', import.meta.url));
+
+test('work detail from files: /api/work/<id> and /api/view?work=, gated and refused honestly', async () => {
+  const s = await startServer({
+    viewFile,
+    workFiles: { 'locale-format': workFile },
+    appDir,
+    version: 'test',
+  });
+  const plain = await startServer({ viewFile, appDir, version: 'test' });
+  try {
+    for (const path of ['api/work/locale-format', 'api/view?work=locale-format']) {
+      const r = await get(s.url + path);
+      assert.equal(r.status, 200, path);
+      assert.equal(JSON.parse(r.body).work.id, 'locale-format');
+      assert.equal(r.headers['cache-control'], 'no-store');
+    }
+    const missing = await get(s.url + 'api/work/docs-page');
+    assert.equal(missing.status, 503);
+    assert.equal(JSON.parse(missing.body).error.code, 'VIEW_UNAVAILABLE');
+    assert.equal((await get(plain.url + 'api/work/locale-format')).status, 503);
+    // Ids outside the harness id alphabet never reach a file or a process.
+    for (const bad of ['..%2fview', 'a%20b', '__proto__x%00', 'x'.repeat(81)]) {
+      const r = await get(s.url + 'api/work/' + bad);
+      assert.ok(r.status === 404 || r.status === 400, `${bad}: ${r.status}`);
+    }
+    assert.equal((await get(s.url + 'api/work/locale-format', { method: 'POST' })).status, 405);
+  } finally {
+    await s.close();
+    await plain.close();
+  }
+});
+
+test('work detail file that is an overview is refused by the detail gate (409)', async () => {
+  const s = await startServer({ viewFile, workFiles: { x: viewFile }, appDir, version: 'test' });
+  try {
+    const r = await get(s.url + 'api/work/x');
+    assert.equal(r.status, 409);
+    assert.equal(JSON.parse(r.body).error.code, 'NOT_A_VIEW');
+  } finally {
+    await s.close();
+  }
+});
+
+test('live route: /api/work/<id> runs harness view --work=<id> with the language; a refusal is 503', async () => {
+  const fake = fakeHarness({ view: true, lang: true });
+  const s = await startServer({
+    harness: { bin: fake.bin, state: '/state-dir', lang: true, defaultLang: 'ru' },
+    appDir,
+    version: 'test',
+  });
+  try {
+    const r = await get(s.url + 'api/work/locale-format?lang=en');
+    assert.equal(r.status, 200);
+    const detail = JSON.parse(r.body);
+    assert.deepEqual(JSON.parse(detail.source.producer), [
+      'view',
+      '--state',
+      '/state-dir',
+      '--lang',
+      'en',
+      '--work=locale-format',
+    ]);
+    const def = JSON.parse((await get(s.url + 'api/work/locale-format')).body);
+    assert.deepEqual(JSON.parse(def.source.producer).slice(3), [
+      '--lang',
+      'ru',
+      '--work=locale-format',
+    ]);
+    const refused = await get(s.url + 'api/work/docs-page');
+    assert.equal(refused.status, 503);
+    assert.match(JSON.parse(refused.body).error.message, /INVALID_INPUT: no work docs-page/);
+  } finally {
+    await s.close();
+    fake.remove();
+  }
+});
+
+test('live route: the work detail shares the view deadline against a hanging harness', async () => {
+  const fake = fakeHarness({ view: true, lang: true, hang: true });
+  const s = await startServer({
+    harness: { bin: fake.bin, state: '/s', lang: true, defaultLang: 'en', timeoutMs: 300 },
+    appDir,
+    version: 'test',
+  });
+  try {
+    const started = Date.now();
+    const r = await get(s.url + 'api/work/locale-format');
+    assert.equal(r.status, 503);
+    assert.match(JSON.parse(r.body).error.message, /timed out after 300 ms/);
+    assert.ok(Date.now() - started < 5000);
+  } finally {
+    await s.close();
+    fake.remove();
+  }
+});

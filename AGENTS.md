@@ -8,6 +8,7 @@ Rules for agents (Claude Code, Codex and others) working in this repository.
 npm test            # node:test via tsx: model, components (renderToStaticMarkup), server, CLI
 npm run typecheck
 npm run build       # tsc library build + Vite app bundle into dist/
+npm run test:e2e    # build, then Playwright (local Chromium) against --demo at 1280 and 390 px
 ```
 
 Every change ends green on `npm test && npm run typecheck && npm run build`.
