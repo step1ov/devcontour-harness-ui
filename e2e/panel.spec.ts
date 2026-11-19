@@ -79,7 +79,7 @@ test('keyboard: the nav reaches every screen and focus is visible', async ({ pag
 
 test('a work link opens the detail, and "what was checked" lands on the rows', async ({ page }) => {
   await open(page, '#/');
-  await page.locator('[data-testid="accepted"] a', { hasText: 'что проверено' }).click();
+  await page.locator('[data-testid="accepted"] a', { hasText: 'что проверено' }).first().click();
   await expect(page).toHaveURL(/#\/work\/add-greeting#verification$/);
   await expect(page.locator('#verification')).toBeInViewport();
 });
@@ -117,4 +117,52 @@ test('reduced motion and dark theme render without scroll', async ({ browser }) 
       .map((v) => v.id),
   ).toEqual([]);
   await ctx.close();
+});
+
+test('long unbroken harness text wraps at 390 px instead of scrolling', async ({ page }) => {
+  const long = 'x'.repeat(120);
+  await page.route('**/api/work/locale-format*', async (route) => {
+    const res = await route.fetch();
+    const body = await res.json();
+    body.work.title = long;
+    body.work.attempts.lastFailure.plain = 'y'.repeat(160);
+    await route.fulfill({ response: res, json: body });
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await open(page, '#/work/locale-format');
+  await expect(page.locator('main')).toContainText(long);
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
+  expect(overflow).toBeLessThanOrEqual(0);
+});
+
+test('"what was checked" moves keyboard focus to the rows', async ({ page }) => {
+  await open(page, '#/');
+  await page.locator('[data-testid="accepted"] a', { hasText: 'что проверено' }).first().focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#verification')).toBeFocused();
+});
+
+test('without ?lang the CLI language wins over the browser locale', async ({ browser }) => {
+  // The demo server runs with --lang ru (playwright.config); an English browser still gets Russian.
+  const ctx = await browser.newContext({ locale: 'en-US' });
+  const page = await ctx.newPage();
+  await page.goto('http://127.0.0.1:4808/#/settings');
+  await expect(page.locator('main')).toContainText('Технические вопросы решает ведущий: да');
+  await ctx.close();
+});
+
+test('a temporary 503 keeps the last view with a connection banner', async ({ page }) => {
+  await page.clock.install();
+  await open(page, '#/');
+  await page.route('**/api/view*', (route) =>
+    route.fulfill({
+      status: 503,
+      json: { error: { code: 'VIEW_UNAVAILABLE', message: 'harness view: timed out' } },
+    }),
+  );
+  await page.clock.runFor(6000);
+  await expect(page.locator('main')).toContainText('Связь потеряна (harness view: timed out)');
+  await expect(page.locator('main')).toContainText('Сейчас: в работе 1');
 });

@@ -150,6 +150,7 @@ async function main() {
     const server = await startServer({
       ...source,
       appDir: join(root, 'dist', 'app'),
+      lang,
       ...(args.host ? { host: args.host } : {}),
       ...(port !== undefined ? { port } : {}),
       version,

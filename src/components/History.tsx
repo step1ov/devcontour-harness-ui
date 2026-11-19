@@ -26,9 +26,18 @@ interface Series {
   cls: 'hui-s1' | 'hui-s2';
 }
 
-/** Sums groups of buckets into hours when the bucket divides an hour; otherwise keeps them. */
+/**
+ * Sums groups of buckets into hours when the bucket divides an hour and the
+ * window holds whole hours; otherwise keeps the buckets (a partial last hour
+ * would be drawn as wide as a full one).
+ */
 export function perHour(h: Pick<ViewHistory, 'bucketMs'>, values: number[]) {
-  if (!(h.bucketMs > 0 && h.bucketMs < HOUR && HOUR % h.bucketMs === 0))
+  if (!(
+    h.bucketMs > 0 &&
+    h.bucketMs < HOUR &&
+    HOUR % h.bucketMs === 0 &&
+    values.length % (HOUR / h.bucketMs) === 0
+  ))
     return { values, hourly: h.bucketMs === HOUR, groupMs: h.bucketMs };
   const k = HOUR / h.bucketMs;
   const out: number[] = [];
@@ -37,20 +46,24 @@ export function perHour(h: Pick<ViewHistory, 'bucketMs'>, values: number[]) {
   return { values: out, hourly: true, groupMs: HOUR };
 }
 
-/** Cumulative spend starting at the opening balance (`spendOpeningUsd`). */
+/**
+ * Cumulative spend at the bucket boundaries: `values[0]` is the opening
+ * balance (`spendOpeningUsd`) at `from`, `values[i]` the total at the end of
+ * bucket i. The end is exact only when both the window and the opening are
+ * exact; an unknown window bound (or one this build does not know) makes it
+ * unknown, never a number.
+ */
 export function cumulativeSpend(h: ViewHistory) {
   const openingKnown = h.spendOpeningUsd.bound === 'exact' || h.spendOpeningUsd.bound === 'lower';
+  const windowKnown = h.spendBound === 'exact' || h.spendBound === 'lower';
   let sum = openingKnown ? h.spendOpeningUsd.value : 0;
-  const values = h.spendUsd.map((x) => (sum += x));
+  const values = [sum, ...h.spendUsd.map((x) => (sum += x))];
   const lower = h.spendBound !== 'exact' || h.spendOpeningUsd.bound !== 'exact';
-  return {
-    start: openingKnown ? h.spendOpeningUsd.value : 0,
-    values,
-    openingKnown,
-    lower,
-    end: { value: sum, bound: lower ? ('lower' as const) : ('exact' as const) },
-  };
+  const bound: 'exact' | 'lower' | 'unknown' = !windowKnown ? 'unknown' : lower ? 'lower' : 'exact';
+  return { values, openingKnown, lower, end: { value: sum, bound } };
 }
+
+const maxOf = (xs: number[]) => xs.reduce((a, b) => (b > a ? b : a), 0);
 
 function Chart({
   id,
@@ -61,7 +74,6 @@ function Chart({
   line,
   guide,
   guideLabel,
-  start,
   times,
   axis,
   t,
@@ -78,8 +90,6 @@ function Chart({
   /** Horizontal dashed guide: concurrency or budget. */
   guide?: number;
   guideLabel?: string;
-  /** Line start value before the first bucket. */
-  start?: number;
   times: string[];
   axis: [string, string, string];
   t: Dict;
@@ -90,17 +100,16 @@ function Chart({
   const tops = Array.from({ length: n }, (_, i) =>
     stacked
       ? series.reduce((a, s) => a + (s.values[i] ?? 0), 0)
-      : Math.max(...series.map((s) => s.values[i] ?? 0)),
+      : maxOf(series.map((s) => s.values[i] ?? 0)),
   );
-  const max = Math.max(1, guide ?? 0, start ?? 0, ...tops) * 1.08;
+  const max = Math.max(1, guide ?? 0, maxOf(tops)) * 1.08;
   const y = (v: number) => H - (v / max) * H;
   const slot = n ? W / n : W;
   const marks: ReactNode[] = [];
   if (line) {
-    const pts = [
-      `0,${y(start ?? 0)}`,
-      ...series[0]!.values.map((v, i) => `${(i + 1) * slot},${y(v)}`),
-    ];
+    // Boundary values: the first point is the opening balance at the window start.
+    const step = n > 1 ? W / (n - 1) : W;
+    const pts = series[0]!.values.map((v, i) => `${i * step},${y(v)}`);
     marks.push(
       <polyline
         key="line"
@@ -224,8 +233,11 @@ export function History({ view, lang = 'ru', timeZone, now: nowProp }: HistoryPr
   const v = t.history;
   const h = view.history;
   const from = instantMs(h.from);
+  // A finite number can still be outside the Date range: unknown, never a crash.
   const clock = (ms: number) =>
-    Number.isFinite(ms) ? clockOf(new Date(ms).toISOString(), t, timeZone, now) : t.unknown;
+    Number.isFinite(ms) && Math.abs(ms) <= 8.64e15
+      ? clockOf(new Date(ms).toISOString(), t, timeZone, now)
+      : t.unknown;
   const series = [
     h.load,
     h.attemptsStarted,
@@ -278,7 +290,7 @@ export function History({ view, lang = 'ru', timeZone, now: nowProp }: HistoryPr
             series={[{ name: v.peak, values: h.load, cls: 'hui-s1' }]}
             guide={slots}
             guideLabel={v.slotsLine(slots)}
-            summary={v.loadSummary(Math.max(...h.load), slots)}
+            summary={v.loadSummary(maxOf(h.load), slots)}
             legend={
               <>
                 <Key cls="hui-s1">{v.peak}</Key>
@@ -298,10 +310,10 @@ export function History({ view, lang = 'ru', timeZone, now: nowProp }: HistoryPr
               { name: v.started, values: started.values, cls: 'hui-s1' },
               { name: v.failed, values: failed.values, cls: 'hui-s2' },
             ]}
-            summary={v.attemptsSummary(
+            summary={(started.hourly ? v.attemptsSummary : v.attemptsSummaryBucket)(
               sum(h.attemptsStarted),
               sum(h.attemptsFailed),
-              Math.max(...started.values),
+              maxOf(started.values),
             )}
             legend={
               <>
@@ -335,10 +347,9 @@ export function History({ view, lang = 'ru', timeZone, now: nowProp }: HistoryPr
             id="spend"
             title={v.spend}
             t={t}
-            times={times}
             axis={axis}
             line={{ dashed: spend.lower }}
-            start={spend.start}
+            times={timesOf(n + 1, h.bucketMs)}
             series={[
               {
                 name: v.cumulative + (spend.lower ? ` (${v.lowerBound})` : ''),

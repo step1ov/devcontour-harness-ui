@@ -63,3 +63,10 @@ main:focus {
   outline: 2px solid var(--hui-focus);
   outline-offset: 2px;
 }
+.app-note {
+  overflow-wrap: anywhere;
+}
+.app-detail {
+  display: block;
+  font-size: 0.85rem;
+}

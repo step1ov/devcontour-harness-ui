@@ -62,6 +62,23 @@ test('components write no visible text of their own: every JSX text node is punc
   assert.ok(seen > 0, 'the scan finds JSX text at all');
 });
 
+test('components and the app put no literal words in accessible attributes or JSX string expressions', () => {
+  const files = [
+    ...readdirSync(new URL('../src/components/', import.meta.url))
+      .filter((x) => x.endsWith('.tsx'))
+      .map((f) => new URL('../src/components/' + f, import.meta.url)),
+    new URL('../src/app/main.tsx', import.meta.url),
+  ];
+  for (const f of files) {
+    const src = readFileSync(f, 'utf8');
+    for (const m of src.matchAll(/\b(aria-label|title|alt|placeholder)="([^"]*)"/g))
+      assert.doesNotMatch(m[2]!, /[A-Za-zА-Яа-яЁё]{2}/, `${f.pathname}: ${m[0]}`);
+    // {'text'} or {"text"} with two letters in a row inside JSX children.
+    for (const m of src.matchAll(/\{\s*(['"])([^'"]*[A-Za-zА-Яа-яЁё]{2}[^'"]*)\1\s*\}/g))
+      assert.fail(`${f.pathname}: literal JSX string ${m[0]}`);
+  }
+});
+
 test('hash routes', () => {
   assert.deepEqual(parseRoute(''), { screen: 'overview' });
   assert.deepEqual(parseRoute('#/'), { screen: 'overview' });

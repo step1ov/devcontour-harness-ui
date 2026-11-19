@@ -266,7 +266,14 @@ const ru = {
     incompatible: 'Панель не может показать эти данные:',
     notFound: 'Такого раздела нет.',
     readOnly: 'Панель только читает: ничего не запускает и не отвечает за вас.',
-    liveQuestions: (n: number) => `Ждут вашего ответа: ${rp(n, 'вопрос', 'вопроса', 'вопросов')}.`,
+    liveQuestions: (n: number, clipped: boolean) =>
+      `Ждут вашего ответа: ${rp(n, 'вопрос', 'вопроса', 'вопросов')}${clipped ? ' и, возможно, ещё (список обрезан)' : ''}.`,
+    refusal: {
+      NOT_A_VIEW: 'Данные не похожи на представление harness.',
+      VIEW_VERSION_UNSUPPORTED: 'Эта версия панели не знает такой версии представления.',
+      VIEW_UNAVAILABLE: 'Представление сейчас недоступно.',
+    } as Labels,
+    details: 'Подробности:',
     skip: 'К содержимому',
   },
   // Units and numbers.
@@ -353,6 +360,11 @@ const ru = {
     noLocation: 'Принято; где — неизвестно: harness не сообщил цель.',
     notYet: 'Ещё не принято.',
     seeChecks: 'что проверено',
+    short: {
+      pushed: 'в удалённом репозитории — да',
+      'not-pushed': 'в удалённом репозитории — ещё нет',
+    } as Labels,
+    shortUnknown: 'в удалённом репозитории — неизвестно',
   },
   // Questions.
   question: {
@@ -375,6 +387,7 @@ const ru = {
     label: 'Обзор harness',
     queueRunning: 'Очередь идёт',
     queuePaused: (reason: string) => `Очередь на паузе${reason ? ` (${reason})` : ''}`,
+    queueWho: (who: string, action: string) => `действует: ${who}${action ? ` — ${action}` : ''}`,
     acceptedOf: (done: number, total: number) => `принято ${done} из ${total}`,
     plan: 'План',
     planClipped: 'список работ обрезан — показана только часть плана',
@@ -500,6 +513,16 @@ const ru = {
     notAccepted: 'Работа ещё не принята — дрейфа быть не может.',
     detailClipped: (what: string, n: number) => `${what}: ещё ${n} не показано (предел).`,
     detailUnavailable: 'Детали работы недоступны:',
+    clippedName: {
+      attempts: 'Попытки',
+      findings: 'Замечания',
+      verification: 'Проверки',
+      stages: 'Этапы попыток',
+      reviews: 'Ревью',
+      questions: 'Вопросы',
+      blockers: 'Причины ожидания',
+      dependsOn: 'Зависимости',
+    } as Labels,
   },
   drift: {
     row: (ref: string, from: string, to: string) => `${ref}: принято ${from} → сейчас ${to}`,
@@ -537,7 +560,7 @@ const ru = {
       continue: 'решено продолжать',
     } as Labels,
     decidedBy: (decision: string, who: string, round: number) =>
-      `${decision} · решил: ${who}, раунд ${round}`,
+      `${decision} · кто решил: ${who}, раунд ${round}`,
     escalation: (requestId: string, findings: string) =>
       `Эскалация ${requestId}: ${findings} — решает оператор`,
     escalationAnswered: 'ответ дан',
@@ -562,10 +585,11 @@ const ru = {
     all: (n: number) => `Все решения (${n})`,
     none: 'Решений пока не было.',
     kind: {
-      'accepted-limitation': 'принял ограничение',
-      'technical-answer': 'ответил на технический вопрос',
-      continue: 'решил продолжать',
+      'accepted-limitation': 'замечание принято как ограничение',
+      'technical-answer': 'ответ на технический вопрос',
+      continue: 'решено продолжать',
     } as Labels,
+    by: (who: string) => `кто решил: ${who}`,
     revisit: (when: string) => `вернуться: ${when}`,
     revisitUnknown: 'условие пересмотра неизвестно',
     reason: (why: string) => `причина: ${why}`,
@@ -613,6 +637,9 @@ const ru = {
     effective: 'Действующий reviewer кода для каждой роли',
     effectiveFrom: (source: string) => `откуда: ${source}`,
     effectiveNone: 'правило не найдено',
+    effectiveClipped:
+      'Список правил ревью обрезан: действующий reviewer может задаваться правилом, которого здесь нет.',
+    anyRepo: 'в остальных репозиториях',
     ask: 'Когда спрашивать вас',
     threshold: (n: number) =>
       n >= 11
@@ -663,6 +690,8 @@ const ru = {
     attemptsBucket: 'Начатые и неудачные попытки за интервал',
     attemptsSummary: (started: number, failed: number, peak: number) =>
       `За окно начато попыток: ${started}, неудачных: ${failed}; больше всего начато за час: ${peak}.`,
+    attemptsSummaryBucket: (started: number, failed: number, peak: number) =>
+      `За окно начато попыток: ${started}, неудачных: ${failed}; больше всего начато за интервал: ${peak}.`,
     gates: 'Проверки: пройденные и не пройденные',
     gatesSummary: (passed: number, failed: number, reused: number) =>
       `За окно пройдено: ${passed}, не пройдено: ${failed}; засчитано по прежнему доказательству: ${reused} (не входит в пройденные).`,
@@ -701,8 +730,16 @@ const ru = {
     envFailures: (n: number, window: string) => `Сбоев окружения за ${window}: ${n}.`,
     budgets: 'Бюджеты',
     budgetingOff: (spent: string) => `Бюджетов нет; всего потрачено ${spent}.`,
-    budgetRow: (scope: string, spent: string, limit: string | undefined, state: string) =>
-      `${scope}: потрачено ${spent}${limit ? ` из ${limit}` : ''}, ${state}.`,
+    budgetRow: (
+      scope: string,
+      spent: string,
+      limit: string | undefined,
+      state: string,
+      time: string | undefined,
+    ) =>
+      `${scope}: потрачено ${spent}${limit ? ` из ${limit}` : ''}${time ? `; ${time}` : ''}, ${state}.`,
+    timeOf: (spent: string, limit: string | undefined) =>
+      `время ${spent}${limit ? ` из ${limit}` : ''}`,
     spentTotal: (s: string) => `Всего потрачено: ${s}.`,
     drift: 'Дрейф после приёмки',
     driftCounts: (drifted: number, unavailable: number, checked: number) =>
@@ -756,7 +793,14 @@ const en: Dict = {
     incompatible: 'The panel cannot show this data:',
     notFound: 'There is no such section.',
     readOnly: 'The panel only reads: it starts nothing and answers nothing for you.',
-    liveQuestions: (n: number) => `${ep(n, 'question waits', 'questions wait')} for your answer.`,
+    liveQuestions: (n: number, clipped: boolean) =>
+      `${ep(n, 'question waits', 'questions wait')} for your answer${clipped ? ' and possibly more (the list is clipped)' : ''}.`,
+    refusal: {
+      NOT_A_VIEW: 'The data does not look like a harness view.',
+      VIEW_VERSION_UNSUPPORTED: 'This panel does not know this view version.',
+      VIEW_UNAVAILABLE: 'The view is not available right now.',
+    },
+    details: 'Details:',
     skip: 'Skip to content',
   },
   usdUnknown: 'unknown',
@@ -838,6 +882,8 @@ const en: Dict = {
     noLocation: 'Accepted; where is unknown: the harness gave no target.',
     notYet: 'Not accepted yet.',
     seeChecks: 'what was checked',
+    short: { pushed: 'on the remote', 'not-pushed': 'not on the remote yet' },
+    shortUnknown: 'remote state unknown',
   },
   question: {
     youOrLead: 'You or the lead agent can answer this question (technical).',
@@ -858,6 +904,7 @@ const en: Dict = {
     label: 'Harness overview',
     queueRunning: 'Queue running',
     queuePaused: (reason: string) => `Paused${reason ? ` (${reason})` : ''}`,
+    queueWho: (who: string, action: string) => `acts: ${who}${action ? ` — ${action}` : ''}`,
     acceptedOf: (done: number, total: number) => `${done} of ${total} accepted`,
     plan: 'Plan',
     planClipped: 'the work list is clipped — only part of the plan is shown',
@@ -975,6 +1022,16 @@ const en: Dict = {
     notAccepted: 'The work is not accepted yet — there is nothing to drift.',
     detailClipped: (what: string, n: number) => `${what}: ${n} more not shown (limit).`,
     detailUnavailable: 'Work details are not available:',
+    clippedName: {
+      attempts: 'Attempts',
+      findings: 'Findings',
+      verification: 'Checks',
+      stages: 'Attempt stages',
+      reviews: 'Reviews',
+      questions: 'Questions',
+      blockers: 'Reasons for waiting',
+      dependsOn: 'Dependencies',
+    },
   },
   drift: {
     row: (ref: string, from: string, to: string) => `${ref}: accepted ${from} → now ${to}`,
@@ -1035,10 +1092,11 @@ const en: Dict = {
     all: (n: number) => `All decisions (${n})`,
     none: 'No decisions yet.',
     kind: {
-      'accepted-limitation': 'accepted a limitation',
-      'technical-answer': 'answered a technical question',
+      'accepted-limitation': 'finding accepted as a limitation',
+      'technical-answer': 'technical question answered',
       continue: 'decided to continue',
     },
+    by: (who: string) => `decided by: ${who}`,
     revisit: (when: string) => `revisit: ${when}`,
     revisitUnknown: 'revisit condition unknown',
     reason: (why: string) => `reason: ${why}`,
@@ -1080,6 +1138,9 @@ const en: Dict = {
     effective: 'Effective code reviewer for each role',
     effectiveFrom: (source: string) => `from: ${source}`,
     effectiveNone: 'no rule found',
+    effectiveClipped:
+      'The review rule list is clipped: the effective reviewer may come from a rule not shown here.',
+    anyRepo: 'in other repositories',
     ask: 'When you are asked',
     threshold: (n: number) =>
       n >= 11
@@ -1129,6 +1190,8 @@ const en: Dict = {
     attemptsBucket: 'Attempts started and failed per bucket',
     attemptsSummary: (started: number, failed: number, peak: number) =>
       `In the window ${started} attempts started and ${failed} failed; at most ${peak} started in one hour.`,
+    attemptsSummaryBucket: (started: number, failed: number, peak: number) =>
+      `In the window ${started} attempts started and ${failed} failed; at most ${peak} started in one bucket.`,
     gates: 'Checks: passed and failed',
     gatesSummary: (passed: number, failed: number, reused: number) =>
       `In the window ${passed} passed and ${failed} failed; ${reused} counted from earlier evidence (not among the passed).`,
@@ -1165,8 +1228,16 @@ const en: Dict = {
     envFailures: (n: number, window: string) => `Environment failures in ${window}: ${n}.`,
     budgets: 'Budgets',
     budgetingOff: (spent: string) => `No budgets; ${spent} spent in total.`,
-    budgetRow: (scope: string, spent: string, limit: string | undefined, state: string) =>
-      `${scope}: ${spent} spent${limit ? ` of ${limit}` : ''}, ${state}.`,
+    budgetRow: (
+      scope: string,
+      spent: string,
+      limit: string | undefined,
+      state: string,
+      time: string | undefined,
+    ) =>
+      `${scope}: ${spent} spent${limit ? ` of ${limit}` : ''}${time ? `; ${time}` : ''}, ${state}.`,
+    timeOf: (spent: string, limit: string | undefined) =>
+      `time ${spent}${limit ? ` of ${limit}` : ''}`,
     spentTotal: (s: string) => `Spent in total: ${s}.`,
     drift: 'Drift after acceptance',
     driftCounts: (drifted: number, unavailable: number, checked: number) =>

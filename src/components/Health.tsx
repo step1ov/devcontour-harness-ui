@@ -3,7 +3,7 @@
 // harness warnings and versions. "Not checked" is never shown as zero drift.
 
 import { dict, label } from '../model/dict.ts';
-import { formatUsd, formatWindow, usd } from '../model/format.ts';
+import { formatDuration, formatUsd, formatWindow, usd } from '../model/format.ts';
 import { instantMs } from '../model/compat.ts';
 import type { OperatorView } from '../model/view.ts';
 import { Clipped, Heading, WorkRef, clockOf, type ScreenProps } from './common.tsx';
@@ -79,6 +79,12 @@ export function Health({
                   formatUsd(b.spentUsd, lang),
                   b.limitUsd !== undefined ? usd(b.limitUsd) : undefined,
                   label(t.budgetState, b.state),
+                  b.spentMs !== undefined || b.limitMs !== undefined
+                    ? v.timeOf(
+                        b.spentMs !== undefined ? formatDuration(b.spentMs, lang) : t.unknown,
+                        b.limitMs !== undefined ? formatDuration(b.limitMs, lang) : undefined,
+                      )
+                    : undefined,
                 )}
               </li>
             ))}

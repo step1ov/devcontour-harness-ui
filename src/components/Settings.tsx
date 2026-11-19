@@ -37,6 +37,33 @@ export function effectiveCodeReview(
   );
 }
 
+/**
+ * Role and repository pairs to show the effective code reviewer for: each
+ * role binding, plus each repository a code-review rule names, plus "other
+ * repositories" for each role. Display work over the listed rules only.
+ */
+export function reviewPairs(
+  roles: RoleBinding[],
+  rules: ReviewRuleView[],
+): { role: string; repositoryId?: string }[] {
+  const repos = new Set<string>();
+  for (const r of roles) if (r.repositoryId) repos.add(r.repositoryId);
+  for (const r of rules) if (r.kind === 'code' && r.repositoryId) repos.add(r.repositoryId);
+  const out: { role: string; repositoryId?: string }[] = [];
+  const seen = new Set<string>();
+  const add = (role: string, repositoryId?: string) => {
+    const k = role + '\0' + (repositoryId ?? '');
+    if (seen.has(k)) return;
+    seen.add(k);
+    out.push(repositoryId === undefined ? { role } : { role, repositoryId });
+  };
+  for (const role of new Set(roles.map((r) => r.role))) {
+    add(role);
+    for (const repo of [...repos].sort()) add(role, repo);
+  }
+  return out;
+}
+
 export function Settings({ view, lang = 'ru' }: SettingsProps) {
   const t = dict(lang);
   const v = t.settings;
@@ -58,7 +85,18 @@ export function Settings({ view, lang = 'ru' }: SettingsProps) {
     </div>
   );
   const scopeText = (r: ReviewRuleView) =>
-    v.scopeOf(label(v.scope, r.scope), r.role ?? r.repositoryId);
+    v.scopeOf(
+      label(v.scope, r.scope),
+      [r.role, r.repositoryId].filter(Boolean).join(' / ') || undefined,
+    );
+  const badge = (path: string) =>
+    isDefault(path) ? (
+      <span className="hui-badge hui-default" data-testid={`default-${path}`}>
+        {t.byDefault}
+      </span>
+    ) : null;
+  const pairs = reviewPairs(s.roles, s.reviews);
+  const rulesClipped = Boolean(view.truncated?.reviewRules || view.truncated?.roles);
   return (
     <section className="hui hui-settings" aria-labelledby="hui-settings-title" lang={lang}>
       <Heading t={t} level={2} id="hui-settings-title">
@@ -99,11 +137,14 @@ export function Settings({ view, lang = 'ru' }: SettingsProps) {
         <Clipped n={view.truncated?.reviewRules} t={t} />
         <h4 className="hui-minor">{v.effective}</h4>
         <ul className="hui-list" data-testid="settings-effective">
-          {s.roles.map((r, i) => {
+          {pairs.map((r, i) => {
             const rule = effectiveCodeReview(s.reviews, r);
             return (
               <li key={i} className="hui-item">
-                {v.role(r.role, r.repositoryId)}:{' '}
+                {r.repositoryId === undefined && pairs.some((p) => p.repositoryId !== undefined)
+                  ? `${v.role(r.role, undefined)} ${v.anyRepo}`
+                  : v.role(r.role, r.repositoryId)}
+                :{' '}
                 {rule
                   ? `${bindingText(rule.reviewer, t)} (${v.effectiveFrom(scopeText(rule))})`
                   : `${v.effectiveNone} (${t.noData})`}
@@ -111,6 +152,7 @@ export function Settings({ view, lang = 'ru' }: SettingsProps) {
             );
           })}
         </ul>
+        {rulesClipped ? <p className="hui-warn-text">{v.effectiveClipped}</p> : null}
       </div>
 
       <div className="hui-panel" data-testid="settings-ask">
@@ -118,10 +160,19 @@ export function Settings({ view, lang = 'ru' }: SettingsProps) {
           {v.ask}
         </Heading>
         <ul className="hui-list">
-          <li>{v.threshold(th.inputSeverity)}</li>
-          <li>{v.leadMax(th.leadAnswersMaxSeverity)}</li>
-          <li data-testid="settings-technical">{v.technical(th.leadAnswersTechnical === true)}</li>
-          <li>{v.criticalPaths(th.criticalPaths)}</li>
+          <li>
+            {v.threshold(th.inputSeverity)} {badge('thresholds.inputSeverity')}
+          </li>
+          <li>
+            {v.leadMax(th.leadAnswersMaxSeverity)} {badge('thresholds.leadAnswersMaxSeverity')}
+          </li>
+          <li data-testid="settings-technical">
+            {v.technical(th.leadAnswersTechnical === true)}{' '}
+            {badge('thresholds.leadAnswersTechnical')}
+          </li>
+          <li>
+            {v.criticalPaths(th.criticalPaths)} {badge('thresholds.criticalPaths')}
+          </li>
         </ul>
       </div>
 

@@ -93,10 +93,11 @@ const nul =
   (v, path, out) => {
     if (v !== null) c(v, path, out);
   };
+/** An array of at most `max` entries (the harness schema limits, design §3.10). */
 const arr =
-  (c: Check): Check =>
+  (c: Check, max: number): Check =>
   (v, path, out) => {
-    if (!Array.isArray(v)) return void out.push(path);
+    if (!Array.isArray(v) || v.length > max) return void out.push(path);
     v.forEach((x, i) => c(x, `${path}[${i}]`, out));
   };
 const rec =
@@ -121,7 +122,7 @@ const settings = obj({
   approvalMode: S,
   mode: S,
   concurrency: C,
-  roles: arr(obj({ role: S, writer: binding, repositoryId: opt(S) })),
+  roles: arr(obj({ role: S, writer: binding, repositoryId: opt(S) }), 100),
   reviews: arr(
     obj({
       kind: S,
@@ -129,9 +130,10 @@ const settings = obj({
       repositoryId: opt(S),
       role: opt(S),
       reviewer: binding,
-      alternates: arr(binding),
+      alternates: arr(binding, 10),
       vendor: S,
     }),
+    100,
   ),
   thresholds: obj({
     inputSeverity: N,
@@ -144,7 +146,7 @@ const settings = obj({
     reviewRoundCap: N,
     reviewEscalationRounds: N,
   }),
-  budgets: arr(obj({ scope: S, usd: opt(N), timeMs: opt(N) })),
+  budgets: arr(obj({ scope: S, usd: opt(N), timeMs: opt(N) }), 3),
   budgetOnUnknown: opt(S),
   timeouts: obj({
     runTimeoutMs: N,
@@ -153,7 +155,7 @@ const settings = obj({
     stall: obj({ intervalMs: N, quietMs: N, stalledMs: N, action: S }),
   }),
   lean: obj({ state: S }),
-  defaulted: arr(S),
+  defaulted: arr(S, 50),
 });
 const work = obj({
   id: S,
@@ -164,7 +166,7 @@ const work = obj({
     name: S,
     step: opt(S),
     since: opt(I),
-    next: arr(S),
+    next: arr(S, 10),
     needs: opt(obj({ actor: nul(S), action: S })),
     typical: opt(obj({ p50Ms: N, p90Ms: N, samples: N })),
   }),
@@ -182,8 +184,8 @@ const work = obj({
   liveness: opt(S),
   runtime: opt(S),
   model: opt(S),
-  blockers: arr(obj({ code: S, plain: opt(S), actor: nul(S) })),
-  dependsOn: opt(arr(S)),
+  blockers: arr(obj({ code: S, plain: opt(S), actor: nul(S) }), 10),
+  dependsOn: opt(arr(S, 50)),
   target: opt(
     obj({
       repositoryId: S,
@@ -216,8 +218,9 @@ const review = obj({
       disposition: opt(obj({ decision: S, by: S, round: N })),
       title: opt(S),
     }),
+    50,
   ),
-  escalation: opt(obj({ requestId: S, findings: arr(S), answered: B })),
+  escalation: opt(obj({ requestId: S, findings: arr(S, 50), answered: B })),
   line: opt(S),
 });
 const question: Check = (v, path, out) => {
@@ -254,13 +257,14 @@ const overview = obj({
   generatedAt: I,
   source,
   settings,
-  works: arr(work),
-  reviews: arr(review),
-  questions: arr(question),
+  works: arr(work, 500),
+  reviews: arr(review, 50),
+  questions: arr(question, 50),
   escalations: arr(
     obj({ workId: opt(S), subject: opt(S), code: S, actor: S, action: S, since: I }),
+    50,
   ),
-  drift: arr(drift),
+  drift: arr(drift, 50),
   progress: obj({
     total: C,
     byStage: rec(C),
@@ -273,13 +277,13 @@ const overview = obj({
     from: I,
     to: I,
     bucketMs: N,
-    load: arr(N),
-    attemptsStarted: arr(N),
-    attemptsFailed: arr(N),
-    gatesPassed: arr(N),
-    gatesFailed: arr(N),
-    gatesReused: arr(N),
-    spendUsd: arr(N),
+    load: arr(N, 500),
+    attemptsStarted: arr(N, 500),
+    attemptsFailed: arr(N, 500),
+    gatesPassed: arr(N, 500),
+    gatesFailed: arr(N, 500),
+    gatesReused: arr(N, 500),
+    spendUsd: arr(N, 500),
     spendBound: S,
     spendOpeningUsd: bounded,
     budgetUsd: opt(N),
@@ -300,13 +304,14 @@ const overview = obj({
         spentMs: opt(N),
         limitMs: opt(N),
       }),
+      50,
     ),
     spentTotalUsd: bounded,
     drift: obj({ checked: C, drifted: C, unavailable: C }),
-    warnings: arr(obj({ code: S, message: S })),
+    warnings: arr(obj({ code: S, message: S }), 20),
   }),
   activity: opt(
-    arr(obj({ at: I, actor: S, action: S, workId: opt(S), subject: opt(S), plain: S })),
+    arr(obj({ at: I, actor: S, action: S, workId: opt(S), subject: opt(S), plain: S }), 50),
   ),
   decisions: opt(
     arr(
@@ -324,6 +329,7 @@ const overview = obj({
         title: opt(S),
         reason: opt(S),
       }),
+      50,
     ),
   ),
   truncated: opt(rec(C)),
@@ -343,8 +349,9 @@ const detail = obj({
       model: opt(S),
       startedAt: I,
       finishedAt: opt(I),
-      stages: arr(obj({ stage: S, durationMs: opt(N), outcome: opt(S) })),
+      stages: arr(obj({ stage: S, durationMs: opt(N), outcome: opt(S) }), 50),
     }),
+    20,
   ),
   verification: opt(
     arr(
@@ -358,10 +365,11 @@ const detail = obj({
         attempt: opt(N),
         at: opt(I),
       }),
+      50,
     ),
   ),
-  reviews: arr(review),
-  questions: arr(question),
+  reviews: arr(review, 50),
+  questions: arr(question, 50),
   drift: opt(drift),
   truncated: opt(rec(C)),
 });

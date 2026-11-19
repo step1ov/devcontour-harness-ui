@@ -86,8 +86,8 @@ const text = (s: string) => s.replace(/<[^>]+>/g, '');
 test('work detail (RU): now, stages, why a retry, what was checked and how', () => {
   const ru = html(<WorkDetail detail={running} lang="ru" timeZone={TZ} workHref={workHref} />);
   assert.match(
-    ru,
-    /Проверки \(<code>candidate-test:unit<\/code>\) с 11:52, 7 мин 50 с; обычно 5 мин–12 мин\./,
+    text(ru),
+    /Проверки \(candidate-test:unit\) с 11:52, 7 мин 50 с; обычно 5 мин–12 мин\./,
   );
   assert.match(ru, /Дальше: ревью, интеграция\./);
   assert.match(ru, /Подготовка<\/span> <span class="hui-muted">— пройден, 20 с/);
@@ -174,7 +174,7 @@ test('reviews: rounds against the cap, findings with who decided, escalation and
   const ru = html(<Reviews view={view} lang="ru" />);
   assert.match(ru, /раунды 2 из 6/);
   assert.match(ru, /открыто: блокирующих 0, заметок 0/);
-  assert.match(ru, /F2.*принято как ограничение · решил: ведущий, раунд 2/s);
+  assert.match(ru, /F2.*принято как ограничение · кто решил: ведущий, раунд 2/s);
   assert.match(ru, /F1.*закрыто/s);
   assert.match(ru, /Эскалаций и остановок, ждущих решения, нет\./);
   const escalated: OperatorView = {
@@ -288,8 +288,21 @@ test('history: summaries, per-hour regrouping, spend starts at the opening balan
   // Each chart has a data table for screen readers.
   assert.equal(ru.match(/<div class="hui-sr"><table>/g)?.length, 4);
   const c = cumulativeSpend(view.history);
-  assert.equal(c.start, 1.2);
+  // Boundary values: the opening balance at `from`, then the total after each bucket.
+  assert.equal(c.values.length, view.history.spendUsd.length + 1);
   assert.equal(c.values[0], 1.2);
+  assert.equal(c.values[1], 1.2);
+  assert.equal(c.end.bound, 'lower');
+  const unknownAll = cumulativeSpend({
+    ...view.history,
+    spendBound: 'unknown',
+    spendOpeningUsd: { value: 0, bound: 'unknown' },
+  });
+  assert.equal(unknownAll.end.bound, 'unknown');
+  assert.equal(
+    cumulativeSpend({ ...view.history, spendBound: 'future' as never }).end.bound,
+    'unknown',
+  );
   assert.ok(Math.abs(c.values.at(-1)! - 7.5) < 1e-9);
   // The polyline starts at the height of the opening balance, not at zero.
   const first = /points="0,([\d.]+)/.exec(ru)!;
@@ -345,9 +358,12 @@ test('decisions and activity: shown when the view carries them, "no data in this
   assert.match(ru, /Временные \(1\)/);
   assert.match(
     ru,
-    /11:10.*ведущий.*принял ограничение по.*F2, g1.*вернуться: перед|вернуться: before the release/s,
+    /11:10.*замечание принято как ограничение<\/strong> по <code>F2, g1<\/code>.*кто решил: ведущий.*вернуться: before the release/s,
   );
-  assert.match(ru, /ответил на технический вопрос по <code>q-12<\/code>/);
+  assert.match(
+    ru,
+    /ответ на технический вопрос<\/strong> по <code>q-12<\/code>.*кто решил: ведущий/s,
+  );
   const a = html(
     <Activity view={view} lang="ru" timeZone={TZ} filterHref={(f) => JSON.stringify(f)} />,
   );
@@ -503,8 +519,16 @@ test('words with grounds (§5.9): every checked, accepted and blocked element sa
         }
         for (const el of statusElements(page, 'blocked')) {
           counts.blocked++;
-          assert.match(text(el), who[lang], `${name}/${lang} blocked without who: ${text(el)}`);
-          assert.ok(text(el).replace(who[lang], '').trim().length > 0, 'blocked without reason');
+          // Who acts sits in its own span; the reason is the text outside it.
+          const span = /<span class="hui-who">([\s\S]*?)<\/span>/.exec(el);
+          assert.ok(span, `${name}/${lang} blocked without a who span: ${text(el)}`);
+          assert.match(
+            text(span[1]!),
+            who[lang],
+            `${name}/${lang} blocked without who: ${text(el)}`,
+          );
+          const rest = text(el.replace(span[0], '')).replace(/[\s—:;,.()-]+/g, '');
+          assert.ok(rest.length >= 1, `${name}/${lang} blocked without reason: ${text(el)}`);
         }
       }
   assert.ok(
@@ -537,4 +561,142 @@ test('no bare "checked / done / blocked" word, no form, no unknown shown as $0.0
   const h = html(<Health view={unknownSpend} lang="ru" />);
   assert.match(h, /Бюджетов нет; всего потрачено неизвестно\./);
   assert.doesNotMatch(h, /\$0\.00/);
+});
+
+test('review fixes: truncation, pause, plan statuses, counters, time budgets, unknown spend', () => {
+  const clipped: OperatorView = {
+    ...view,
+    questions: [],
+    escalations: [],
+    truncated: { questions: 2, escalations: 1 },
+  };
+  const c = html(<Overview view={clipped} lang="ru" />);
+  assert.doesNotMatch(c, /Вопросов, которые ждут вас, нет/);
+  assert.doesNotMatch(c, /Решений от вас и ведущего сейчас не ждут/);
+  assert.equal(c.match(/неизвестно — список обрезан/g)?.length, 2); // both sections
+  assert.match(c, /ещё 2 не показано/);
+  const paused: OperatorView = {
+    ...view,
+    progress: {
+      ...view.progress,
+      queue: {
+        paused: true,
+        reason: 'budget',
+        detail: 'total budget exceeded',
+        actor: 'operator',
+        action: 'raise the budget',
+      },
+    },
+  };
+  assert.match(
+    text(html(<Overview view={paused} lang="ru" />)),
+    /total budget exceeded — действует: вы — raise the budget/,
+  );
+  const stopped: OperatorView = {
+    ...view,
+    works: view.works.map((w) =>
+      w.id === 'docs-page' ? { ...w, stage: { ...w.stage, name: 'stopped' } } : w,
+    ),
+  };
+  const st = text(html(<Overview view={stopped} lang="ru" workHref={workHref} />));
+  assert.match(
+    st,
+    /Остановлено: just waits for export-csv to be accepted; nothing is needed — никто/,
+  );
+  assert.match(st, /Принято локально; в удалённом репозитории — неизвестно; что проверено/);
+  const quiet: WorkDetailView = {
+    ...accepted,
+    work: {
+      ...accepted.work,
+      attempts: { ...accepted.work.attempts, rechecks: 2, neutral: { used: 1, max: 3 } },
+    },
+  };
+  const q = html(<WorkDetail detail={quiet} lang="ru" />);
+  assert.doesNotMatch(q, /data-testid="why-retry"/);
+  assert.match(q, /Перепроверок: 2\. Нейтральных сбоев: 1 из 3\./);
+  const timeBudget: OperatorView = {
+    ...view,
+    health: {
+      ...view.health,
+      budgets: [
+        {
+          scope: 'total',
+          state: 'exceeded',
+          spentUsd: { value: 0.5, bound: 'exact' },
+          spentMs: 4_000_000,
+          limitMs: 3_600_000,
+        },
+      ],
+    },
+  };
+  assert.match(
+    html(<Health view={timeBudget} lang="ru" />),
+    /общий: потрачено \$0\.50; время 1 ч 06 мин из 1 ч 00 мин, превышен\./,
+  );
+  const allUnknown: OperatorView = {
+    ...view,
+    history: {
+      ...view.history,
+      spendBound: 'unknown',
+      spendOpeningUsd: { value: 0, bound: 'unknown' },
+    },
+  };
+  const hu = html(<History view={allUnknown} lang="ru" />);
+  assert.match(hu, /К концу окна потрачено неизвестно/);
+  assert.doesNotMatch(hu, /≥ \$0\.00/);
+  const detailClipped: WorkDetailView = {
+    ...running,
+    truncated: { questions: 1, reviews: 2, findings: 3, stages: 4, blockers: 5, dependsOn: 6 },
+  };
+  const dc = text(html(<WorkDetail detail={detailClipped} lang="ru" />));
+  for (const [what, n] of [
+    ['Вопросы', 1],
+    ['Ревью', 2],
+    ['Замечания', 3],
+    ['Этапы попыток', 4],
+    ['Причины ожидания', 5],
+    ['Зависимости', 6],
+  ])
+    assert.match(dc, new RegExp(`${what}: ещё ${n} не показано`), String(what));
+});
+
+test('settings: role/repository pairs from review overrides; a clipped rule list is not authoritative', () => {
+  const v2: OperatorView = {
+    ...view,
+    settings: {
+      ...view.settings,
+      reviews: [
+        ...view.settings.reviews,
+        {
+          kind: 'code',
+          scope: 'repository',
+          repositoryId: 'web',
+          reviewer: { runtime: 'r-web' },
+          alternates: [],
+          vendor: 'different-vendor',
+        },
+        {
+          kind: 'code',
+          scope: 'role',
+          role: 'backend',
+          repositoryId: 'api',
+          reviewer: { runtime: 'r-api' },
+          alternates: [],
+          vendor: 'different-vendor',
+        },
+      ],
+    },
+  };
+  const ru = text(html(<Settings view={v2} lang="ru" />));
+  assert.match(ru, /роль backend в репозитории web: r-web \(откуда: для репозитория web\)/);
+  assert.match(ru, /роль backend в репозитории api: r-api \(откуда: для роли backend \/ api\)/);
+  assert.match(ru, /роль backend в остальных репозиториях: codex · example-reviewer/);
+  assert.doesNotMatch(ru, /Список правил ревью обрезан/);
+  const cut = text(html(<Settings view={{ ...v2, truncated: { reviewRules: 3 } }} lang="ru" />));
+  assert.match(cut, /Список правил ревью обрезан/);
+  const empty = read('../tests/contract/harness/empty-state.view.json').data;
+  assert.match(
+    html(<Settings view={empty} lang="ru" />),
+    /data-testid="default-thresholds\.inputSeverity"/,
+  );
 });

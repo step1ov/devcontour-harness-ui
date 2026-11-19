@@ -20,7 +20,9 @@ import { footerSentence, headerSentence } from '../model/i18n.ts';
 import {
   AcceptedLine,
   BlockerLine,
+  Clipped,
   Heading,
+  StageStatus,
   Term,
   WorkRef,
   actorLabel,
@@ -103,6 +105,14 @@ export function Overview({
         >
           {progress.queue.paused ? o.queuePaused(progress.queue.reason ?? '') : o.queueRunning}
         </span>
+        {progress.queue.paused ? (
+          <span data-status="blocked" data-testid="queue-who">
+            {progress.queue.detail ? <span>{progress.queue.detail} — </span> : null}
+            <span className="hui-who">
+              {o.queueWho(actorLabel(t, progress.queue.actor), progress.queue.action ?? '')}
+            </span>
+          </span>
+        ) : null}
         <span className="hui-muted">{o.acceptedOf(progress.done, progress.total)}</span>
       </header>
       <p className="hui-lead" data-testid="sentence">
@@ -120,8 +130,7 @@ export function Overview({
                 key={w.id}
                 className={'hui-plan-step' + (SLOT_STAGES.has(w.stage.name) ? ' hui-current' : '')}
               >
-                <WorkRef id={w.id} {...links} />{' '}
-                <span className="hui-badge">{stageLabel(w.stage.name, lang)}</span>
+                <WorkRef id={w.id} {...links} /> <StageStatus w={w} lang={lang} linkProps={links} />
                 {w.dependsOn?.length ? (
                   <span className="hui-muted"> {o.after(w.dependsOn.join(', '))}</span>
                 ) : null}
@@ -137,7 +146,9 @@ export function Overview({
           {o.needsYou(asking.length)}
         </Heading>
         {asking.length === 0 ? (
-          <p className="hui-muted">{o.noQuestions}</p>
+          <p className="hui-muted">
+            {view.truncated?.questions ? t.header.unknownClipped : o.noQuestions}
+          </p>
         ) : (
           <ul className="hui-list">
             {asking.map((q) => (
@@ -157,6 +168,7 @@ export function Overview({
             ))}
           </ul>
         )}
+        <Clipped n={view.truncated?.questions} t={t} />
         {otherQuestions.length ? (
           <ul className="hui-list hui-secondary" data-testid="other-questions">
             {otherQuestions.map((q) => (
@@ -219,7 +231,9 @@ export function Overview({
           {o.decisions(deciding.length)}
         </Heading>
         {deciding.length === 0 ? (
-          <p className="hui-muted">{o.noDecisions}</p>
+          <p className="hui-muted">
+            {view.truncated?.escalations ? t.header.unknownClipped : o.noDecisions}
+          </p>
         ) : (
           <ul className="hui-list">
             {deciding.map((e, i) => (
@@ -232,6 +246,7 @@ export function Overview({
             ))}
           </ul>
         )}
+        <Clipped n={view.truncated?.escalations} t={t} />
       </div>
 
       <div className="hui-panel" data-testid="waiting">
@@ -251,11 +266,17 @@ export function Overview({
                     w.blockers.map((b, i) => <BlockerLine key={i} b={b} t={t} />)
                   ) : w.stage.needs ? (
                     <li className="hui-item" data-status="blocked">
-                      {o.whoActs(actorLabel(t, w.stage.needs.actor), w.stage.needs.action)}
+                      {w.stage.needs.action} —{' '}
+                      <span className="hui-who">
+                        {w.stage.needs.actor === null
+                          ? t.blocker.nobody
+                          : t.blocker.whoActs(actorLabel(t, w.stage.needs.actor))}
+                      </span>
                     </li>
                   ) : (
                     <li className="hui-item" data-status="blocked">
-                      {t.blocker.stoppedNoReason}
+                      {t.blocker.noReason(w.stage.name)} —{' '}
+                      <span className="hui-who">{t.blocker.whoActs(t.unknown)}</span>
                     </li>
                   )}
                 </ul>

@@ -29,7 +29,7 @@ function DecisionItem({
   return (
     <li className="hui-item" data-testid={`decision-${d.id}`}>
       <span className="hui-muted">{clockOf(d.at, t, timeZone, now)}</span>{' '}
-      <strong>{actorLabel(t, d.by)}</strong> {label(v.kind, d.kind)}
+      <strong>{label(v.kind, d.kind)}</strong>
       {about ? (
         <>
           {' '}
@@ -42,6 +42,8 @@ function DecisionItem({
           (<WorkRef id={d.workId} {...links} />)
         </>
       ) : null}
+      {' · '}
+      <span className="hui-who">{v.by(actorLabel(t, d.by))}</span>
       {d.title ? <div>{d.title}</div> : null}
       <div className="hui-muted">{d.reason ? v.reason(d.reason) : v.reasonMissing}</div>
       {d.temporary ? (

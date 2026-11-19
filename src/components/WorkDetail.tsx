@@ -18,6 +18,8 @@ import {
   AcceptedLine,
   BlockerLine,
   Heading,
+  StageStatus,
+  Term,
   WorkRef,
   actorLabel,
   clockOf,
@@ -121,7 +123,7 @@ export function WorkDetail({
           <code>{work.id}</code>
           {work.title ? <span className="hui-work-title"> {work.title}</span> : null}
         </h2>
-        <span className="hui-badge">{stageLabel(work.stage.name, lang)}</span>
+        <StageStatus w={work} lang={lang} linkProps={links} verificationHref={verificationHref} />
         {work.liveness ? (
           <span className={'hui-badge' + (work.liveness === 'active' ? '' : ' hui-warn')}>
             {label(t.liveness, work.liveness)}
@@ -134,7 +136,7 @@ export function WorkDetail({
           {w.now}
         </Heading>
         <p>
-          {stageLabel(work.stage.name, lang)}
+          <StageStatus w={work} lang={lang} linkProps={links} verificationHref={verificationHref} />
           {work.stage.step ? (
             <>
               {' '}
@@ -155,7 +157,7 @@ export function WorkDetail({
                 formatDuration(work.stage.typical.p90Ms, lang),
               )
             : ''}
-          .{' '}
+          {work.stage.step || work.stage.since || work.stage.typical ? '.' : ''}{' '}
           {work.stage.next.length
             ? w.next(work.stage.next.map((s) => stageLabel(s, lang).toLowerCase()).join(', '))
             : w.nothingNext}
@@ -187,6 +189,10 @@ export function WorkDetail({
             </li>
           ))}
         </ol>
+        {clipped(w.clippedName.stages!, detail.truncated?.stages)}
+        <div className="hui-terms">
+          <Term id="integration" t={t} named />
+        </div>
       </div>
 
       {a.failed > 0 || a.interrupted > 0 || a.lastFailure ? (
@@ -205,10 +211,6 @@ export function WorkDetail({
               w.failureUnknown
             ) : null}
           </p>
-          <p className="hui-muted">
-            {w.rechecks(a.rechecks)} {w.neutral(a.neutral.used, a.neutral.max)}
-            {a.interrupted ? ' ' + w.interrupted(a.interrupted) : ''}
-          </p>
         </div>
       ) : null}
 
@@ -217,6 +219,14 @@ export function WorkDetail({
           {w.attempts}
         </Heading>
         {a.line ? <p className="hui-muted">{a.line}</p> : null}
+        <p data-testid="work-counters">
+          {w.rechecks(a.rechecks)} {w.neutral(a.neutral.used, a.neutral.max)}
+          {a.interrupted ? ' ' + w.interrupted(a.interrupted) : ''}
+        </p>
+        <div className="hui-terms">
+          <Term id="recheck" t={t} named />
+          <Term id="neutral" t={t} named />
+        </div>
         {detail.attempts.length === 0 ? (
           <p className="hui-muted">{w.noAttempts}</p>
         ) : (
@@ -309,6 +319,7 @@ export function WorkDetail({
           ) : (
             <p className="hui-muted">{w.noBlockers}</p>
           )}
+          {clipped(w.clippedName.blockers!, detail.truncated?.blockers)}
         </div>
       </div>
 
@@ -338,6 +349,7 @@ export function WorkDetail({
             ))}
           </ul>
         )}
+        {clipped(w.clippedName.questions!, detail.truncated?.questions)}
       </div>
 
       <div className="hui-panel" data-testid="work-reviews">
@@ -351,6 +363,8 @@ export function WorkDetail({
             <ReviewSubjectCard key={r.kind + ':' + r.subject} r={r} lang={lang} links={links} />
           ))
         )}
+        {clipped(w.clippedName.reviews!, detail.truncated?.reviews)}
+        {clipped(w.clippedName.findings!, detail.truncated?.findings)}
       </div>
 
       <div className="hui-panel" data-testid="work-accepted">
@@ -393,6 +407,7 @@ export function WorkDetail({
           ))}
         </p>
       ) : null}
+      {clipped(w.clippedName.dependsOn!, detail.truncated?.dependsOn)}
     </section>
   );
 }

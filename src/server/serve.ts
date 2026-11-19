@@ -18,6 +18,10 @@ export const LOOPBACK_HOSTS = ['127.0.0.1', '::1', 'localhost'] as const;
 export const DEFAULT_PORT = 4790;
 /** How many consecutive ports the probe tries when no port was given. */
 export const PORT_PROBE_SPAN = 20;
+/** Harness processes the live route runs at once; more requests queue. */
+export const MAX_RUNS = 4;
+/** Requests queued behind the running ones; beyond that a request gets 503 at once. */
+export const MAX_WAITING = 16;
 
 export interface ServeOptions {
   /** File with an operator view JSON; re-read on every request. */
@@ -47,6 +51,8 @@ export interface ServeOptions {
   /** Directory of the built app (dist/app); missing = a plain fallback page. */
   appDir: string;
   host?: string;
+  /** Interface language of the CLI (`--lang` or the system locale), reported by /api/health. */
+  lang?: 'ru' | 'en';
   /** Explicit port: used as is, busy = error. Absent: probe from DEFAULT_PORT. */
   port?: number;
   version: string;
@@ -233,11 +239,32 @@ export async function startServer(options: ServeOptions): Promise<RunningServer>
   const live = options.harness;
   // One `harness view` run per language at a time; later requests share it.
   const inFlight = new Map<string, Promise<HarnessViewResult>>();
+  // At most MAX_RUNS harness processes at once and MAX_WAITING queued behind
+  // them: distinct work ids cannot fan out into unbounded processes.
+  let running = 0;
+  const waiting: (() => void)[] = [];
+  const limited = (run: () => Promise<HarnessViewResult>): Promise<HarnessViewResult> => {
+    if (running >= MAX_RUNS && waiting.length >= MAX_WAITING)
+      return Promise.resolve({
+        ok: false,
+        code: 'VIEW_UNAVAILABLE',
+        message: 'The panel is busy with other harness runs; try again shortly.',
+      });
+    const start = () => {
+      running++;
+      return run().finally(() => {
+        running--;
+        waiting.shift()?.();
+      });
+    };
+    if (running < MAX_RUNS) return start();
+    return new Promise((ok) => waiting.push(() => void start().then(ok)));
+  };
   const liveView = (lang: 'ru' | 'en', workId?: string) => {
     const key = (live!.lang ? lang : '') + (workId !== undefined ? '\0' + workId : '');
     let p = inFlight.get(key);
     if (!p) {
-      p = harnessView(live!, live!.lang ? lang : undefined, workId).finally(() =>
+      p = limited(() => harnessView(live!, live!.lang ? lang : undefined, workId)).finally(() =>
         inFlight.delete(key),
       );
       inFlight.set(key, p);
@@ -319,7 +346,12 @@ export async function startServer(options: ServeOptions): Promise<RunningServer>
       return send(
         res,
         200,
-        JSON.stringify({ ok: true, version: options.version, readOnly: true }),
+        JSON.stringify({
+          ok: true,
+          version: options.version,
+          readOnly: true,
+          ...(options.lang ? { lang: options.lang } : {}),
+        }),
         types['.json']!,
       );
     }

@@ -63,6 +63,7 @@
 }
 
 .hui {
+  overflow-wrap: anywhere;
   font-family: var(--hui-font);
   color: var(--hui-text);
   background: var(--hui-bg);
@@ -468,4 +469,17 @@
     transition: none !important;
     scroll-behavior: auto !important;
   }
+}
+
+.hui-header > *,
+.hui-row > * {
+  min-width: 0;
+  max-width: 100%;
+}
+.hui-badge {
+  max-width: 100%;
+}
+.app-detail {
+  display: block;
+  font-size: 0.85rem;
 }

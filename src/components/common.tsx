@@ -170,3 +170,68 @@ export function AcceptedLine({
 export function Clipped({ n, t }: { n: number | undefined; t: Dict }) {
   return n ? <p className="hui-muted hui-clipped">{t.listClipped(n)}</p> : null;
 }
+
+/**
+ * A stage badge that keeps the wording rules: an accepted stage says where
+ * the result is and links to its checks; a stopped or waiting-on-conditions
+ * stage says why and who acts. Other stages are a plain badge.
+ */
+export function StageStatus({
+  w,
+  lang,
+  linkProps,
+  verificationHref,
+}: {
+  w: Pick<WorkView, 'id' | 'stage' | 'blockers' | 'target'>;
+  lang: Lang;
+  linkProps: Pick<ScreenProps, 'onOpenWork' | 'workHref'>;
+  verificationHref?: string;
+}) {
+  const t = dict(lang);
+  const name = w.stage.name;
+  const text = label(t.stage, name);
+  if (name === 'done') {
+    const remote = w.target
+      ? Object.hasOwn(t.target.short, w.target.remote.state)
+        ? t.target.short[w.target.remote.state]!
+        : t.target.shortUnknown
+      : t.target.shortUnknown;
+    return (
+      <span className="hui-badge hui-status" data-status="accepted">
+        {text}; {remote};{' '}
+        {verificationHref ? (
+          <a className="hui-link" href={verificationHref}>
+            {t.target.seeChecks}
+          </a>
+        ) : (
+          <WorkRef id={w.id} suffix="#verification" {...linkProps}>
+            {t.target.seeChecks}
+          </WorkRef>
+        )}
+      </span>
+    );
+  }
+  if (name === 'stopped' || name === 'blocked') {
+    const b = w.blockers[0];
+    const reason = b
+      ? b.plain && b.plain.trim()
+        ? b.plain
+        : t.blocker.noReason(b.code)
+      : w.stage.needs
+        ? w.stage.needs.action
+        : t.blocker.stoppedNoReason;
+    const actor = b ? b.actor : w.stage.needs ? w.stage.needs.actor : undefined;
+    const who =
+      actor === null
+        ? t.blocker.nobody
+        : actor === undefined
+          ? t.blocker.whoActs(t.unknown)
+          : t.blocker.whoActs(actorLabel(t, actor));
+    return (
+      <span className="hui-badge hui-status hui-warn" data-status="blocked">
+        {text}: {reason} — <span className="hui-who">{who}</span>
+      </span>
+    );
+  }
+  return <span className="hui-badge">{text}</span>;
+}

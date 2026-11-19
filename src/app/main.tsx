@@ -15,6 +15,9 @@ import { WorkDetail } from '../components/WorkDetail.tsx';
 import {
   dict,
   httpViewSource,
+  type Dict,
+  type Lang,
+  type ViewSource,
   pickLang,
   questionStatus,
   type OperatorView,
@@ -26,16 +29,12 @@ import '../components/styles.css';
 import './app.css';
 
 const POLL_MS = 5000;
-// `?lang=ru|en` wins; an empty or unknown value falls back to the browser locale.
-const lang = pickLang(new URLSearchParams(window.location.search).get('lang'), [
-  ...(navigator.languages ?? []),
-  navigator.language,
-]);
-const t = dict(lang);
-document.documentElement.lang = lang;
-// The UI language goes to the view source too: the harness writes the plain
-// strings (`plain`, `line`, warnings) in it (`harness view --lang`).
-const source = httpViewSource(new URL('./', window.location.href).toString(), fetch, { lang });
+// Set once at boot (see the end of the file): the language, its dictionary and the source.
+let lang: Lang = 'ru';
+let t: Dict = dict(lang);
+let source: ViewSource;
+let uiVersion: string | undefined;
+const mobile = () => window.matchMedia('(max-width: 639px)').matches;
 
 function useRoute(): Route {
   const [route, setRoute] = useState(() => parseRoute(window.location.hash));
@@ -47,22 +46,34 @@ function useRoute(): Route {
   return route;
 }
 
-/** Polls `load` every 5 s while the tab is visible; keeps the last result on a transport error. */
-function usePoll<T>(load: () => Promise<T>, key: string) {
+type Checked = { ok: true } | { ok: false; code: string; message: string };
+
+/**
+ * Polls `load` every 5 s while the tab is visible. A transport error, or a
+ * temporary `VIEW_UNAVAILABLE` after a good document, keeps the last good
+ * document on screen with a "connection lost" banner (design §5.9).
+ */
+function usePoll<T extends Checked>(load: () => Promise<T>, key: string) {
   const [value, setValue] = useState<T | undefined>();
   const [error, setError] = useState<string | undefined>();
+  const last = useRef<T | undefined>(undefined);
   useEffect(() => {
     setValue(undefined);
     setError(undefined);
+    last.current = undefined;
     let stopped = false;
     const tick = async () => {
       if (document.hidden) return;
       try {
         const next = await load();
-        if (!stopped) {
-          setValue(next);
-          setError(undefined);
+        if (stopped) return;
+        if (!next.ok && next.code === 'VIEW_UNAVAILABLE' && last.current?.ok) {
+          setError(next.message);
+          return;
         }
+        last.current = next;
+        setValue(next);
+        setError(undefined);
       } catch (err) {
         if (!stopped) setError((err as Error).message);
       }
@@ -115,9 +126,20 @@ function Nav({ route }: { route: Route }) {
   );
 }
 
-const isEmpty = (v: OperatorView) =>
-  v.health.warnings.some((w) => w.code === 'STATE_NOT_FOUND') ||
-  (v.progress.total === 0 && v.works.length === 0);
+// Only the producer's own signal: a state without work orders is not a missing state.
+const isEmpty = (v: OperatorView) => v.health.warnings.some((w) => w.code === 'STATE_NOT_FOUND');
+
+/** A refusal in the panel's words, with the server's message as a detail. */
+function Refusal({ head, r }: { head: string; r: { code: string; message: string } }) {
+  return (
+    <p className="app-note app-bad">
+      {head} {Object.hasOwn(t.app.refusal, r.code) ? t.app.refusal[r.code] : r.code}{' '}
+      <span className="app-detail">
+        {t.app.details} <code>{r.message}</code>
+      </span>
+    </p>
+  );
+}
 
 function Note({ bad, children }: { bad?: boolean; children: ReactNode }) {
   return <p className={'app-note' + (bad ? ' app-bad' : '')}>{children}</p>;
@@ -126,7 +148,12 @@ function Note({ bad, children }: { bad?: boolean; children: ReactNode }) {
 function WorkScreen({ id, anchor }: { id: string; anchor: string | undefined }) {
   const { value, error } = usePoll<WorkDetailCheck>(() => source.loadWork!(id), 'work:' + id);
   useEffect(() => {
-    if (value?.ok && anchor) document.getElementById(anchor)?.scrollIntoView();
+    // The clicked link is gone after navigation: move focus to the target, not just the view.
+    const el = value?.ok && anchor ? document.getElementById(anchor) : null;
+    if (!el) return;
+    el.setAttribute('tabindex', '-1');
+    el.scrollIntoView();
+    el.focus({ preventScroll: true });
   }, [value?.ok, anchor]);
   return (
     <>
@@ -138,9 +165,7 @@ function WorkScreen({ id, anchor }: { id: string; anchor: string | undefined }) 
       {!value ? (
         <Note bad={Boolean(error)}>{error ? t.app.connectionLost(error) : t.app.loadingWork}</Note>
       ) : !value.ok ? (
-        <Note bad>
-          {t.work.detailUnavailable} {value.message}
-        </Note>
+        <Refusal head={t.work.detailUnavailable} r={value} />
       ) : (
         <>
           {error ? <Note bad>{t.app.connectionLost(error)}</Note> : null}
@@ -155,17 +180,8 @@ function WorkScreen({ id, anchor }: { id: string; anchor: string | undefined }) 
 function App() {
   const route = useRoute();
   const { value: check, error } = usePoll<ViewCheck>(() => source.load(), 'view');
-  const [uiVersion, setUiVersion] = useState<string | undefined>();
   const main = useRef<HTMLElement>(null);
   const first = useRef(true);
-  useEffect(() => {
-    fetch(new URL('./api/health', window.location.href))
-      .then((r) => r.json())
-      .then((h: { version?: unknown }) => {
-        if (typeof h.version === 'string') setUiVersion(h.version);
-      })
-      .catch(() => undefined);
-  }, []);
   useEffect(() => {
     const name =
       route.screen === 'work'
@@ -183,12 +199,7 @@ function App() {
   if (route.screen === 'work') body = <WorkScreen id={route.workId!} anchor={route.anchor} />;
   else if (!check)
     body = <Note bad={Boolean(error)}>{error ? t.app.connectionLost(error) : t.app.loading}</Note>;
-  else if (!check.ok)
-    body = (
-      <Note bad>
-        {t.app.incompatible} {check.message}
-      </Note>
-    );
+  else if (!check.ok) body = <Refusal head={t.app.incompatible} r={check} />;
   else {
     const view = check.view;
     const common = { view, lang, now: Date.now(), workHref: workHash };
@@ -196,7 +207,7 @@ function App() {
       route.screen === 'overview' ? (
         <Overview {...common} />
       ) : route.screen === 'reviews' ? (
-        <Reviews {...common} />
+        <Reviews {...common} collapseFindings={mobile()} />
       ) : route.screen === 'decisions' ? (
         <Decisions {...common} />
       ) : route.screen === 'activity' ? (
@@ -211,6 +222,7 @@ function App() {
         <Note bad>{t.app.notFound}</Note>
       );
     const waiting = view.questions.filter((q) => questionStatus(q).needsAnswer).length;
+    const clipped = Boolean(view.truncated?.questions);
     body = (
       <>
         {error ? <Note bad>{t.app.connectionLost(error)}</Note> : null}
@@ -221,7 +233,7 @@ function App() {
           </Note>
         ) : null}
         <p className="hui-sr" aria-live="polite">
-          {t.app.liveQuestions(waiting)}
+          {t.app.liveQuestions(waiting, clipped)}
         </p>
         {screen}
       </>
@@ -247,8 +259,35 @@ function App() {
   );
 }
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-);
+/**
+ * Language: `?lang=ru|en` wins; then the CLI's `--lang` (or its system
+ * locale), which `/api/health` reports; then the browser locale (design §6).
+ */
+async function boot() {
+  const param = new URLSearchParams(window.location.search).get('lang');
+  let served: string | undefined;
+  try {
+    const h = (await (await fetch(new URL('./api/health', window.location.href))).json()) as {
+      version?: unknown;
+      lang?: unknown;
+    };
+    if (typeof h.version === 'string') uiVersion = h.version;
+    if (typeof h.lang === 'string') served = h.lang;
+  } catch {
+    // No health route (a host page): the browser locale decides.
+  }
+  const asked = param === 'ru' || param === 'en' ? param : served;
+  lang = pickLang(asked, [...(navigator.languages ?? []), navigator.language]);
+  t = dict(lang);
+  document.documentElement.lang = lang;
+  // The UI language goes to the view source too: the harness writes the plain
+  // strings (`plain`, `line`, warnings) in it (`harness view --lang`).
+  source = httpViewSource(new URL('./', window.location.href).toString(), fetch, { lang });
+  createRoot(document.getElementById('root')!).render(
+    <StrictMode>
+      <App />
+    </StrictMode>,
+  );
+}
+
+void boot();

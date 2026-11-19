@@ -19,7 +19,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: `node dist/lib/cli.js --demo --port ${PORT}`,
+    command: `node dist/lib/cli.js --demo --lang ru --port ${PORT}`,
     url: `http://127.0.0.1:${PORT}/api/health`,
     reuseExistingServer: false,
     stdout: 'ignore',

@@ -418,3 +418,26 @@ test('live route: the work detail shares the view deadline against a hanging har
     fake.remove();
   }
 });
+
+test('live route: distinct work ids never run more than MAX_RUNS harness processes at once', async () => {
+  const { MAX_RUNS, MAX_WAITING } = await import('../src/server/serve.ts');
+  const fake = fakeHarness({ view: true, lang: true, hang: true });
+  const s = await startServer({
+    harness: { bin: fake.bin, state: '/s', lang: true, defaultLang: 'en', timeoutMs: 400 },
+    appDir,
+    version: 'test',
+  });
+  try {
+    const n = MAX_RUNS + MAX_WAITING + 3;
+    const results = await Promise.all(
+      Array.from({ length: n }, (_, i) => get(s.url + 'api/work/w' + i)),
+    );
+    const bodies = results.map((r) => JSON.parse(r.body).error.message as string);
+    // The overflow is refused at once; the rest time out in waves of MAX_RUNS.
+    assert.equal(bodies.filter((m) => /busy/.test(m)).length, 3);
+    assert.equal(bodies.filter((m) => /timed out/.test(m)).length, MAX_RUNS + MAX_WAITING);
+  } finally {
+    await s.close();
+    fake.remove();
+  }
+});

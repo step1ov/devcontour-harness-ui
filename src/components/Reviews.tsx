@@ -10,6 +10,8 @@ import { Clipped, Heading, WorkRef, actorLabel, clockOf, type ScreenProps } from
 
 export interface ReviewsProps extends ScreenProps {
   view: OperatorView;
+  /** Findings start collapsed (narrow screens, design §5.3). */
+  collapseFindings?: boolean;
 }
 
 const bindingText = (b: { runtime: string; model?: string } | undefined, t: Dict) =>
@@ -20,10 +22,12 @@ export function ReviewSubjectCard({
   r,
   lang,
   links,
+  collapsed,
 }: {
   r: ReviewSubjectView;
   lang: Lang;
   links: Pick<ScreenProps, 'onOpenWork' | 'workHref'>;
+  collapsed?: boolean;
 }) {
   const t = dict(lang);
   const v = t.reviews;
@@ -50,7 +54,7 @@ export function ReviewSubjectCard({
           {formatUsd(r.spend.usd, lang)} · {t.calls(r.spend.calls)}
         </li>
       </ul>
-      <details className="hui-findings" open>
+      <details className="hui-findings" open={!collapsed}>
         <summary>{v.findings(r.findings.length)}</summary>
         {r.findings.length === 0 ? (
           <p className="hui-muted">{v.noFindings}</p>
@@ -116,7 +120,15 @@ export function EscalationList({
   );
 }
 
-export function Reviews({ view, lang = 'ru', onOpenWork, workHref, timeZone, now }: ReviewsProps) {
+export function Reviews({
+  view,
+  lang = 'ru',
+  onOpenWork,
+  workHref,
+  timeZone,
+  now,
+  collapseFindings,
+}: ReviewsProps) {
   const t = dict(lang);
   const v = t.reviews;
   const links = { onOpenWork, workHref };
@@ -169,7 +181,13 @@ export function Reviews({ view, lang = 'ru', onOpenWork, workHref, timeZone, now
             </tbody>
           </table>
           {view.reviews.map((r) => (
-            <ReviewSubjectCard key={r.kind + ':' + r.subject} r={r} lang={lang} links={links} />
+            <ReviewSubjectCard
+              key={r.kind + ':' + r.subject}
+              r={r}
+              lang={lang}
+              links={links}
+              collapsed={Boolean(collapseFindings)}
+            />
           ))}
         </>
       )}
