@@ -7,6 +7,7 @@ import { readFile, realpath, stat } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { extname, join, resolve, sep } from 'node:path';
 import { checkView, checkWorkDetail } from '../model/compat.ts';
+import { liveHub, MAX_STREAMS, type WatchSpec } from './live.ts';
 import {
   harnessView,
   stopHarnessRuns,
@@ -22,6 +23,15 @@ export const PORT_PROBE_SPAN = 20;
 export const MAX_RUNS = 4;
 /** Requests queued behind the running ones; beyond that a request gets 503 at once. */
 export const MAX_WAITING = 16;
+
+/** Live route: first re-check interval while a page is connected; doubles while nothing changes. */
+export const LIVE_MIN_MS = 2_000;
+/** Backoff ceiling of the live route while no work runs. */
+export const LIVE_MAX_MS = 15_000;
+/** Ceiling while work runs: leases and liveness change without a store write (design §3.10). */
+export const LIVE_ACTIVE_MAX_MS = 5_000;
+/** A request within this time after a watch check reuses its result instead of running harness again. */
+export const RECENT_MS = 1_500;
 
 export interface ServeOptions {
   /** File with an operator view JSON; re-read on every request. */
@@ -53,6 +63,8 @@ export interface ServeOptions {
   host?: string;
   /** Interface language of the CLI (`--lang` or the system locale), reported by /api/health. */
   lang?: 'ru' | 'en';
+  /** Live update intervals (tests shorten them); defaults: LIVE_MIN_MS, LIVE_MAX_MS, LIVE_ACTIVE_MAX_MS. */
+  liveIntervals?: { minMs: number; maxMs: number; activeMaxMs: number };
   /** Explicit port: used as is, busy = error. Absent: probe from DEFAULT_PORT. */
   port?: number;
   version: string;
@@ -62,6 +74,8 @@ export interface RunningServer {
   url: string;
   host: string;
   port: number;
+  /** Open live streams and the work they caused (tests, measurements). */
+  live(): { watches: number; streams: number; checks: number; hints: number };
   close(): Promise<void>;
 }
 
@@ -143,28 +157,105 @@ type Gate = (v: unknown) => { ok: true } | { ok: false; code: string; message: s
 const viewGate: Gate = checkView;
 const detailGate: Gate = checkWorkDetail;
 
+type FileRead =
+  | { ok: true; view: unknown; bytes: Buffer }
+  | { ok: false; status: number; code: string; message: string };
+
+async function readViewFile(file: string): Promise<FileRead> {
+  let bytes: Buffer;
+  try {
+    bytes = await readFile(file);
+  } catch {
+    return {
+      ok: false,
+      status: 503,
+      code: 'VIEW_UNAVAILABLE',
+      message: 'View file is not readable yet.',
+    };
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(bytes.toString('utf8'));
+  } catch {
+    return { ok: false, status: 502, code: 'NOT_A_VIEW', message: 'View file is not JSON.' };
+  }
+  if (typeof parsed === 'object' && parsed !== null && (parsed as { ok?: unknown }).ok === false) {
+    return {
+      ok: false,
+      status: 502,
+      code: 'NOT_A_VIEW',
+      message: 'View file holds a harness error envelope.',
+    };
+  }
+  return { ok: true, view: unwrapView(parsed), bytes };
+}
+
 async function serveViewFile(
   req: IncomingMessage,
   res: ServerResponse,
   file: string,
   gate: Gate = viewGate,
 ) {
-  let bytes: Buffer;
-  try {
-    bytes = await readFile(file);
-  } catch {
-    return jsonError(res, 503, 'VIEW_UNAVAILABLE', 'View file is not readable yet.');
-  }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(bytes.toString('utf8'));
-  } catch {
-    return jsonError(res, 502, 'NOT_A_VIEW', 'View file is not JSON.');
-  }
-  if (typeof parsed === 'object' && parsed !== null && (parsed as { ok?: unknown }).ok === false) {
-    return jsonError(res, 502, 'NOT_A_VIEW', 'View file holds a harness error envelope.');
-  }
-  return sendView(req, res, unwrapView(parsed), gate);
+  const r = await readViewFile(file);
+  if (!r.ok) return jsonError(res, r.status, r.code, r.message);
+  return sendView(req, res, r.view, gate);
+}
+
+const hashOf = (b: Buffer | string) => createHash('sha256').update(b).digest('hex');
+
+/**
+ * Change digest of a document for the live stream. The harness `source.token`
+ * cannot serve: harness 0.1.0-alpha.55 hashes the history window too, and
+ * the window ends at the projection clock, so the token differs on every run
+ * of an unchanged state. The digest hashes the document without the clock
+ * fields — `generatedAt`, `source.token`, `history.from`, `history.to` —
+ * so it changes exactly when something the screens show changes (counts,
+ * stages, buckets crossing a boundary). Clock-relative fields the harness
+ * computes (ages, elapsed times) do change it: the screens show them.
+ */
+export function digestOf(view: unknown): string {
+  const strip = (v: unknown): unknown => {
+    if (typeof v !== 'object' || v === null || Array.isArray(v)) return v;
+    const o = { ...(v as Record<string, unknown>) };
+    delete o.generatedAt;
+    if (typeof o.source === 'object' && o.source !== null && !Array.isArray(o.source)) {
+      const source = { ...(o.source as Record<string, unknown>) };
+      delete source.token;
+      o.source = source;
+    }
+    if (typeof o.history === 'object' && o.history !== null && !Array.isArray(o.history)) {
+      const history = { ...(o.history as Record<string, unknown>) };
+      delete history.from;
+      delete history.to;
+      o.history = history;
+    }
+    return o;
+  };
+  return hashOf(JSON.stringify(strip(view)));
+}
+
+/** The document shows running work: re-check at least every LIVE_ACTIVE_MAX_MS. */
+function activeWork(view: unknown): boolean {
+  const v = view as {
+    progress?: { running?: unknown };
+    attempts?: { finishedAt?: unknown }[];
+  } | null;
+  if (typeof v?.progress?.running === 'number') return v.progress.running > 0;
+  const a = Array.isArray(v?.attempts) ? v.attempts[0] : undefined;
+  return a !== undefined && a !== null && typeof a === 'object' && a.finishedAt === undefined;
+}
+
+/** Cheap change signature of paths: mtime, size and inode; a missing path is `-`. */
+async function signature(paths: string[]): Promise<string> {
+  const parts = await Promise.all(
+    paths.map((p) =>
+      stat(p).then(
+        (s) => `${s.mtimeMs}:${s.size}:${s.ino}`,
+        () => '-',
+      ),
+    ),
+  );
+  return parts.join('|');
 }
 
 function sendView(req: IncomingMessage, res: ServerResponse, view: unknown, gate: Gate = viewGate) {
@@ -172,7 +263,7 @@ function sendView(req: IncomingMessage, res: ServerResponse, view: unknown, gate
   if (!check.ok) return jsonError(res, 409, check.code, check.message);
   // The ETag is derived from the content, never from a store counter.
   const body = Buffer.from(JSON.stringify(view));
-  const etag = '"' + createHash('sha256').update(body).digest('hex').slice(0, 32) + '"';
+  const etag = '"' + hashOf(body).slice(0, 32) + '"';
   const headers = { etag, 'cache-control': 'no-store' };
   if (req.headers['if-none-match'] === etag) return send(res, 304, '', types['.json']!, headers);
   return send(res, 200, body, types['.json']!, headers);
@@ -260,17 +351,66 @@ export async function startServer(options: ServeOptions): Promise<RunningServer>
     if (running < MAX_RUNS) return start();
     return new Promise((ok) => waiting.push(() => void start().then(ok)));
   };
-  const liveView = (lang: 'ru' | 'en', workId?: string) => {
-    const key = (live!.lang ? lang : '') + (workId !== undefined ? '\0' + workId : '');
+  // The last result of each live document, so that the page's GET right after
+  // a pushed change does not run harness a second time.
+  const recent = new Map<string, { at: number; result: HarnessViewResult }>();
+  const liveKey = (lang: 'ru' | 'en', workId?: string) =>
+    (live!.lang ? lang : '') + (workId !== undefined ? '\0' + workId : '');
+  const liveView = (lang: 'ru' | 'en', workId?: string, reuse = false) => {
+    const key = liveKey(lang, workId);
+    const r = recent.get(key);
+    if (reuse && r && r.result.ok && Date.now() - r.at < RECENT_MS)
+      return Promise.resolve(r.result);
     let p = inFlight.get(key);
     if (!p) {
-      p = limited(() => harnessView(live!, live!.lang ? lang : undefined, workId)).finally(() =>
-        inFlight.delete(key),
-      );
+      p = limited(() => harnessView(live!, live!.lang ? lang : undefined, workId))
+        .then((result) => {
+          recent.set(key, { at: Date.now(), result });
+          return result;
+        })
+        .finally(() => inFlight.delete(key));
       inFlight.set(key, p);
     }
     return p;
   };
+  const hub = liveHub();
+  const intervals = options.liveIntervals ?? {
+    minMs: LIVE_MIN_MS,
+    maxMs: LIVE_MAX_MS,
+    activeMaxMs: LIVE_ACTIVE_MAX_MS,
+  };
+  const liveSpec = (lang: 'ru' | 'en', workId?: string): WatchSpec => ({
+    check: async () => {
+      const r = await liveView(lang, workId);
+      const checkedAt = new Date().toISOString();
+      if (!r.ok) return { ok: false, code: r.code, message: r.message, checkedAt };
+      return { ok: true, token: digestOf(r.view), checkedAt, activeWork: activeWork(r.view) };
+    },
+    hint: () =>
+      signature([
+        live!.state,
+        join(live!.state, 'state.sqlite'),
+        join(live!.state, 'state.sqlite-wal'),
+        ...(live!.policy !== undefined ? [live!.policy] : []),
+      ]),
+    ...intervals,
+    fresh: true,
+  });
+  const fileSpec = (file: string, gate: Gate): WatchSpec => ({
+    check: async () => {
+      const checkedAt = new Date().toISOString();
+      const r = await readViewFile(file);
+      if (!r.ok) return { ...r, checkedAt };
+      // An incompatible document still gets a token: the page then reads the refusal.
+      return {
+        ok: true,
+        token: gate(r.view).ok ? digestOf(r.view) : 'refused:' + hashOf(r.bytes),
+        checkedAt,
+      };
+    },
+    hint: () => signature([file]),
+    fresh: false,
+  });
   /** The file view for a request: the localized files of `?lang=`, else the defaults. */
   const fileSource = (params: URLSearchParams) => {
     const asked = params.get('lang');
@@ -317,7 +457,7 @@ export async function startServer(options: ServeOptions): Promise<RunningServer>
       if (live) {
         const asked = params.get('lang');
         const lang = asked === 'ru' || asked === 'en' ? asked : live.defaultLang;
-        const r = await liveView(lang, workId);
+        const r = await liveView(lang, workId, true);
         return r.ok
           ? sendView(req, res, r.view, detailGate)
           : jsonError(res, 503, r.code, r.message);
@@ -333,11 +473,59 @@ export async function startServer(options: ServeOptions): Promise<RunningServer>
         );
       return serveViewFile(req, res, file, detailGate);
     }
+    if (pathname === '/api/events') {
+      const asked = params.get('lang');
+      const lang = asked === 'ru' || asked === 'en' ? asked : (live?.defaultLang ?? 'en');
+      const work = params.has('work') ? (params.get('work') ?? '') : undefined;
+      if (work !== undefined && !WORK_ID.test(work))
+        return jsonError(res, 404, 'VIEW_UNAVAILABLE', 'There is no such work order id.');
+      let key: string;
+      let spec: () => WatchSpec;
+      if (live) {
+        key = 'live\0' + liveKey(lang, work);
+        spec = () => liveSpec(lang, work);
+      } else {
+        const src = fileSource(params);
+        const file =
+          work === undefined
+            ? src.viewFile
+            : src.workFiles && Object.hasOwn(src.workFiles, work)
+              ? src.workFiles[work]
+              : undefined;
+        if (!file)
+          return jsonError(
+            res,
+            503,
+            'VIEW_UNAVAILABLE',
+            `No work detail for ${work} in this file view.`,
+          );
+        key = 'file\0' + (work === undefined ? 'view' : 'work') + '\0' + file;
+        spec = () => fileSpec(file, work === undefined ? viewGate : detailGate);
+      }
+      if (hub.stats().streams >= MAX_STREAMS)
+        return jsonError(
+          res,
+          503,
+          'VIEW_UNAVAILABLE',
+          'Too many open live streams; the page polls instead.',
+        );
+      res.writeHead(200, {
+        ...securityHeaders,
+        'content-type': 'text/event-stream; charset=utf-8',
+        'cache-control': 'no-store',
+        connection: 'keep-alive',
+      });
+      if (req.method === 'HEAD') return void res.end();
+      // The page retries a lost stream itself (it falls back to polling first).
+      res.write('retry: 5000\n\n');
+      hub.attach(res, key, spec);
+      return;
+    }
     if (pathname === '/api/view') {
       if (live) {
         const asked = params.get('lang');
         const lang = asked === 'ru' || asked === 'en' ? asked : live.defaultLang;
-        const r = await liveView(lang);
+        const r = await liveView(lang, undefined, true);
         return r.ok ? sendView(req, res, r.view) : jsonError(res, 503, r.code, r.message);
       }
       return serveViewFile(req, res, fileSource(params).viewFile!);
@@ -350,6 +538,8 @@ export async function startServer(options: ServeOptions): Promise<RunningServer>
           ok: true,
           version: options.version,
           readOnly: true,
+          // What /api/events watches: a live `harness view` or a file.
+          live: live ? 'state' : 'file',
           ...(options.lang ? { lang: options.lang } : {}),
         }),
         types['.json']!,
@@ -369,8 +559,10 @@ export async function startServer(options: ServeOptions): Promise<RunningServer>
         url: `http://${shown}:${port}/`,
         host,
         port,
+        live: () => hub.stats(),
         close: () =>
           new Promise((ok) => {
+            hub.close();
             // Running `harness view` processes end with the panel.
             const runs = live ? stopHarnessRuns() : Promise.resolve();
             server.close(() => void runs.then(() => ok()));

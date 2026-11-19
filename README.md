@@ -44,15 +44,20 @@ npx devcontour-harness-ui --demo --lang ru      # демонстрационны
 ```
 
 Откройте напечатанный URL. Чтобы показать настоящий проект, панель сама
-вызывает установленный harness на каждый запрос и передаёт язык
-интерфейса:
+вызывает установленный harness и передаёт язык интерфейса. Открытая
+страница обновляется сама: пока она открыта, панель замечает изменения
+каталога состояния и перепроверяет `harness view` (2–15 с, не реже 5 с,
+пока идут попытки) и присылает изменения по SSE; без открытой страницы и
+при скрытой вкладке harness не запускается. Над экраном — строка «Данные на
+HH:MM» и предупреждение, если обновить данные не удалось:
 
 ```sh
 npx devcontour-harness-ui --state <state> --policy .harness/policy.json \
   --harness node_modules/.bin/harness
 ```
 
-Или запишите снимок и раздайте файл (деталей работ у снимка нет):
+Или запишите снимок и раздайте файл (деталей работ у снимка нет); при
+перезаписи файла открытая страница обновится:
 
 ```sh
 npx harness view --state <state> --policy .harness/policy.json > view.json   # конверт тоже принимается
@@ -73,6 +78,11 @@ npx devcontour-harness-ui --view view.json
 - `--host`, только loopback: `127.0.0.1`, `::1` или `localhost`. Всё
   остальное отклоняется.
 - `--lang ru|en` — язык, когда страница не запросила свой (`?lang=`).
+- `--window 24h|7d` — окно истории для `--state` (по умолчанию окно harness,
+  24 ч).
+- `--check [--harness <bin>] [--state <dir> [--policy <file>]]` — печатает
+  `{harness, ui, viewVersion, compatible, fix?}`; выход 0 — совместимо, 3 —
+  нет.
 
 В stdout печатается одна строка JSON, подсказки идут в stderr. Коды
 выхода: 0, 2 (ввод), 3 (отказ) и 4 (инфраструктура).
@@ -83,6 +93,7 @@ npx devcontour-harness-ui --view view.json
 npm install
 npm test && npm run typecheck && npm run build
 npm run test:e2e           # Playwright при 1280 и 390 px, axe; нужен локальный Chromium Playwright
+npm run check              # всё вместе: typecheck, prettier, unit, сборка, e2e
 node dist/lib/cli.js --demo
 ```
 
