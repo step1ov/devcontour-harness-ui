@@ -2,8 +2,9 @@
 // `httpViewSource` against the local CLI; DevContour implements `ViewSource`
 // over its own store. Components never fetch on their own.
 //
-// Wire contract (docs/design.md §6): `GET <base>/api/view` returns the bare
-// view with an ETag; a compatibility refusal is HTTP 409 with
+// Wire contract (docs/design.md §6): `GET <base>/api/view[?lang=ru|en]`
+// returns the bare view with an ETag; `lang` asks the harness for plain
+// strings in that language (a file view ignores it); a compatibility refusal is HTTP 409 with
 // `{ error: { code, message } }`. The UI CLI and the proposed
 // `harness serve-view` serve the same routes.
 
@@ -23,8 +24,19 @@ export function staticViewSource(view: unknown): ViewSource {
 
 const refusalCodes = new Set(['NOT_A_VIEW', 'VIEW_VERSION_UNSUPPORTED', 'VIEW_UNAVAILABLE']);
 
-export function httpViewSource(base: string, fetchImpl: typeof fetch = fetch): ViewSource {
-  const url = new URL('api/view', base.endsWith('/') ? base : base + '/').toString();
+export interface HttpViewSourceOptions {
+  /** UI language, passed as `?lang=` so the harness writes plain strings in it. */
+  lang?: 'ru' | 'en';
+}
+
+export function httpViewSource(
+  base: string,
+  fetchImpl: typeof fetch = fetch,
+  options: HttpViewSourceOptions = {},
+): ViewSource {
+  const u = new URL('api/view', base.endsWith('/') ? base : base + '/');
+  if (options.lang) u.searchParams.set('lang', options.lang);
+  const url = u.toString();
   return {
     async load(signal) {
       const res = await fetchImpl(url, {

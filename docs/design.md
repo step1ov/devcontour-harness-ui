@@ -67,7 +67,7 @@ operator` (S5, дизайн утверждает владелец).
  │   ▼ collectOperatorViewInput (node, git)     │   │  model/  view types, checkView│
  │   ▼ operatorView(input) ─ pure, browser-safe │──▶│  components/  React, CSS vars │
  │        │                                     │   │  app/  standalone bundle      │
- │        ├─ harness view --json      (stdout)  │   │  cli  loopback static server  │
+ │        ├─ harness view             (stdout)  │   │  cli  loopback static server  │
  │        └─ harness serve-view  GET /view, SSE │   └──────────────┬───────────────┘
  └──────────────────────────────────────────────┘                  │ npm dependency
                                                                    ▼ (build time)
@@ -81,9 +81,9 @@ operator` (S5, дизайн утверждает владелец).
   следует шаблону отчёта: `valueReport` чистый, `collectReportInput` читает
   хранилище. Предложения — в [harness-proposals.md](harness-proposals.md).
 - Пакет UI никогда не импортирует внутренности harness. Он зависит только
-  от типа представления. Пока harness не экспортирует этот тип, UI держит
-  локальную копию (`src/model/view.ts`). Когда появится схема (срез S1),
-  тест сверит копию со схемой harness.
+  от схемы представления. Типы `src/model/view.ts` повторяют схему harness
+  поле в поле; `tests/contract.test.ts` сверяет их с копией JSON Schema
+  harness (§3).
 - `devcontour-harness` — необязательная peer-зависимость. Отдельному CLI она
   нужна только для живых представлений. `--view <file>` и `--demo` работают
   без неё.
@@ -92,10 +92,32 @@ operator` (S5, дизайн утверждает владелец).
 
 ## 3. Схема операторского представления (версия 1)
 
-Один JSON-документ. Имена полей следуют договорам harness, из которых они
-проецируются. Авторитетный TypeScript — `src/model/view.ts`. Предложение P1
-переносит его в Zod-договор harness со сгенерированной JSON Schema
-`schemas/operator-view.schema.json`.
+Один JSON-документ. **Схемой владеет harness** (с `0.1.0-alpha.55`):
+Zod-договор `operatorViewSchema` и `workDetailViewSchema` в
+`src/contracts/operator-view.ts`, пределы в `operator-view-limits.ts` и
+сгенерированные JSON Schema `schemas/operator-view.schema.json` и
+`schemas/work-detail-view.schema.json`. Версия `viewVersion: 1`
+зафиксирована; добавления идут через `viewRevision` (§4).
+
+Этот репозиторий схему не определяет, а повторяет:
+
+- `src/model/view.ts` — типы TypeScript поле в поле по схеме harness;
+- `tests/contract/harness/*.schema.json` — дословные копии JSON Schema
+  harness; `tests/contract.test.ts` проверяет по ним обе фикстуры и
+  настоящий документ `harness view`, а также что каждый объект типов
+  перечисляет ровно поля схемы с тем же набором обязательных. С
+  `DEVCONTOUR_HARNESS_DIR=<checkout harness>` тест сверяет копии с
+  checkout побайтно;
+- правила, которых JSON Schema не выражает (например, `how: executed`
+  требует `by` и `attempt`), проверяются в том же тесте на фикстурах.
+
+Если поле расходится, правится harness (или копия схемы после выпуска
+harness), а не тип в панели.
+
+Тексты простыми словами (`plain`, `line`, `reason`, сообщения
+`health.warnings`) harness пишет на запрошенном языке (`harness view --lang
+ru|en`). Коды, id и команды не переводятся; детали из внешнего вывода
+(например, сообщение lint) остаются как есть.
 
 ```
 OperatorView {
@@ -120,9 +142,11 @@ OperatorView {
 две политики различаются, в `health.warnings` попадает
 `POLICY_DIGEST_MISMATCH`.
 
-`settings.defaulted` перечисляет пути через точку, значение которых взято из
-умолчаний harness, а не из файла политики. Экран настроек пишет
-«по умолчанию» только для этих путей.
+`settings.defaulted` перечисляет пути представления через точку
+(относительно `settings`, по алфавиту), значение которых взято из умолчаний
+harness, а не из файла политики: например `approvalMode`,
+`thresholds.repairBudget`, `thresholds.maxAttempts`, `timeouts.stall`.
+Экран настроек пишет «по умолчанию» только для этих путей.
 
 | Поле представления                                                            | Источник в harness                                                                     |
 | ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
@@ -824,7 +848,7 @@ reviewer кода и откуда он взят. При 390 px это одна �
 ```sh
 npx devcontour-harness-ui --view view.json          # голое представление или конверт `harness view`
 npx devcontour-harness-ui --demo                    # встроенный пример
-npx devcontour-harness-ui --state <dir> --policy <file> [--port N]   # срез S3
+npx devcontour-harness-ui --state <dir> [--policy <file>] [--harness <bin>] [--lang ru|en]
 npx devcontour-harness-ui --from http://127.0.0.1:4791/              # срез S3, уже запущенный serve-view
 npx devcontour-harness-ui --demo --lang ru          # срез S2, язык интерфейса
 ```
@@ -834,6 +858,14 @@ npx devcontour-harness-ui --demo --lang ru          # срез S2, язык ин
 значение, начинающееся с `ru`, даёт `ru`, любое другое — `en`. Русский —
 полноправный язык, а не перевод по остаточному принципу. Приложение также
 учитывает `?lang=ru|en` в адресе страницы; параметр адреса сильнее флага.
+
+Язык интерфейса передаётся и источнику представления: приложение запрашивает
+`GET /api/view?lang=<язык>`, а маршрут `--state` вызывает `harness view
+--lang <язык>`, поэтому тексты harness приходят на том же языке, что и
+подписи панели. Запрос без `lang` получает язык `--lang` CLI (или локали).
+`--lang` передаётся harness, только если его `capabilities` объявляет `lang`
+у операции `view`. Для `--view <file>` язык текстов выбрал тот, кто записал
+файл.
 
 **Окно истории (S3).** `--window 24h|7d` передаётся в живые маршруты
 (`--state`, `--from`) как есть. По умолчанию окно 24 ч, 7 дней — по запросу.
@@ -890,11 +922,21 @@ npx devcontour-harness-ui --demo --lang ru          # срез S2, язык ин
 **Путь данных.**
 
 - `--view`: файл перечитывается при каждом запросе.
-- `--state` (S3): CLI запускает `harness serve-view` дочерним процессом на
-  временном loopback-порту и проксирует к нему `/api/*`.
+- `--state <dir> [--policy <file>]`: CLI на старте читает `harness
+capabilities`. Если в каталоге нет операции `view` (harness старше
+  `0.1.0-alpha.55`) или harness не запускается, CLI отказывает с
+  `HARNESS_VIEW_UNAVAILABLE` (выход 2) и подсказкой про `--view <file>`.
+  Иначе каждый `GET /api/view` запускает `harness view --state <dir>
+[--policy <file>] [--lang <язык>]` и отдаёт `data` его конверта;
+  одновременные запросы одного языка делят один запуск. Отказ harness
+  (конверт ошибки, ненулевой выход) — 503 `VIEW_UNAVAILABLE` с кодом и
+  сообщением harness. Флага `--json` нет: harness печатает JSON по
+  умолчанию.
   - Представление всегда вычисляет harness, установленный пользователем,
-    а не этот пакет.
-  - Дочерний процесс останавливается вместе с панелью.
+    а не этот пакет. `--harness <bin>` задаёт исполняемый файл (по
+    умолчанию `harness` из PATH).
+  - Позже (P3) маршрут перейдёт на `harness serve-view` дочерним процессом
+    с прокси `/api/*` и SSE; договор `/api/view` не меняется.
 - `--from <url>` (S3) проксирует к уже запущенному `serve-view`. Адрес
   проверяется до первого запроса:
   - схема должна быть `http:`;
@@ -1379,12 +1421,10 @@ build`. Тесты не используют сеть дальше loopback, и�
    пределах больше 256 КБ (§3.10). Решить: уменьшить пределы (например,
    общий предел замечаний в обзоре) или оставить отказ `VIEW_TOO_LARGE`
    для крайних состояний.
-6. **Язык текстов harness.** Тексты `plain` пишет harness (P6), а панель
-   двуязычна с S2. Предложено: опция проекции `lang: 'ru' | 'en'`
-   (`harness view --lang`, `serve-view --lang`, `GET /api/view?lang=`),
-   шаблоны на обоих языках в harness, детали из внешнего вывода (например,
-   сообщение lint) не переводятся. Пока опции нет, `plain` приходит
-   по-английски и панель показывает его как есть, с атрибутом `lang="en"`.
+6. **Язык текстов harness** — решено в `0.1.0-alpha.55`: опция проекции
+   `lang: 'ru' | 'en'` (`harness view --lang`), шаблоны на обоих языках в
+   harness, детали из внешнего вывода не переводятся. Приложение передаёт
+   язык интерфейса источнику (`GET /api/view?lang=`, §6).
 
 ## 12. Глоссарий
 

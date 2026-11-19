@@ -14,7 +14,9 @@ const lang = pickLang(new URLSearchParams(window.location.search).get('lang'), [
   ...(navigator.languages ?? []),
   navigator.language,
 ]);
-const source = httpViewSource(new URL('./', window.location.href).toString());
+// The UI language goes to the view source too: the harness writes the plain
+// strings (`plain`, `line`, warnings) in it (`harness view --lang`).
+const source = httpViewSource(new URL('./', window.location.href).toString(), fetch, { lang });
 
 function App() {
   const [check, setCheck] = useState<ViewCheck | undefined>();

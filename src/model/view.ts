@@ -1,8 +1,11 @@
-// Operator view: the read-only document the panel renders. It is produced by
-// the harness core (proposed `operatorView` projection, `harness view --json`)
-// or by a host adapter from its own store. This file mirrors view version 1
-// described in docs/design.md, "Operator view schema"; field names follow the
-// harness contracts they are projected from. Pure types: no node:*, no React.
+// Operator view: the read-only document the panel renders. The schema is
+// owned by devcontour-harness (`operatorViewSchema` in its
+// src/contracts/operator-view.ts, JSON Schema schemas/operator-view.schema.json
+// and schemas/work-detail-view.schema.json, harness 0.1.0-alpha.55, view
+// version 1). These types mirror it field by field; tests/contract.test.ts
+// validates the fixtures against copies of the harness JSON Schemas. A host
+// adapter that builds a view from its own store follows the same schema.
+// Pure types: no node:*, no React.
 
 /** Major version of the view document. Bumped only on a breaking change. */
 export const VIEW_VERSION = 1 as const;
@@ -14,7 +17,7 @@ export interface Bounded {
 }
 
 export type Runtime = 'claude' | 'codex' | (string & {});
-export type Effort = 'low' | 'medium' | 'high' | 'xhigh';
+export type Effort = 'low' | 'medium' | 'high' | 'xhigh' | (string & {});
 export type Actor = 'operator' | 'lead' | 'controller' | 'host' | (string & {});
 
 /** Policy `RuntimeBinding` without the tool profile internals. */
@@ -90,7 +93,11 @@ export interface ViewSettings {
   };
   /** Lean profile layer from the project manifest; `unknown` without a manifest. */
   lean: { state: 'on' | 'off' | 'unknown' };
-  /** Dotted paths of settings that came from harness defaults, not the policy file. */
+  /**
+   * View paths (dotted, relative to `settings`) whose value came from harness
+   * defaults, not the policy file, sorted: e.g. `approvalMode`,
+   * `thresholds.repairBudget`, `thresholds.maxAttempts`, `timeouts.stall`.
+   */
   defaulted: string[];
 }
 
@@ -158,7 +165,9 @@ export interface OperatorQuestion {
   answerableBy: 'operator' | 'operator-or-lead';
   /**
    * Whether the answer changes the result for the user (harness alpha.55).
-   * Absent or unknown reads as `user-visible`: only the operator answers.
+   * Harness always emits it (`user-visible` when the request has none); the
+   * schema keeps it optional for other producers. Absent or unknown reads as
+   * `user-visible`: only the operator answers.
    */
   impact?: 'user-visible' | 'technical' | (string & {});
   /** One plain line: what changes for the user. Masked and clipped (200). */
@@ -216,7 +225,11 @@ export interface TargetView {
   remote: {
     state: 'pushed' | 'not-pushed' | 'unknown' | (string & {});
     trackingRef?: string;
-    /** Why the state is unknown. Masked and clipped (200). */
+    /**
+     * Why the state is unknown, in the requested language. Masked and clipped
+     * (200). Harness 0.1.0-alpha.55 does not read the tracking ref yet and
+     * always sends `unknown` with a reason.
+     */
     reason?: string;
   };
 }
@@ -334,8 +347,20 @@ export interface ViewHealth {
   spentTotalUsd: Bounded;
   /** Drift counts over all accepted works, not over the `drift` list. */
   drift: { checked: number; drifted: number; unavailable: number };
-  warnings: { code: string; message: string }[];
+  /** Plain `message` in the requested language (`--lang`); codes are stable. */
+  warnings: { code: ViewWarningCode; message: string }[];
 }
+
+/**
+ * `health.warnings[].code` values harness 0.1.0-alpha.55 emits. Unknown codes
+ * from a newer producer are shown with their message as is.
+ */
+export type ViewWarningCode =
+  | 'POLICY_DIGEST_MISMATCH'
+  | 'STATE_NOT_FOUND'
+  | 'DRIFT_UNAVAILABLE'
+  | 'VIEW_TRUNCATED'
+  | (string & {});
 
 /** One entry of "who did what" (P2): lead, harness, writer, reviewer, operator. */
 export interface ActivityEntry {
@@ -371,6 +396,12 @@ export interface DecisionView {
   reason?: string;
 }
 
+/**
+ * The overview document (`harness view --state <dir> [--lang ru|en]`). Every
+ * plain string (`plain`, `line`, `reason`, warning messages) comes from the
+ * harness in the requested language; details quoted from external output
+ * (e.g. a lint message) are not translated. Codes and ids are never localized.
+ */
 export interface OperatorView {
   viewVersion: typeof VIEW_VERSION;
   /** Additive revision inside a major version; the UI ignores unknown fields. */
@@ -408,6 +439,10 @@ export interface OperatorView {
       | 'roles'
       | 'reviewRules'
       | 'warnings'
+      | 'budgets'
+      | 'blockers'
+      | 'dependsOn'
+      | 'alternates'
       | 'activity'
       | 'decisions',
       number
@@ -435,13 +470,19 @@ export interface AttemptRow {
  * is never `executed`; a gate still running is `not-run` / `not-checked`.
  */
 export interface VerificationRow {
-  /** Gate id, or the review subject for review rows. */
+  /** Gate id (`gate@consumer` for a consumer gate), or the review subject for review rows. */
   gate: string;
   kind: 'gate' | 'review';
+  /** Evidence phase of a gate row: candidate or integration. */
+  phase?: 'candidate' | 'integration';
+  /**
+   * `skipped` = the gate does not apply; `not-run` = it applies but did not
+   * run (yet). Unknown values are shown as is, never as passed.
+   */
   result: 'passed' | 'failed' | 'reused' | 'skipped' | 'not-run' | (string & {});
   /** executed = ran now; reused = earlier evidence; read = reviewer read the diff and ran nothing. */
   how: 'executed' | 'reused' | 'read' | 'not-checked' | (string & {});
-  /** Runtime or actor that did it. */
+  /** `harness` for an executed gate; the reviewer runtime for a review row. */
   by?: string;
   attempt?: number;
   at?: string;
@@ -464,5 +505,17 @@ export interface WorkDetailView {
   reviews: ReviewSubjectView[];
   questions: OperatorQuestion[];
   drift?: DriftView;
-  truncated?: Partial<Record<'attempts' | 'findings' | 'verification', number>>;
+  truncated?: Partial<
+    Record<
+      | 'attempts'
+      | 'findings'
+      | 'verification'
+      | 'stages'
+      | 'reviews'
+      | 'questions'
+      | 'blockers'
+      | 'dependsOn',
+      number
+    >
+  >;
 }

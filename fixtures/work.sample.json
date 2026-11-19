@@ -110,24 +110,26 @@
     {
       "gate": "lint",
       "kind": "gate",
+      "phase": "candidate",
       "result": "passed",
       "how": "executed",
-      "by": "claude",
+      "by": "harness",
       "attempt": 2,
       "at": "2026-11-19T11:51:40.000Z"
     },
     {
       "gate": "typecheck",
       "kind": "gate",
+      "phase": "integration",
       "result": "reused",
       "how": "reused",
-      "by": "claude",
-      "attempt": 1,
+      "attempt": 2,
       "at": "2026-11-19T11:39:50.000Z"
     },
     {
       "gate": "unit",
       "kind": "gate",
+      "phase": "candidate",
       "result": "not-run",
       "how": "not-checked",
       "attempt": 2
@@ -138,13 +140,16 @@
       "result": "passed",
       "how": "read",
       "by": "codex",
+      "attempt": 2,
       "at": "2026-11-19T11:10:00.000Z"
     },
     {
       "gate": "e2e",
       "kind": "gate",
+      "phase": "candidate",
       "result": "skipped",
-      "how": "not-checked"
+      "how": "not-checked",
+      "attempt": 2
     }
   ],
   "reviews": [],

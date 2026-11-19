@@ -86,7 +86,12 @@
     "lean": {
       "state": "off"
     },
-    "defaulted": ["repairBudget", "timeouts.runTimeoutMs", "timeouts.leaseMs", "timeouts.stall"]
+    "defaulted": [
+      "thresholds.repairBudget",
+      "timeouts.leaseMs",
+      "timeouts.runTimeoutMs",
+      "timeouts.stall"
+    ]
   },
   "works": [
     {
@@ -126,8 +131,8 @@
         "ref": "refs/heads/harness/accepted",
         "acceptedSha": "3b1f9e0c2a7d",
         "remote": {
-          "state": "not-pushed",
-          "trackingRef": "refs/remotes/origin/harness/accepted"
+          "state": "unknown",
+          "reason": "the remote-tracking ref is not read by this harness version"
         }
       }
     },

@@ -12,7 +12,7 @@ import {
   questionStatus,
   stageLabel,
 } from '../model/format.ts';
-import { footerSentence, headerSentence, type Lang } from '../model/i18n.ts';
+import { footerSentence, headerSentence, targetSentence, type Lang } from '../model/i18n.ts';
 
 export interface OverviewProps {
   view: OperatorView;
@@ -51,6 +51,7 @@ export function Overview({ view, now, onOpenWork, lang = 'en', timeZone }: Overv
   const asking = view.questions.filter((q) => questionStatus(q).needsAnswer);
   const otherQuestions = view.questions.filter((q) => !questionStatus(q).needsAnswer);
   const budget = worstBudget(health);
+  const accepted = view.works.filter((w) => w.target !== undefined);
   const count = (stage: string) =>
     Object.hasOwn(progress.byStage, stage) ? Number(progress.byStage[stage]) || 0 : 0;
   const sentence = headerSentence(
@@ -168,6 +169,22 @@ export function Overview({ view, now, onOpenWork, lang = 'en', timeZone }: Overv
         ) : null}
       </div>
 
+      {accepted.length ? (
+        <div className="hui-panel" data-testid="accepted">
+          <h3 className="hui-subtitle">Accepted ({accepted.length})</h3>
+          <ul className="hui-list">
+            {accepted.map((w) => (
+              <li key={w.id} className="hui-item">
+                {workRef(w.id)} <code className="hui-muted">{w.target!.ref}</code>
+                <div className="hui-muted" lang={lang}>
+                  {targetSentence(w.target!, lang)}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
       <dl className="hui-grid" data-testid="health">
         <div>
           <dt>Budget</dt>
@@ -203,6 +220,15 @@ export function Overview({ view, now, onOpenWork, lang = 'en', timeZone }: Overv
           </dd>
         </div>
       </dl>
+      {health.warnings.length ? (
+        <ul className="hui-list hui-secondary" data-testid="warnings">
+          {health.warnings.map((w, i) => (
+            <li key={i} className="hui-item">
+              <code className="hui-muted">{w.code}</code> {w.message}
+            </li>
+          ))}
+        </ul>
+      ) : null}
       <footer className="hui-muted hui-footer" data-testid="footer" lang={lang}>
         {footerSentence(view.generatedAt, lang, timeZone, now)}
       </footer>

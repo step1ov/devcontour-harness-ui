@@ -235,3 +235,41 @@ test('the lead may answer only a technical question the policy opens to it', asy
   assert.match(questionStatus({ ...q }).text, /Only you can answer/);
   assert.match(questionStatus({ ...q, impact: 'technical' }).text, /You or the lead agent/);
 });
+
+test('httpViewSource passes the UI language as ?lang=', async () => {
+  const seen: string[] = [];
+  const fake = (async (url: string | URL | Request) => {
+    seen.push(String(url));
+    return new Response(JSON.stringify(fixture), { status: 200 });
+  }) as typeof fetch;
+  await httpViewSource('http://127.0.0.1:1/', fake, { lang: 'ru' }).load();
+  await httpViewSource('http://127.0.0.1:1/', fake).load();
+  assert.deepEqual(seen, ['http://127.0.0.1:1/api/view?lang=ru', 'http://127.0.0.1:1/api/view']);
+});
+
+test('targetSentence: only pushed and not-pushed are definite; anything else is unknown', async () => {
+  const { targetSentence } = await import('../src/model/i18n.ts');
+  const t = (state: string, reason?: string) => ({
+    remote: { state, ...(reason ? { reason } : {}) },
+  });
+  assert.match(targetSentence(t('pushed'), 'en'), /^Accepted locally; on the remote \(as of/);
+  assert.match(targetSentence(t('not-pushed'), 'en'), /not on the remote yet/);
+  assert.equal(
+    targetSentence(t('unknown', 'no tracking ref'), 'en'),
+    'Accepted locally; remote state unknown: no tracking ref.',
+  );
+  assert.equal(targetSentence(t('future-state'), 'en'), 'Accepted locally; remote state unknown.');
+  assert.match(targetSentence(t('unknown', 'нет ref'), 'ru'), /— неизвестно: нет ref\.$/);
+});
+
+test('the gate checks the target and warnings the panel renders', () => {
+  const badTarget = structuredClone(fixture);
+  badTarget.works[0].target.remote = { reason: 'x' };
+  const t = checkView(badTarget);
+  assert.equal(t.ok ? '' : t.code, 'NOT_A_VIEW');
+  assert.match(t.ok ? '' : t.message, /works\[0\]\.target/);
+  const badWarnings = structuredClone(fixture);
+  badWarnings.health.warnings = [{ code: 'VIEW_TRUNCATED' }];
+  const w = checkView(badWarnings);
+  assert.match(w.ok ? '' : w.message, /health\.warnings\[0\]/);
+});

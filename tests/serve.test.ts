@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import { DEFAULT_PORT, ServeError, startServer } from '../src/server/serve.ts';
+import { fakeHarness, recordedArgs } from './fake-harness.ts';
 
 const viewFile = fileURLToPath(new URL('../fixtures/view.sample.json', import.meta.url));
 // A fresh empty directory: no app bundle, so the fallback page is served.
@@ -23,7 +24,7 @@ function get(
         {
           host: u.hostname,
           port: u.port,
-          path: u.pathname,
+          path: u.pathname + u.search,
           method: init.method ?? 'GET',
           agent: false,
           headers: { ...(init.host ? { host: init.host } : {}), ...init.headers },
@@ -156,4 +157,79 @@ test('a harness envelope file is unwrapped; an error envelope is refused', async
   } finally {
     await s.close();
   }
+});
+
+test('live route: harness view runs per request with the page language and the policy', async () => {
+  const fake = fakeHarness({ view: true, lang: true });
+  const s = await startServer({
+    harness: {
+      bin: fake.bin,
+      state: '/state-dir',
+      policy: '/policy.json',
+      lang: true,
+      defaultLang: 'en',
+    },
+    appDir,
+    version: 'test',
+  });
+  try {
+    const ru = await get(s.url + 'api/view?lang=ru');
+    assert.equal(ru.status, 200);
+    assert.deepEqual(recordedArgs(JSON.parse(ru.body)), [
+      'view',
+      '--state',
+      '/state-dir',
+      '--policy',
+      '/policy.json',
+      '--lang',
+      'ru',
+    ]);
+    // No or an unknown `lang` falls back to the CLI default.
+    for (const q of ['', '?lang=de']) {
+      const r = await get(s.url + 'api/view' + q);
+      assert.equal(r.status, 200);
+      assert.deepEqual(recordedArgs(JSON.parse(r.body)).slice(-2), ['--lang', 'en']);
+    }
+  } finally {
+    await s.close();
+    fake.remove();
+  }
+});
+
+test('live route: a harness without lang gets no --lang; a refusal is VIEW_UNAVAILABLE', async () => {
+  const fake = fakeHarness({ view: true, lang: false });
+  const s = await startServer({
+    harness: { bin: fake.bin, state: '/state-dir', lang: false, defaultLang: 'ru' },
+    appDir,
+    version: 'test',
+  });
+  const refusing = fakeHarness({
+    view: true,
+    lang: true,
+    refuse: { code: 'POLICY_REQUIRED', message: 'no state and no --policy' },
+  });
+  const s2 = await startServer({
+    harness: { bin: refusing.bin, state: '/state-dir', lang: true, defaultLang: 'en' },
+    appDir,
+    version: 'test',
+  });
+  try {
+    const r = await get(s.url + 'api/view?lang=ru');
+    assert.equal(r.status, 200);
+    assert.deepEqual(recordedArgs(JSON.parse(r.body)), ['view', '--state', '/state-dir']);
+    const refused = await get(s2.url + 'api/view');
+    assert.equal(refused.status, 503);
+    const body = JSON.parse(refused.body);
+    assert.equal(body.error.code, 'VIEW_UNAVAILABLE');
+    assert.match(body.error.message, /POLICY_REQUIRED: no state and no --policy/);
+  } finally {
+    await s.close();
+    await s2.close();
+    fake.remove();
+    refusing.remove();
+  }
+});
+
+test('startServer needs exactly one view source', async () => {
+  await assert.rejects(() => startServer({ appDir, version: 'test' }), TypeError);
 });

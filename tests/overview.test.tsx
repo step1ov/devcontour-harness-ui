@@ -23,7 +23,7 @@ test('overview shows the waiting question, the running work and health', () => {
   assert.match(html, /7m 50s/); // stage since 11:52:10, view at 12:00:00
   assert.match(html, /≥ \$6\.02 of \$40\.00 \(total: within\)/);
   // Accepted, queued and answer-waiting work does not hold a slot.
-  const now = html.slice(html.indexOf('data-testid="now"'), html.indexOf('data-testid="health"'));
+  const now = html.slice(html.indexOf('data-testid="now"'), html.indexOf('data-testid="accepted"'));
   assert.match(now, /Working now \(1 of 2 slots\)/);
   assert.doesNotMatch(now, /add-greeting|docs-page|export-csv/);
 });
@@ -222,4 +222,39 @@ test('footer defaults to the viewer time zone (TZ), not UTC', () => {
     if (saved === undefined) delete process.env.TZ;
     else process.env.TZ = saved;
   }
+});
+
+test('accepted work: an unknown remote state is shown as unknown with the harness reason', () => {
+  const html = renderToStaticMarkup(<Overview view={view} />);
+  const accepted = html.slice(html.indexOf('data-testid="accepted"'));
+  assert.match(accepted, /add-greeting/);
+  assert.match(
+    accepted,
+    /Accepted locally; remote state unknown: the remote-tracking ref is not read by this harness version\./,
+  );
+  assert.doesNotMatch(accepted, /not on the remote|on the remote \(/);
+  const ru = renderToStaticMarkup(<Overview view={view} lang="ru" />);
+  assert.match(ru, /Принято локально; в удалённом репозитории — неизвестно: /);
+  const none = renderToStaticMarkup(
+    <Overview view={{ ...view, works: view.works.map(({ target: _t, ...w }) => w) }} />,
+  );
+  assert.doesNotMatch(none, /data-testid="accepted"/);
+});
+
+test('health warnings from the harness are listed with their code and message', () => {
+  const warned: OperatorView = {
+    ...view,
+    health: {
+      ...view.health,
+      warnings: [
+        { code: 'STATE_NOT_FOUND', message: 'there is no state yet' },
+        { code: 'POLICY_DIGEST_MISMATCH', message: 'the policy differs from the bound one' },
+      ],
+    },
+  };
+  const html = renderToStaticMarkup(<Overview view={warned} />);
+  const list = html.slice(html.indexOf('data-testid="warnings"'));
+  assert.match(list, /STATE_NOT_FOUND<\/code> there is no state yet/);
+  assert.match(list, /POLICY_DIGEST_MISMATCH<\/code> the policy differs/);
+  assert.doesNotMatch(renderToStaticMarkup(<Overview view={view} />), /data-testid="warnings"/);
 });

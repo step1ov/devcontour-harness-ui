@@ -1,8 +1,10 @@
 # Предлагаемые дополнения к devcontour-harness
 
-Это предложения для репозитория harness; здесь ничего из этого не
-реализовано. Вместе они дают панели оператора ([design.md](design.md)) один
-источник данных: только для чтения и с версией.
+Это предложения для репозитория harness; в этом репозитории они не
+реализуются. Вместе они дают панели оператора ([design.md](design.md)) один
+источник данных: только для чтения и с версией. P1 и P2 реализованы в
+harness `0.1.0-alpha.55`; схемой представления теперь владеет harness
+(design.md §3).
 
 Цель панели — чтобы её понимал оператор без технической подготовки. Панель
 показывает данные harness, а не пересказ агента. Поэтому всё, что панель
@@ -27,6 +29,16 @@
 S — до 200, M — 200–600, L — больше 600.
 
 ## P1. Проекция `operatorView` и договор (M–L)
+
+**Статус: реализовано в 0.1.0-alpha.55.** Договор, пределы, проекция и JSON
+Schema — в harness; `viewVersion: 1` зафиксирована. По сравнению с текстом
+ниже: `settings.defaulted` содержит пути представления
+(`thresholds.repairBudget`, `timeouts.stall`), в `truncated` добавлены
+`budgets`, `blockers`, `dependsOn`, `alternates`, у документа деталей —
+`stages`, `reviews`, `questions`, `blockers`, `dependsOn`; строка проверки
+получила `phase`, а `by` у выполненного gate — `harness`. Удалённое
+состояние цели (`target.remote.state`) в alpha.55 всегда `unknown` с
+причиной.
 
 ### Договор
 
@@ -185,6 +197,10 @@ export function viewToken(view: OperatorView | WorkDetailView): string; // sha25
   `schemas/operator-view.schema.json`.
 
 ## P2. `harness view` (S)
+
+**Статус: реализовано в 0.1.0-alpha.55**, с флагом `--lang ru|en`. Флага
+`--json` нет: JSON — вывод по умолчанию. Панель использует команду в
+маршруте `--state` (design.md §6).
 
 ```
 harness view --state D --policy F [--work ID] [--no-titles] [--window 24h|7d]

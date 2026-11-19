@@ -3,9 +3,11 @@
 // any `viewRevision` is accepted (unknown fields are ignored), a different
 // major is refused with a reason the panel shows instead of guessing.
 //
-// The gate checks every field the components read, so that a malformed
-// document is refused here instead of throwing during render. It is not a
-// full schema validator: the producer owns the schema.
+// The gate checks every field the components read, with the type the harness
+// schema gives it (devcontour-harness schemas/operator-view.schema.json), so
+// that a malformed document is refused here instead of throwing during render.
+// It is not a full schema validator: the harness owns the schema, and
+// tests/contract.test.ts checks that every schema-valid fixture passes here.
 
 import { VIEW_VERSION, type OperatorView } from './view.ts';
 
@@ -95,6 +97,14 @@ function problems(v: Obj): string[] {
     const drift = obj(health.drift, 'health.drift');
     if (drift)
       for (const k of ['drifted', 'unavailable']) need(isCount(drift[k]), `health.drift.${k}`);
+    need(Array.isArray(health.warnings), 'health.warnings');
+    if (Array.isArray(health.warnings))
+      health.warnings.forEach((w, i) =>
+        need(
+          isObject(w) && typeof w.code === 'string' && typeof w.message === 'string',
+          `health.warnings[${i}]`,
+        ),
+      );
   }
   for (const key of ['works', 'reviews', 'questions', 'escalations', 'drift']) {
     need(Array.isArray(v[key]), key);
@@ -109,6 +119,17 @@ function problems(v: Obj): string[] {
         need(isInstant(w.stage.since), `${p}.stage.since`);
       const a = w.attempts;
       need(isObject(a) && isCount(a.used) && isCount(a.max) && isCount(a.left), `${p}.attempts`);
+      if (w.target !== undefined) {
+        const t = w.target;
+        need(
+          isObject(t) &&
+            typeof t.ref === 'string' &&
+            isObject(t.remote) &&
+            typeof t.remote.state === 'string' &&
+            (t.remote.reason === undefined || typeof t.remote.reason === 'string'),
+          `${p}.target`,
+        );
+      }
     });
   if (Array.isArray(v.escalations))
     v.escalations.forEach((e, i) =>

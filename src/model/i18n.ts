@@ -4,6 +4,8 @@
 // Pure: no node:*, no React. Sentences are phrasing over the view's own
 // counts; no number is derived here.
 
+import type { TargetView } from './view.ts';
+
 export type Lang = 'ru' | 'en';
 
 /** `ru` for a Russian locale tag (`ru`, `ru-RU`, `ru_RU.UTF-8`), else `en`. */
@@ -149,4 +151,27 @@ export function footerSentence(
   if (lang === 'ru')
     return `Данные harness на ${at ?? 'неизвестное время'}; панель ничего не меняет.`;
   return `Harness data as of ${at ?? 'an unknown time'}; the panel changes nothing.`;
+}
+
+/**
+ * Where an accepted result is (`works[].target`), in one sentence. The remote
+ * state is read by the harness from the local remote-tracking ref without a
+ * fetch, so the sentence says "as of the last git update on this machine".
+ * `unknown` or any state this build does not know reads as unknown, never as
+ * "not pushed" or "pushed"; the harness `reason` follows as is.
+ */
+export function targetSentence(target: Pick<TargetView, 'remote'>, lang: Lang): string {
+  const { state, reason } = target.remote;
+  const why = typeof reason === 'string' && reason.trim() ? `: ${reason.trim()}` : '';
+  if (lang === 'ru') {
+    const asOf = ' (по последнему обновлению git на этой машине)';
+    if (state === 'pushed') return 'Принято локально; в удалённом репозитории — да' + asOf + '.';
+    if (state === 'not-pushed')
+      return 'Принято локально; в удалённом репозитории — ещё нет' + asOf + '.';
+    return 'Принято локально; в удалённом репозитории — неизвестно' + why + '.';
+  }
+  const asOf = ' (as of the last git update on this machine)';
+  if (state === 'pushed') return 'Accepted locally; on the remote' + asOf + '.';
+  if (state === 'not-pushed') return 'Accepted locally; not on the remote yet' + asOf + '.';
+  return 'Accepted locally; remote state unknown' + why + '.';
 }

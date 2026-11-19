@@ -7,6 +7,7 @@ import { readFile, realpath, stat } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { extname, join, resolve, sep } from 'node:path';
 import { checkView } from '../model/compat.ts';
+import { harnessView, type HarnessViewOptions, type HarnessViewResult } from './harness.ts';
 
 export const LOOPBACK_HOSTS = ['127.0.0.1', '::1', 'localhost'] as const;
 export const DEFAULT_PORT = 4790;
@@ -15,7 +16,17 @@ export const PORT_PROBE_SPAN = 20;
 
 export interface ServeOptions {
   /** File with an operator view JSON; re-read on every request. */
-  viewFile: string;
+  viewFile?: string;
+  /**
+   * Live route instead of a file: `harness view` runs on every request
+   * (concurrent requests for one language share a run).
+   */
+  harness?: HarnessViewOptions & {
+    /** The installed harness takes `--lang`; otherwise it is not passed. */
+    lang: boolean;
+    /** Language when the request has no valid `?lang=ru|en`. */
+    defaultLang: 'ru' | 'en';
+  };
   /** Directory of the built app (dist/app); missing = a plain fallback page. */
   appDir: string;
   host?: string;
@@ -102,7 +113,7 @@ export function unwrapView(parsed: unknown): unknown {
   return parsed;
 }
 
-async function serveView(req: IncomingMessage, res: ServerResponse, file: string) {
+async function serveViewFile(req: IncomingMessage, res: ServerResponse, file: string) {
   let bytes: Buffer;
   try {
     bytes = await readFile(file);
@@ -118,7 +129,10 @@ async function serveView(req: IncomingMessage, res: ServerResponse, file: string
   if (typeof parsed === 'object' && parsed !== null && (parsed as { ok?: unknown }).ok === false) {
     return jsonError(res, 502, 'NOT_A_VIEW', 'View file holds a harness error envelope.');
   }
-  const view = unwrapView(parsed);
+  return sendView(req, res, unwrapView(parsed));
+}
+
+function sendView(req: IncomingMessage, res: ServerResponse, view: unknown) {
   const check = checkView(view);
   if (!check.ok) return jsonError(res, 409, check.code, check.message);
   // The ETag is derived from the content, never from a store counter.
@@ -185,6 +199,20 @@ export async function startServer(options: ServeOptions): Promise<RunningServer>
   ) {
     throw new ServeError('PORT_INVALID', `Port ${options.port} is not in 1-65535.`);
   }
+  if ((options.viewFile === undefined) === (options.harness === undefined))
+    throw new TypeError('startServer: pass exactly one of viewFile and harness');
+  const live = options.harness;
+  // One `harness view` run per language at a time; later requests share it.
+  const inFlight = new Map<string, Promise<HarnessViewResult>>();
+  const liveView = (lang: 'ru' | 'en') => {
+    const key = live!.lang ? lang : '';
+    let p = inFlight.get(key);
+    if (!p) {
+      p = harnessView(live!, live!.lang ? lang : undefined).finally(() => inFlight.delete(key));
+      inFlight.set(key, p);
+    }
+    return p;
+  };
   let port = 0;
   const server = createServer((req, res) => {
     const failed = () => {
@@ -212,7 +240,15 @@ export async function startServer(options: ServeOptions): Promise<RunningServer>
       return send(res, 400, 'Bad request', 'text/plain; charset=utf-8');
     }
     if (pathname.includes('\0')) return send(res, 400, 'Bad request', 'text/plain; charset=utf-8');
-    if (pathname === '/api/view') return serveView(req, res, options.viewFile);
+    if (pathname === '/api/view') {
+      if (live) {
+        const asked = new URL(req.url ?? '/', 'http://local').searchParams.get('lang');
+        const lang = asked === 'ru' || asked === 'en' ? asked : live.defaultLang;
+        const r = await liveView(lang);
+        return r.ok ? sendView(req, res, r.view) : jsonError(res, 503, r.code, r.message);
+      }
+      return serveViewFile(req, res, options.viewFile!);
+    }
     if (pathname === '/api/health') {
       return send(
         res,

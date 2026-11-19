@@ -16,8 +16,9 @@
 сейчас, как именно проверена работа и где лежит принятый результат.
 
 > Статус: `0.1.0-alpha.0`, заготовка. Экран Overview работает по файлу
-> представления. Живой маршрут `--state` ждёт `harness view` /
-> `harness serve-view`; см. [предложения для harness](docs/harness-proposals.md).
+> представления или вживую через `harness view` (`--state`, harness
+> `0.1.0-alpha.55` и новее). Схемой представления владеет harness; см.
+> [предложения для harness](docs/harness-proposals.md).
 > [Дизайн](docs/design.md) описывает схему, экраны, безопасность и этапы.
 
 ## Язык
@@ -40,8 +41,15 @@ node dist/lib/cli.js --demo          # демонстрационные данн
 # → {"ok":true,"url":"http://127.0.0.1:4790/","port":4790,"readOnly":true,...}
 ```
 
-Откройте напечатанный URL. Чтобы показать настоящий проект, запишите
-представление через harness, в котором есть `harness view`, и раздайте файл:
+Откройте напечатанный URL. Чтобы показать настоящий проект, нужен harness
+с `harness view` (`0.1.0-alpha.55` и новее). Панель вызывает его сама на
+каждый запрос и передаёт язык интерфейса (`--lang`):
+
+```sh
+node dist/lib/cli.js --state <state> --policy .harness/policy.json
+```
+
+Или запишите снимок и раздайте файл:
 
 ```sh
 harness view --state <state> --policy .harness/policy.json > view.json   # конверт тоже принимается
@@ -50,12 +58,15 @@ node dist/lib/cli.js --view view.json
 
 Флаги CLI:
 
-- `--view <file>` и `--demo`;
+- `--view <file>`, `--demo` или `--state <dir>` с `--policy <file>` и
+  `--harness <bin>` (по умолчанию `harness` из PATH); harness без `view` —
+  отказ `HARNESS_VIEW_UNAVAILABLE`;
 - `--port N` (точный порт; занятый порт — ошибка). Без флага перебираются
   порты 4790–4809.
 - `--host`, только loopback: `127.0.0.1`, `::1` или `localhost`. Всё
   остальное отклоняется.
-- `--lang ru|en` — с этапа S2.
+- `--lang ru|en` — язык текстов harness, когда страница не запросила свой
+  (`?lang=`); подписи панели двуязычны с этапа S2.
 
 В stdout печатается одна строка JSON, подсказки идут в stderr. Коды
 выхода: 0, 2 (ввод), 3 (отказ) и 4 (инфраструктура).

@@ -3,7 +3,12 @@
 
 export * from './view.ts';
 export { checkView, KNOWN_VIEW_REVISION, type ViewCheck } from './compat.ts';
-export { httpViewSource, staticViewSource, type ViewSource } from './source.ts';
+export {
+  httpViewSource,
+  staticViewSource,
+  type HttpViewSourceOptions,
+  type ViewSource,
+} from './source.ts';
 export {
   KNOWN_QUESTION_STATES,
   SLOT_STAGES,
@@ -21,6 +26,7 @@ export {
   langOf,
   pickLang,
   ruPlural,
+  targetSentence,
   type HeaderCounts,
   type Lang,
 } from './i18n.ts';

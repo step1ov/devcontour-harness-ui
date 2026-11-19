@@ -8,7 +8,9 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
-import { ServeError, startServer } from './server/serve.ts';
+import { langOf } from './model/i18n.ts';
+import { HarnessUnavailable, probeHarness } from './server/harness.ts';
+import { ServeError, startServer, type ServeOptions } from './server/serve.ts';
 
 /** Package root: the nearest ancestor whose package.json is this package. */
 function packageRoot(): string {
@@ -27,14 +29,20 @@ function packageRoot(): string {
   }
 }
 
-const usage = `Usage: devcontour-harness-ui (--view <file> | --demo) [--port N] [--host 127.0.0.1]
+const usage = `Usage: devcontour-harness-ui (--view <file> | --demo | --state <dir> [--policy <file>])
+                            [--lang ru|en] [--harness <bin>] [--port N] [--host 127.0.0.1]
 
-  --view <file>   operator view JSON (from \`harness view --json\`), re-read on each request
-  --demo          serve the bundled sample view
-  --state <dir>   planned: compute the view with \`harness view\` (not available yet)
-  --port N        exact port; busy = error. Without it ports 4790-4809 are probed
-  --host H        loopback only: 127.0.0.1 (default), ::1 or localhost
-  --version       print the package version
+  --view <file>    operator view JSON (from \`harness view\`), re-read on each request
+  --demo           serve the bundled sample view
+  --state <dir>    compute the view with the installed \`harness view\` on each request
+                   (devcontour-harness 0.1.0-alpha.55 or newer)
+  --policy <file>  policy for --state; needed while the state has no binding
+  --lang ru|en     language of harness texts when the page does not ask for one;
+                   default from LC_ALL, LC_MESSAGES or LANG
+  --harness <bin>  harness executable for --state (default: harness on PATH)
+  --port N         exact port; busy = error. Without it ports 4790-4809 are probed
+  --host H         loopback only: 127.0.0.1 (default), ::1 or localhost
+  --version        print the package version
 `;
 
 function fail(code: string, message: string, exit: number): never {
@@ -52,6 +60,8 @@ async function main() {
         demo: { type: 'boolean' },
         state: { type: 'string' },
         policy: { type: 'string' },
+        lang: { type: 'string' },
+        harness: { type: 'string' },
         port: { type: 'string' },
         host: { type: 'string' },
         version: { type: 'boolean' },
@@ -66,20 +76,66 @@ async function main() {
   const version = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version as string;
   if (args.help) return void process.stdout.write(usage);
   if (args.version) return void process.stdout.write(version + '\n');
-  if (args.state !== undefined || args.policy !== undefined) {
-    fail(
-      'HARNESS_VIEW_UNAVAILABLE',
-      '--state/--policy need a harness release with `harness view --json` (proposed). ' +
-        'Until then write the view to a file and pass --view <file>.',
-      2,
-    );
+  if (args.lang !== undefined && args.lang !== 'ru' && args.lang !== 'en')
+    fail('INVALID_INPUT', `--lang: expected ru or en, got ${args.lang}.`, 2);
+  const sources = [args.view !== undefined, args.demo === true, args.state !== undefined];
+  if (sources.filter(Boolean).length > 1)
+    fail('INVALID_INPUT', 'Pass only one of --view, --demo and --state.\n' + usage, 2);
+  if (args.policy !== undefined && args.state === undefined)
+    fail('INVALID_INPUT', '--policy needs --state.\n' + usage, 2);
+  if (args.harness !== undefined && args.state === undefined)
+    fail('INVALID_INPUT', '--harness needs --state.\n' + usage, 2);
+  if (!sources.some(Boolean))
+    fail('INVALID_INPUT', 'Pass --view <file>, --demo or --state <dir>.\n' + usage, 2);
+  const lang =
+    args.lang === 'ru' || args.lang === 'en'
+      ? args.lang
+      : langOf(
+          [process.env.LC_ALL, process.env.LC_MESSAGES, process.env.LANG].find(
+            (v) => typeof v === 'string' && v.trim() !== '',
+          ),
+        );
+  let source: Pick<ServeOptions, 'viewFile' | 'harness'>;
+  if (args.state !== undefined) {
+    const bin = args.harness ?? 'harness';
+    let support;
+    try {
+      support = await probeHarness(bin);
+    } catch (err) {
+      if (!(err instanceof HarnessUnavailable)) throw err;
+      fail(
+        'HARNESS_VIEW_UNAVAILABLE',
+        `${err.message} --state needs devcontour-harness 0.1.0-alpha.55 or newer ` +
+          '(pass --harness <bin> if it is not on PATH), or write the view to a file and pass --view <file>.',
+        2,
+      );
+    }
+    if (!support.view)
+      fail(
+        'HARNESS_VIEW_UNAVAILABLE',
+        `The installed harness${support.version ? ' ' + support.version : ''} has no \`harness view\`. ` +
+          '--state needs devcontour-harness 0.1.0-alpha.55 or newer; until then write the view ' +
+          'to a file and pass --view <file>.',
+        2,
+      );
+    source = {
+      harness: {
+        bin,
+        state: resolve(args.state),
+        ...(args.policy !== undefined ? { policy: resolve(args.policy) } : {}),
+        lang: support.lang,
+        defaultLang: lang,
+      },
+    };
+  } else {
+    source = {
+      viewFile: args.view ? resolve(args.view) : join(root, 'fixtures', 'view.sample.json'),
+    };
   }
-  if (!args.view && !args.demo) fail('INVALID_INPUT', 'Pass --view <file> or --demo.\n' + usage, 2);
-  const viewFile = args.view ? resolve(args.view) : join(root, 'fixtures', 'view.sample.json');
   const port = args.port === undefined ? undefined : Number(args.port);
   try {
     const server = await startServer({
-      viewFile,
+      ...source,
       appDir: join(root, 'dist', 'app'),
       ...(args.host ? { host: args.host } : {}),
       ...(port !== undefined ? { port } : {}),
