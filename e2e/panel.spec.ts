@@ -153,8 +153,10 @@ test('without ?lang the CLI language wins over the browser locale', async ({ bro
   await ctx.close();
 });
 
-test('a temporary 503 keeps the last view with a connection banner', async ({ page }) => {
+test('a temporary 503 keeps the last view with a stale warning', async ({ page }) => {
   await page.clock.install();
+  // Without a stream the page polls; the poll then meets the 503.
+  await page.route('**/api/events**', (route) => route.abort());
   await open(page, '#/');
   await page.route('**/api/view*', (route) =>
     route.fulfill({
@@ -163,6 +165,8 @@ test('a temporary 503 keeps the last view with a connection banner', async ({ pa
     }),
   );
   await page.clock.runFor(6000);
-  await expect(page.locator('main')).toContainText('Связь потеряна (harness view: timed out)');
+  await expect(page.getByTestId('stale')).toContainText(
+    /Не удалось обновить данные с \d\d:\d\d: harness view: timed out\. На экране данные на/,
+  );
   await expect(page.locator('main')).toContainText('Сейчас: в работе 1');
 });

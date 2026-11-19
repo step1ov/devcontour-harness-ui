@@ -114,3 +114,95 @@ test('--demo prints one JSON line with a loopback URL and serves the view', asyn
     child.kill('SIGTERM');
   }
 });
+
+test('--window: 24h or 7d, only with --state, passed to a harness that takes it', async () => {
+  for (const args of [
+    ['--demo', '--window', '7d'],
+    ['--state', '/s', '--window', '30d'],
+  ]) {
+    const r = node(args);
+    assert.equal(r.status, 2, args.join(' '));
+    assert.equal(JSON.parse(r.stdout).error.code, 'INVALID_INPUT', args.join(' '));
+  }
+  const old = fakeHarness({ view: true, lang: true, window: false });
+  try {
+    const r = node(['--state', '/s', '--harness', old.bin, '--window', '7d']);
+    assert.equal(r.status, 2);
+    assert.match(JSON.parse(r.stdout).error.message, /does not take --window/);
+  } finally {
+    old.remove();
+  }
+  const fake = fakeHarness({ view: true, lang: true, window: true });
+  const child = spawn(
+    process.execPath,
+    ['--import', 'tsx', cli, '--state', '/s', '--harness', fake.bin, '--window', '7d'],
+    { stdio: ['ignore', 'pipe', 'pipe'] },
+  );
+  try {
+    const started = JSON.parse(await firstLine(child));
+    const view = await (await fetch(started.url + 'api/view?lang=en')).json();
+    assert.deepEqual(recordedArgs(view), [
+      'view',
+      '--state',
+      '/s',
+      '--lang',
+      'en',
+      '--window',
+      '7d',
+    ]);
+    const health = await (await fetch(started.url + 'api/health')).json();
+    assert.equal(health.live, 'state');
+  } finally {
+    child.kill('SIGTERM');
+    await new Promise((ok) => child.once('exit', ok));
+    fake.remove();
+  }
+});
+
+test('--check: compatible harness exits 0; another view version or no view exits 3 with a fix', () => {
+  const good = fakeHarness({ view: true, lang: true });
+  const newer = fakeHarness({ view: true, lang: true, viewVersion: 2, version: '0.2.0-alpha.1' });
+  const old = fakeHarness({ view: false, lang: false, version: '0.1.0-alpha.54' });
+  const silent = fakeHarness({ view: true, lang: true, viewVersion: null });
+  try {
+    const ok = node(['--check', '--harness', good.bin]);
+    assert.equal(ok.status, 0, ok.stdout);
+    const r = JSON.parse(ok.stdout);
+    assert.deepEqual(
+      { ok: r.ok, harness: r.harness, viewVersion: r.viewVersion, compatible: r.compatible },
+      { ok: true, harness: '0.1.0-alpha.55', viewVersion: 1, compatible: true },
+    );
+    assert.equal(typeof r.ui, 'string');
+    assert.equal(r.fix, undefined);
+    // With a state, one real view is read and checked.
+    const withState = JSON.parse(node(['--check', '--harness', good.bin, '--state', '/s']).stdout);
+    assert.deepEqual(withState.view, { ok: true });
+
+    const n = node(['--check', '--harness', newer.bin]);
+    assert.equal(n.status, 3);
+    const nr = JSON.parse(n.stdout);
+    assert.equal(nr.compatible, false);
+    assert.equal(nr.viewVersion, 2);
+    assert.match(nr.fix, /view version 2; this panel reads 1/);
+
+    const o = JSON.parse(node(['--check', '--harness', old.bin]).stdout);
+    assert.equal(o.compatible, false);
+    assert.match(o.fix, /0\.1\.0-alpha\.54 has no `harness view`/);
+
+    const missing = node(['--check', '--harness', '/nonexistent/harness-bin']);
+    assert.equal(missing.status, 3);
+    assert.equal(JSON.parse(missing.stdout).harness, null);
+
+    // An undeclared view version is unknown, not compatible, until one view is read.
+    const s = JSON.parse(node(['--check', '--harness', silent.bin]).stdout);
+    assert.equal(s.compatible, false);
+    assert.equal(s.viewVersion, null);
+    const s2 = JSON.parse(node(['--check', '--harness', silent.bin, '--state', '/s']).stdout);
+    assert.equal(s2.compatible, true);
+    assert.equal(s2.viewVersion, 1);
+
+    assert.equal(node(['--check', '--demo']).status, 2);
+  } finally {
+    for (const f of [good, newer, old, silent]) f.remove();
+  }
+});

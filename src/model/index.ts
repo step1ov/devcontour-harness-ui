@@ -11,8 +11,15 @@ export {
 } from './compat.ts';
 export {
   httpViewSource,
+  liveEventOf,
   staticViewSource,
+  STREAM_SILENCE_MS,
+  type Digested,
+  type EventSourceFactory,
+  type EventSourceLike,
   type HttpViewSourceOptions,
+  type LiveEvent,
+  type SubscribeOptions,
   type ViewSource,
 } from './source.ts';
 export {

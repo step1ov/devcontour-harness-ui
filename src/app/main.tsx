@@ -18,6 +18,8 @@ import {
   type Dict,
   type Lang,
   type ViewSource,
+  type Digested,
+  formatClock,
   pickLang,
   questionStatus,
   type OperatorView,
@@ -34,6 +36,8 @@ let lang: Lang = 'ru';
 let t: Dict = dict(lang);
 let source: ViewSource;
 let uiVersion: string | undefined;
+/** What the server watches (`/api/health`): a live `harness view` or a file. */
+let liveRoute: 'state' | 'file' | undefined;
 const mobile = () => window.matchMedia('(max-width: 639px)').matches;
 
 function useRoute(): Route {
@@ -48,45 +52,287 @@ function useRoute(): Route {
 
 type Checked = { ok: true } | { ok: false; code: string; message: string };
 
+/** What the page knows about the freshness of the shown document. */
+interface Live {
+  /** `push`: an SSE stream delivers changes; `poll`: GET every 5 s (no stream, or it failed). */
+  mode: 'push' | 'poll';
+  /** Last confirmed check of the server (stream) and the content token it saw. */
+  checkedAt?: string;
+  token?: string;
+  /**
+   * The server digest the shown document was loaded for (the `view` or
+   * `fresh` event that caused the load); `undefined` after a poll. Equal to
+   * `token` = the shown content is what the server last checked.
+   */
+  docDigest?: string;
+  /** The last server check failed: harness refused, crashed or timed out. */
+  stale?: { since: string; message: string };
+  /** A GET failed: transport error, or a temporary refusal after a good document. */
+  lost?: { message: string; harness: boolean; since: string };
+}
+
+/** After a stream is lost, the page polls and tries the stream again after this long. */
+const RESUBSCRIBE_MS = 30_000;
 /**
- * Polls `load` every 5 s while the tab is visible. A transport error, or a
- * temporary `VIEW_UNAVAILABLE` after a good document, keeps the last good
- * document on screen with a "connection lost" banner (design §5.9).
+ * A load that has not answered by then is abandoned as a failure (and retried
+ * by polling): one stalled GET must not block every later load. Longer than
+ * the server's 30 s harness deadline.
  */
-function usePoll<T extends Checked>(load: () => Promise<T>, key: string) {
+const LOAD_DEADLINE_MS = 40_000;
+
+/**
+ * Loads a document and keeps it current (design §6, S3). With a stream
+ * (`source.subscribe`) the page loads only when the server reports a
+ * digest other than the one the shown document was loaded for; without one, or after the stream failed, it polls every
+ * 5 s and tries the stream again after RESUBSCRIBE_MS. A hidden tab closes
+ * the stream and stops polling: the server then runs nothing for it.
+ *
+ * A transport error, or a temporary `VIEW_UNAVAILABLE` after a good
+ * document, keeps the last good document on screen with a banner (§5.9).
+ */
+function useLive<T extends Checked & { digest?: string }>(
+  load: (signal: AbortSignal) => Promise<T>,
+  key: string,
+  workId?: string,
+  active = true,
+) {
   const [value, setValue] = useState<T | undefined>();
-  const [error, setError] = useState<string | undefined>();
+  const [live, setLive] = useState<Live>({ mode: 'poll' });
   const last = useRef<T | undefined>(undefined);
+  const shownKey = useRef<string | undefined>(undefined);
   useEffect(() => {
-    setValue(undefined);
-    setError(undefined);
-    last.current = undefined;
+    // A new document starts empty; pausing and resuming the same one keeps it.
+    if (shownKey.current !== key) {
+      shownKey.current = key;
+      setValue(undefined);
+      setLive({ mode: 'poll' });
+      last.current = undefined;
+    }
+    if (!active) return;
     let stopped = false;
-    const tick = async () => {
-      if (document.hidden) return;
+    let poll: number | undefined;
+    let retry: number | undefined;
+    let unsubscribe: (() => void) | undefined;
+    /**
+     * Loads run one at a time. A load asked while one runs is coalesced into
+     * one more load after it. `generation` changes when a pending answer must
+     * not land any more (the tab was hidden, or the server confirmed the
+     * shown content meanwhile).
+     */
+    let generation = 0;
+    let loading = false;
+    let again = false;
+    /** Server digest of the shown document (`x-hui-digest` of its GET). */
+    let docDigest = last.current?.digest;
+    /** Digest of the latest `view`/`fresh` event: what the server has now. */
+    let latest: string | undefined;
+    /** Loads in a row whose digest still differs from `latest` (bounded catch-up). */
+    let behind = 0;
+    /** The stream delivers events; polling then runs only to retry a failed load. */
+    let pushing = false;
+    let failing = false;
+    const startPoll = () => {
+      // A hidden tab never polls.
+      if (poll === undefined && !document.hidden)
+        poll = window.setInterval(() => void fetchNow(), POLL_MS);
+    };
+    const stopPoll = () => {
+      window.clearInterval(poll);
+      poll = undefined;
+    };
+    const failed = (message: string, harness: boolean) => {
+      failing = true;
+      // A failed load is retried by polling, whatever the stream says.
+      startPoll();
+      setLive((l) => ({
+        ...l,
+        lost: { message, harness, since: l.lost?.since ?? new Date().toISOString() },
+      }));
+    };
+    const fetchNow = async (): Promise<void> => {
+      if (loading) {
+        again = true;
+        return;
+      }
+      loading = true;
+      again = false;
+      const mine = generation;
+      let next: T | undefined;
+      let error: string | undefined;
       try {
-        const next = await load();
-        if (stopped) return;
-        if (!next.ok && next.code === 'VIEW_UNAVAILABLE' && last.current?.ok) {
-          setError(next.message);
-          return;
+        const ctl = new AbortController();
+        const deadline = window.setTimeout(() => ctl.abort(), LOAD_DEADLINE_MS);
+        try {
+          next = await load(ctl.signal);
+        } finally {
+          window.clearTimeout(deadline);
         }
-        last.current = next;
-        setValue(next);
-        setError(undefined);
       } catch (err) {
-        if (!stopped) setError((err as Error).message);
+        error =
+          (err as Error).name === 'AbortError'
+            ? `no answer in ${LOAD_DEADLINE_MS / 1000} s`
+            : (err as Error).message;
+      }
+      if (stopped || mine !== generation) return;
+      loading = false;
+      if (next === undefined) failed(error ?? 'error', false);
+      else if (!next.ok && next.code === 'VIEW_UNAVAILABLE') {
+        // Temporary: keep a good document with a warning, and retry either way.
+        if (last.current?.ok) failed(next.message, true);
+        else {
+          failing = true;
+          startPoll();
+          last.current = next;
+          setValue(next);
+        }
+      } else {
+        last.current = next;
+        docDigest = next.digest;
+        failing = false;
+        if (pushing) stopPoll();
+        setValue(next);
+        setLive((l) => ({
+          ...l,
+          lost: undefined,
+          docDigest: next.digest,
+          // A GET answered while polling ran the source just now: the data is current.
+          ...(pushing ? {} : { stale: undefined }),
+        }));
+        // The server moved on while this load ran: catch up (a few times at most).
+        const lagging =
+          pushing && latest !== undefined && next.digest !== undefined && next.digest !== latest;
+        behind = lagging ? behind + 1 : 0;
+        if (lagging && behind <= 3) again = true;
+      }
+      if (again) void fetchNow();
+    };
+    /** Drops a pending load: its answer is no longer wanted. */
+    const forget = () => {
+      generation++;
+      loading = false;
+      again = false;
+    };
+    const unsubscribeNow = () => {
+      unsubscribe?.();
+      unsubscribe = undefined;
+      window.clearTimeout(retry);
+      retry = undefined;
+      pushing = false;
+    };
+    const subscribe = () => {
+      unsubscribeNow();
+      // Until the stream confirms itself, the page polls: a stream that never
+      // opens cannot freeze the screen.
+      startPoll();
+      if (!source.subscribe) return;
+      unsubscribe = source.subscribe(
+        (ev) => {
+          if (stopped) return;
+          if (!ev) return void fetchNow();
+          if (ev.kind === 'down') {
+            unsubscribe = undefined;
+            pushing = false;
+            latest = undefined;
+            // A known failure stays on screen until a load succeeds.
+            setLive((l) => ({ ...l, mode: 'poll' }));
+            startPoll();
+            void fetchNow();
+            retry = window.setTimeout(subscribe, RESUBSCRIBE_MS);
+            return;
+          }
+          pushing = true;
+          if (!failing) stopPoll();
+          if (ev.kind === 'stale') {
+            const stale = { since: ev.since, message: ev.message };
+            setLive((l) => ({ ...l, mode: 'push', stale }));
+            return;
+          }
+          latest = ev.token;
+          const shown = docDigest !== undefined && ev.token === docDigest;
+          setLive((l) => ({
+            ...l,
+            mode: 'push',
+            checkedAt: ev.checkedAt,
+            token: ev.token,
+            stale: undefined,
+            // The server confirmed exactly the shown content: the link works again.
+            ...(shown ? { lost: undefined } : {}),
+          }));
+          if (shown) {
+            // A pending load would only replace confirmed content with an older answer.
+            forget();
+            behind = 0;
+            failing = false;
+            stopPoll();
+          } else void fetchNow();
+        },
+        workId !== undefined ? { workId } : {},
+      );
+    };
+    const onVisibility = () => {
+      if (document.hidden) {
+        unsubscribeNow();
+        stopPoll();
+        forget();
+      } else {
+        void fetchNow();
+        subscribe();
       }
     };
-    void tick();
-    const id = window.setInterval(tick, POLL_MS);
+    document.addEventListener('visibilitychange', onVisibility);
+    if (!document.hidden) {
+      void fetchNow();
+      subscribe();
+    }
     return () => {
       stopped = true;
-      window.clearInterval(id);
+      document.removeEventListener('visibilitychange', onVisibility);
+      unsubscribeNow();
+      stopPoll();
     };
-    // `key` names the polled document; `load` is recreated on every render.
-  }, [key]);
-  return { value, error };
+    // `key` names the document; `load` is recreated on every render.
+  }, [key, active]);
+  return { value, live };
+}
+
+/** «Данные на HH:MM · обновляются сами» and the stale or lost-connection warning. */
+function Freshness({ generatedAt, live }: { generatedAt: string; live: Live }) {
+  const now = Date.now();
+  const clock = (iso: string) => formatClock(iso, undefined, now) ?? t.live.unknownTime;
+  // A confirmed check of the same content is newer than the document's own
+  // time. Only the live route confirms: a file read says nothing about when
+  // the snapshot was taken.
+  const confirmed =
+    liveRoute === 'state' &&
+    live.mode === 'push' &&
+    live.checkedAt !== undefined &&
+    live.token !== undefined &&
+    live.token === live.docDigest &&
+    Date.parse(live.checkedAt) > Date.parse(generatedAt)
+      ? live.checkedAt
+      : undefined;
+  const at = clock(confirmed ?? generatedAt);
+  const how =
+    live.mode === 'poll' ? t.live.poll : liveRoute === 'state' ? t.live.push : t.live.snapshot;
+  const problem = live.stale ?? live.lost;
+  return (
+    <>
+      {problem ? (
+        <p className="app-note app-bad" data-testid="stale">
+          {live.lost && !live.lost.harness
+            ? t.app.connectionLost(live.lost.message)
+            : t.live.stale(clock(problem.since), problem.message, at)}
+        </p>
+      ) : null}
+      <p className="app-note app-fresh" data-testid="freshness">
+        {t.live.at(
+          at,
+          confirmed && clock(generatedAt) !== at ? clock(generatedAt) : undefined,
+          how,
+        )}
+      </p>
+    </>
+  );
 }
 
 type NavKey = 'overview' | 'reviews' | 'decisions' | 'activity' | 'settings' | 'history' | 'health';
@@ -146,7 +392,12 @@ function Note({ bad, children }: { bad?: boolean; children: ReactNode }) {
 }
 
 function WorkScreen({ id, anchor }: { id: string; anchor: string | undefined }) {
-  const { value, error } = usePoll<WorkDetailCheck>(() => source.loadWork!(id), 'work:' + id);
+  const { value, live } = useLive<WorkDetailCheck & Digested>(
+    (signal) => source.loadWork!(id, signal),
+    'work:' + id,
+    id,
+  );
+  const error = live.lost?.message;
   useEffect(() => {
     // The clicked link is gone after navigation: move focus to the target, not just the view.
     const el = value?.ok && anchor ? document.getElementById(anchor) : null;
@@ -168,7 +419,7 @@ function WorkScreen({ id, anchor }: { id: string; anchor: string | undefined }) 
         <Refusal head={t.work.detailUnavailable} r={value} />
       ) : (
         <>
-          {error ? <Note bad>{t.app.connectionLost(error)}</Note> : null}
+          <Freshness generatedAt={value.detail.generatedAt} live={live} />
           {value.newerRevision ? <Note>{t.app.newerRevision}</Note> : null}
           <WorkDetail detail={value.detail} now={Date.now()} lang={lang} workHref={workHash} />
         </>
@@ -179,7 +430,15 @@ function WorkScreen({ id, anchor }: { id: string; anchor: string | undefined }) 
 
 function App() {
   const route = useRoute();
-  const { value: check, error } = usePoll<ViewCheck>(() => source.load(), 'view');
+  const { value: check, live } = useLive<ViewCheck & Digested>(
+    (signal) => source.load(signal),
+    'view',
+    undefined,
+    // The work screen has its own stream; the overview one would only cost
+    // a harness run per check and a browser connection.
+    route.screen !== 'work',
+  );
+  const error = live.lost?.message;
   const main = useRef<HTMLElement>(null);
   const first = useRef(true);
   useEffect(() => {
@@ -225,7 +484,7 @@ function App() {
     const clipped = Boolean(view.truncated?.questions);
     body = (
       <>
-        {error ? <Note bad>{t.app.connectionLost(error)}</Note> : null}
+        <Freshness generatedAt={view.generatedAt} live={live} />
         {check.newerRevision ? <Note>{t.app.newerRevision}</Note> : null}
         {isEmpty(view) ? (
           <Note>
@@ -270,8 +529,10 @@ async function boot() {
     const h = (await (await fetch(new URL('./api/health', window.location.href))).json()) as {
       version?: unknown;
       lang?: unknown;
+      live?: unknown;
     };
     if (typeof h.version === 'string') uiVersion = h.version;
+    if (h.live === 'state' || h.live === 'file') liveRoute = h.live;
     if (typeof h.lang === 'string') served = h.lang;
   } catch {
     // No health route (a host page): the browser locale decides.

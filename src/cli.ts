@@ -9,6 +9,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { langOf } from './model/i18n.ts';
+import { compatReport } from './server/check.ts';
 import { HarnessUnavailable, probeHarness } from './server/harness.ts';
 import { ServeError, startServer, type ServeOptions } from './server/serve.ts';
 
@@ -30,13 +31,16 @@ function packageRoot(): string {
 }
 
 const usage = `Usage: devcontour-harness-ui (--view <file> | --demo | --state <dir> [--policy <file>])
-                            [--lang ru|en] [--harness <bin>] [--port N] [--host 127.0.0.1]
+                            [--lang ru|en] [--window 24h|7d] [--harness <bin>] [--port N] [--host 127.0.0.1]
+       devcontour-harness-ui --check [--harness <bin>] [--state <dir> [--policy <file>]]
 
-  --view <file>    operator view JSON (from \`harness view\`), re-read on each request
+  --view <file>    operator view JSON (from \`harness view\`); an open page updates when the file changes
   --demo           serve the bundled sample view
-  --state <dir>    compute the view with the installed \`harness view\` on each request
-                   (devcontour-harness 0.1.0-alpha.55 or newer)
+  --state <dir>    compute the view with the installed \`harness view\`
+                   (devcontour-harness 0.1.0-alpha.55 or newer); an open page updates by itself
   --policy <file>  policy for --state; needed while the state has no binding
+  --window 24h|7d  history window for --state (default: the harness default, 24h)
+  --check          print {harness, ui, viewVersion, compatible, fix?}; exit 0 compatible, 3 not
   --lang ru|en     language of harness texts when the page does not ask for one;
                    default from LC_ALL, LC_MESSAGES or LANG
   --harness <bin>  harness executable for --state (default: harness on PATH)
@@ -60,6 +64,8 @@ async function main() {
         demo: { type: 'boolean' },
         state: { type: 'string' },
         policy: { type: 'string' },
+        window: { type: 'string' },
+        check: { type: 'boolean' },
         lang: { type: 'string' },
         harness: { type: 'string' },
         port: { type: 'string' },
@@ -78,6 +84,29 @@ async function main() {
   if (args.version) return void process.stdout.write(version + '\n');
   if (args.lang !== undefined && args.lang !== 'ru' && args.lang !== 'en')
     fail('INVALID_INPUT', `--lang: expected ru or en, got ${args.lang}.`, 2);
+  if (args.check) {
+    if (args.view !== undefined || args.demo)
+      fail('INVALID_INPUT', '--check takes --harness, --state and --policy only.\n' + usage, 2);
+    if (args.policy !== undefined && args.state === undefined)
+      fail('INVALID_INPUT', '--policy needs --state.\n' + usage, 2);
+    const report = await compatReport({
+      bin: args.harness ?? 'harness',
+      ui: version,
+      ...(args.state !== undefined ? { state: resolve(args.state) } : {}),
+      ...(args.policy !== undefined ? { policy: resolve(args.policy) } : {}),
+    });
+    process.stdout.write(JSON.stringify({ ok: report.compatible, ...report }) + '\n');
+    if (report.fix) process.stderr.write(report.fix + '\n');
+    process.exit(report.compatible ? 0 : 3);
+  }
+  if (args.window !== undefined && args.window !== '24h' && args.window !== '7d')
+    fail('INVALID_INPUT', `--window: expected 24h or 7d, got ${args.window}.`, 2);
+  if (args.window !== undefined && args.state === undefined)
+    fail(
+      'INVALID_INPUT',
+      '--window needs --state; a --view file has the window it was written with.\n' + usage,
+      2,
+    );
   const sources = [args.view !== undefined, args.demo === true, args.state !== undefined];
   if (sources.filter(Boolean).length > 1)
     fail('INVALID_INPUT', 'Pass only one of --view, --demo and --state.\n' + usage, 2);
@@ -118,10 +147,17 @@ async function main() {
           'to a file and pass --view <file>.',
         2,
       );
+    if (args.window !== undefined && !support.window)
+      fail(
+        'HARNESS_VIEW_UNAVAILABLE',
+        `The installed harness${support.version ? ' ' + support.version : ''} does not take --window.`,
+        2,
+      );
     source = {
       harness: {
         bin,
         state: resolve(args.state),
+        ...(args.window !== undefined ? { window: args.window } : {}),
         ...(args.policy !== undefined ? { policy: resolve(args.policy) } : {}),
         lang: support.lang,
         defaultLang: lang,

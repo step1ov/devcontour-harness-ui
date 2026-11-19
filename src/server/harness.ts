@@ -12,6 +12,8 @@ export interface HarnessViewOptions {
   bin: string;
   state: string;
   policy?: string;
+  /** History window passed as `--window` (`24h` or `7d`); absent = the harness default (24 h). */
+  window?: string;
   /** Deadline of one harness run; default 30 s. */
   timeoutMs?: number;
 }
@@ -23,6 +25,10 @@ export interface HarnessSupport {
   view: boolean;
   /** The `view` operation takes `lang` (plain strings in the requested language). */
   lang: boolean;
+  /** The `view` operation takes `window` (history window). */
+  window: boolean;
+  /** `viewVersion` the `view` operation declares in its output schema, when it names one. */
+  viewVersion?: number;
 }
 
 export class HarnessUnavailable extends Error {
@@ -164,13 +170,44 @@ export async function probeHarness(bin: string): Promise<HarnessSupport> {
     throw new HarnessUnavailable(`\`${bin} capabilities\` printed no capabilities catalog.`);
   const tools = Array.isArray(data.tools) ? data.tools : [];
   const view = tools.find((t) => isObject(t) && t.name === 'view') as
-    { inputSchema?: { properties?: Record<string, unknown> } } | undefined;
+    { inputSchema?: { properties?: Record<string, unknown> }; outputSchema?: unknown } | undefined;
   const props = view?.inputSchema?.properties;
+  const viewVersion = declaredViewVersion(view?.outputSchema);
   return {
     ...(typeof data.version === 'string' ? { version: data.version } : {}),
     view: view !== undefined,
     lang: isObject(props) && Object.hasOwn(props, 'lang'),
+    window: isObject(props) && Object.hasOwn(props, 'window'),
+    ...(viewVersion !== undefined ? { viewVersion } : {}),
   };
+}
+
+/**
+ * The `viewVersion` constant of the `view` output schema: the overview branch
+ * (`properties.viewVersion.const`) of a plain object or `anyOf`/`oneOf` schema.
+ */
+function declaredViewVersion(schema: unknown): number | undefined {
+  if (!isObject(schema)) return undefined;
+  const branches = [
+    schema,
+    ...(['anyOf', 'oneOf'] as const).flatMap((k) =>
+      Array.isArray(schema[k]) ? (schema[k] as unknown[]) : [],
+    ),
+  ];
+  for (const b of branches) {
+    const props = isObject(b) && isObject(b.properties) ? b.properties : undefined;
+    const v = props && isObject(props.viewVersion) ? props.viewVersion.const : undefined;
+    if (typeof v === 'number' && Number.isInteger(v)) return v;
+  }
+  return undefined;
+}
+
+/** `harness --version`: the version from its envelope, or `undefined` when it does not answer. */
+export async function harnessVersion(bin: string): Promise<string | undefined> {
+  const r = await run(bin, ['--version']);
+  const env = r.exit === 0 ? parseEnvelope(r.stdout) : undefined;
+  const data = env?.ok === true && isObject(env.data) ? env.data : undefined;
+  return typeof data?.harness === 'string' ? data.harness : undefined;
 }
 
 export type HarnessViewResult =
@@ -189,6 +226,7 @@ export async function harnessView(
   const args = ['view', '--state', o.state];
   if (o.policy !== undefined) args.push('--policy', o.policy);
   if (lang !== undefined) args.push('--lang', lang);
+  if (o.window !== undefined) args.push('--window', o.window);
   if (workId !== undefined) args.push(`--work=${workId}`);
   const r = await run(o.bin, args, o.timeoutMs);
   if (r.exit === undefined)

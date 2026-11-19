@@ -347,6 +347,17 @@ const ru = {
     idle: 'Сейчас ничего не выполняется.',
     fromYou: (what: string) => ` От вас: ${what}.`,
   },
+  // Freshness of the shown data (S3 live updates).
+  live: {
+    at: (at: string, same: string | undefined, how: string) =>
+      `Данные на ${at}${same ? ` (без изменений с ${same})` : ''} · ${how}`,
+    push: 'обновляются сами',
+    poll: 'проверка раз в 5 секунд',
+    snapshot: 'снимок; при изменении файла страница обновится',
+    unknownTime: 'неизвестное время',
+    stale: (since: string, message: string, at: string) =>
+      `Не удалось обновить данные с ${since}: ${message}. На экране данные на ${at} — они могут быть устаревшими.`,
+  },
   footer: (at: string | undefined) =>
     `Данные harness на ${at ?? 'неизвестное время'}; панель ничего не меняет.`,
   target: {
@@ -869,6 +880,16 @@ const en: Dict = {
     now: (parts: string) => `Now: ${parts}.`,
     idle: 'Nothing is running now.',
     fromYou: (what: string) => ` From you: ${what}.`,
+  },
+  live: {
+    at: (at: string, same: string | undefined, how: string) =>
+      `Data as of ${at}${same ? ` (unchanged since ${same})` : ''} · ${how}`,
+    push: 'updates by itself',
+    poll: 'checked every 5 seconds',
+    snapshot: 'a snapshot; the page updates when the file changes',
+    unknownTime: 'an unknown time',
+    stale: (since: string, message: string, at: string) =>
+      `Could not update the data since ${since}: ${message}. Showing the data as of ${at}; it may be out of date.`,
   },
   footer: (at: string | undefined) =>
     `Harness data as of ${at ?? 'an unknown time'}; the panel changes nothing.`,

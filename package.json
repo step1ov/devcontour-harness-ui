@@ -41,7 +41,8 @@
     "start": "node dist/lib/cli.js --demo",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test:e2e": "npm run build && playwright test"
+    "test:e2e": "npm run build && playwright test",
+    "check": "npm run typecheck && npm run format:check && npm test && npm run test:e2e"
   },
   "peerDependencies": {
     "devcontour-harness": ">=0.1.0-alpha.55 <0.2.0",
