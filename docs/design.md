@@ -1,43 +1,63 @@
-# devcontour-harness-ui: design
+# devcontour-harness-ui: дизайн
 
-Status: draft for `0.1.0-alpha.0`. Applies to view version 1.
+Статус: черновик для `0.1.0-alpha.0`. Относится к представлению версии 1.
+Версия 1 фиксируется, когда предложение P1 попадает в harness (срез S1); до
+этого черновик может меняться без новой мажорной версии.
 
-## 1. Goals
+## 1. Цели
 
-The harness is headless. Its state is spread across `status`, `explain`,
-`report`, `handoff`, review records and the event log. Each of these answers
-one question, in JSON or terminal text. An operator watching a run, or a
-person the lead agent works for, needs one place that shows:
+Harness работает без интерфейса. Его состояние разнесено по `status`,
+`explain`, `report`, `handoff`, записям ревью и журналу событий. Каждая из
+этих команд отвечает на один вопрос — в JSON или в тексте терминала.
+Оператору, который следит за прогоном, или человеку, на которого работает
+ведущий агент, нужно одно место, где видно:
 
-- what needs their answer now;
-- what runs now, at which stage, after how many attempts and rechecks;
-- how reviews converge: rounds, open and decided findings, escalations;
-- which settings are in force: who writes, who reviews, thresholds,
-  budgets, timeouts;
-- how the run went over time: load, failures, gates, spend against budget;
-- whether the machinery is healthy: controller, stalled attempts,
-  environment failures, budget state, drift of accepted results.
+- что ждёт его ответа сейчас;
+- что выполняется сейчас, на каком этапе, после скольких попыток и
+  перепроверок, и почему была повторная попытка;
+- что проверено и как: запуском, повторным использованием прежнего
+  результата, чтением reviewer или никак;
+- как сходятся ревью: раунды, открытые и решённые замечания, эскалации;
+- какие решения приняты по ходу работы, в том числе временные;
+- кто что делал: ведущий, harness, writer, reviewer, оператор;
+- какие настройки действуют: кто пишет, кто проверяет, пороги, бюджеты,
+  таймауты, решает ли ведущий технические вопросы;
+- как шёл прогон во времени: нагрузка, сбои, gates, расходы против бюджета;
+- исправна ли машинерия: контроллер, зависшие попытки, сбои окружения,
+  состояние бюджета, дрейф принятых результатов, принят ли результат только
+  локально или уже есть в удалённом репозитории.
 
-Goals:
+Цели:
 
-1. **Data stays in the harness.** The panel renders a document the harness
-   computes, the _operator view_. The panel derives no numbers of its own.
-   The view is a pure projection over state and policy, with its own
-   `viewVersion`.
-2. **One component set, two hosts.** The standalone app (`npx
-devcontour-harness-ui`) and DevContour render the same React components
-   from the same view type. DevContour feeds them from its own store.
-3. **Read-only first.** The first release has no write path. The first
-   write, later, is the operator's answer to an executor question, recorded
-   with `--actor operator`.
-4. **Local and quiet.** The panel listens on loopback only. It makes no
-   outbound requests and sends no telemetry. Secrets never enter the view.
+1. **Понятно без технической подготовки.** Каждый экран сначала отвечает
+   обычными словами: что происходит, что дальше, что нужно от человека.
+   Технические подробности (коды, ref, gates) доступны, но не обязательны
+   для понимания (§5.9).
+2. **Панель показывает данные harness, а не пересказ агента.** Всё, что
+   видит оператор, вычислено harness из его состояния. Ведущий агент может
+   объяснить экран, но не подменяет его своим рассказом.
+3. **Данные остаются в harness.** Панель рисует документ, который вычисляет
+   harness, — _операторское представление_ (operator view). Своих чисел
+   панель не выводит. Представление — чистая проекция состояния и политики
+   со своей `viewVersion`. Простые фразы на экране — это формулировка над
+   числами представления, а не новый расчёт.
+4. **Один набор компонентов, два хоста.** Отдельное приложение (`npx
+devcontour-harness-ui`) и DevContour рисуют одни и те же компоненты React
+   по одному типу представления. DevContour кормит их из своего хранилища.
+5. **Сначала только чтение.** В первом выпуске пути записи нет. Первая
+   запись, позже, — ответ оператора на вопрос исполнителя с `--actor
+operator` (S5, дизайн утверждает владелец).
+6. **Локально и тихо.** Панель слушает только loopback. Она не делает
+   исходящих запросов и не отправляет телеметрию. Секреты в представление не
+   попадают.
+7. **Два языка.** Русский — полноправный язык интерфейса, английский —
+   запасной (с S2, §5.9, §6, §7).
 
-Non-goals: editing policy or the graph, starting or stopping runs, remote
-or multi-user access, product features of DevContour (product memory,
-releases, boards), and a hosted service.
+Не цели: редактирование политики или графа, запуск и остановка прогонов,
+удалённый или многопользовательский доступ, продуктовые функции DevContour
+(продуктовая память, релизы, доски) и облачный сервис.
 
-## 2. Architecture
+## 2. Архитектура
 
 ```
             harness core (devcontour-harness)                 this package
@@ -55,26 +75,27 @@ releases, boards), and a hosted service.
                                            ViewSource adapter over its own store
 ```
 
-- `operatorView` lives in `devcontour-harness/projections`. That module is
-  already browser-safe (no `node:*`) and already holds the shared
-  projections (`attemptView`, `queueStop`, `workInputOf`). The node-side
-  loader follows the report pattern: `valueReport` is pure,
-  `collectReportInput` reads the store. Proposals are in
-  [harness-proposals.md](harness-proposals.md).
-- The UI package never imports harness internals. It depends on the view
-  type only. Until the harness exports that type, the UI keeps a local copy
-  (`src/model/view.ts`). A test checks the copy against the harness schema
-  once the schema exists (slice S1).
-- `devcontour-harness` is an optional peer dependency. The standalone CLI
-  needs it only to compute live views. `--view <file>` and `--demo` work
-  without it.
+- `operatorView` живёт в `devcontour-harness/projections`. Этот модуль уже
+  безопасен для браузера (без `node:*`) и уже содержит общие проекции
+  (`attemptView`, `queueStop`, `workInputOf`). Загрузчик на стороне node
+  следует шаблону отчёта: `valueReport` чистый, `collectReportInput` читает
+  хранилище. Предложения — в [harness-proposals.md](harness-proposals.md).
+- Пакет UI никогда не импортирует внутренности harness. Он зависит только
+  от типа представления. Пока harness не экспортирует этот тип, UI держит
+  локальную копию (`src/model/view.ts`). Когда появится схема (срез S1),
+  тест сверит копию со схемой harness.
+- `devcontour-harness` — необязательная peer-зависимость. Отдельному CLI она
+  нужна только для живых представлений. `--view <file>` и `--demo` работают
+  без неё.
+- Пакет остаётся отдельным репозиторием (решение владельца): React не
+  попадает в harness.
 
-## 3. Operator view schema (version 1)
+## 3. Схема операторского представления (версия 1)
 
-One JSON document. The field names follow the harness contracts they are
-projected from. The authoritative TypeScript is `src/model/view.ts`.
-Proposal P1 moves it to a Zod contract in the harness, with a generated
-JSON Schema `schemas/operator-view.schema.json`.
+Один JSON-документ. Имена полей следуют договорам harness, из которых они
+проецируются. Авторитетный TypeScript — `src/model/view.ts`. Предложение P1
+переносит его в Zod-договор harness со сгенерированной JSON Schema
+`schemas/operator-view.schema.json`.
 
 ```
 OperatorView {
@@ -83,109 +104,126 @@ OperatorView {
   generatedAt: ISO          // projection clock (injected in tests)
   source { producer, producerVersion, stateVersion, token }
   settings, works[], reviews[], questions[], escalations[], drift[],
-  progress, history, health, truncated?
+  progress, history, health, activity[]?, decisions[]?, truncated?
 }
 ```
 
+Поля, помеченные ниже «alpha.55», harness выдаёт с `0.1.0-alpha.55`; поля
+«P2» — в более поздних выпусках (номер не назначен). Источники и выпуски —
+в разделе P6 [предложений](harness-proposals.md). Пока производитель поле
+не выдаёт, панель пишет «нет сведений», а не ноль и не «в порядке».
+
 ### 3.1 settings
 
-The source is the execution policy bound to the state (`binding.json`), or
-the one passed with `--policy`. The view carries `policyDigest`. If the two
-policies differ, `health.warnings` gets `POLICY_DIGEST_MISMATCH`.
+Источник — политика исполнения, привязанная к состоянию (`binding.json`),
+или переданная через `--policy`. Представление несёт `policyDigest`. Если
+две политики различаются, в `health.warnings` попадает
+`POLICY_DIGEST_MISMATCH`.
 
-`settings.defaulted` lists the dotted paths whose value came from a harness
-default rather than the policy file. The Settings screen shows "default"
-only for those paths.
+`settings.defaulted` перечисляет пути через точку, значение которых взято из
+умолчаний harness, а не из файла политики. Экран настроек пишет
+«по умолчанию» только для этих путей.
 
-| View field                                                                    | Harness source                                                                                  |
-| ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| `approvalMode`                                                                | `approvalMode` (`agent` \| `operator`, default `agent`)                                         |
-| `mode`, `concurrency`                                                         | `mode`, `concurrency` (1–4, default 2)                                                          |
-| `roles[] {role, writer, repositoryId?}`                                       | `roles.<id>.writer`, overridden per repository by `repositories[].roles`                        |
-| `reviews[] {kind, scope, repositoryId?, role?, reviewer, alternates, vendor}` | the effective `ReviewRule` per scope (see below)                                                |
-| `thresholds.inputSeverity`                                                    | `inputPolicy.threshold` (1–11, default 7; 11 = autonomous)                                      |
-| `thresholds.leadAnswersMaxSeverity`                                           | `inputPolicy.leadAnswers.maxSeverity` (alpha.54; absent means none)                             |
-| `thresholds.criticalPaths`                                                    | `inputPolicy.criticalPaths.length`: the count only, not the paths                               |
-| `thresholds.maxAttempts / repairBudget`                                       | `maxAttempts` (default 3), `repairBudget` (default 6)                                           |
-| `thresholds.maxNeutralFailures`                                               | `MAX_NEUTRAL_FAILURES`                                                                          |
-| `thresholds.reviewRoundCap`                                                   | `reviewRoundCap(policy)` (today `maxAttempts * 2`)                                              |
-| `thresholds.reviewEscalationRounds`                                           | `REVIEW_ESCALATION_ROUNDS` (3)                                                                  |
-| `budgets[] {scope, usd?, timeMs?}`                                            | `budgets.work / group / total`                                                                  |
-| `budgetOnUnknown`                                                             | `budgets.onUnknown`                                                                             |
-| `timeouts {runTimeoutMs, leaseMs, gateTimeoutFloorMs?, stall}`                | the same policy fields; `stallSweep`, or `DEFAULT_STALL_SWEEP` when absent                      |
-| `lean.state`                                                                  | `on` when the project manifest's `profile.layers` contains `lean`; `unknown` without a manifest |
+| Поле представления                                                            | Источник в harness                                                                     |
+| ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `approvalMode`                                                                | `approvalMode` (`agent` \| `operator`, по умолчанию `agent`)                           |
+| `mode`, `concurrency`                                                         | `mode`, `concurrency` (1–4, по умолчанию 2)                                            |
+| `roles[] {role, writer, repositoryId?}`                                       | `roles.<id>.writer`, переопределяется по репозиторию в `repositories[].roles`          |
+| `reviews[] {kind, scope, repositoryId?, role?, reviewer, alternates, vendor}` | действующее `ReviewRule` для каждой области (см. ниже)                                 |
+| `thresholds.inputSeverity`                                                    | `inputPolicy.threshold` (1–11, по умолчанию 7; 11 = автономно)                         |
+| `thresholds.leadAnswersMaxSeverity`                                           | `inputPolicy.leadAnswers.maxSeverity` (alpha.54; отсутствие значит «ни одного»)        |
+| `thresholds.leadAnswersTechnical`                                             | `inputPolicy.leadAnswers.technical` (alpha.55; отсутствие значит «нет»)                |
+| `thresholds.criticalPaths`                                                    | `inputPolicy.criticalPaths.length`: только число, не пути                              |
+| `thresholds.maxAttempts / repairBudget`                                       | `maxAttempts` (по умолчанию 3), `repairBudget` (по умолчанию 6)                        |
+| `thresholds.maxNeutralFailures`                                               | `MAX_NEUTRAL_FAILURES`                                                                 |
+| `thresholds.reviewRoundCap`                                                   | `reviewRoundCap(policy)` (сейчас `maxAttempts * 2`)                                    |
+| `thresholds.reviewEscalationRounds`                                           | `REVIEW_ESCALATION_ROUNDS` (3)                                                         |
+| `budgets[] {scope, usd?, timeMs?}`                                            | `budgets.work / group / total`                                                         |
+| `budgetOnUnknown`                                                             | `budgets.onUnknown`                                                                    |
+| `timeouts {runTimeoutMs, leaseMs, gateTimeoutFloorMs?, stall}`                | те же поля политики; `stallSweep` или `DEFAULT_STALL_SWEEP`, если его нет              |
+| `lean.state`                                                                  | `on`, если `profile.layers` манифеста проекта содержит `lean`; `unknown` без манифеста |
 
-Review rules have scopes:
+У правил ревью есть области:
 
-- Plan and contract rules are global.
-- A code review resolves role → repository → global, like `codeReview()` in
-  the harness. `reviews[]` therefore holds one global `code` rule plus one
-  entry for each repository or role that overrides it (`scope`,
-  `repositoryId`, `role`).
-- The Settings screen shows the effective reviewer for each role and
-  repository pair, and where that reviewer comes from.
+- Правила плана и договора глобальные.
+- Ревью кода разрешается по цепочке роль → репозиторий → глобально, как
+  `codeReview()` в harness. Поэтому `reviews[]` содержит одно глобальное
+  правило `code` и по записи на каждый репозиторий или роль, которые его
+  переопределяют (`scope`, `repositoryId`, `role`).
+- Экран настроек показывает действующего reviewer для каждой пары роли и
+  репозитория и откуда он взят.
 
-Gate commands, `writePaths`, prompts, tool profiles and prices are not
-part of the view.
+Команды gates, `writePaths`, промпты, профили инструментов и цены в
+представление не входят.
 
 ### 3.2 works[]
 
-One entry per work order, in the order `status` lists them. Limit: 500.
-Overview counts come from `progress`, not from this list (§3.6).
+Одна запись на поручение, в том порядке, в каком их перечисляет `status`.
+Предел: 500. Счётчики обзора берутся из `progress`, а не из этого списка
+(§3.6).
 
-| Field                                         | Harness source                                                                                                                     |
-| --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `id, graphId, status, resultSha?`             | `status.works[]`                                                                                                                   |
-| `title?`                                      | graph node title, masked and clipped to 120 chars (§9); dropped with `--no-titles`                                                 |
-| `stage {name, step?, since?, next[], needs?}` | `status.works[].stage` (alpha.54: `queued, blocked, prepare, writer, gates, review, integration, input, stopped, done, cancelled`) |
-| `attempts.used / max / left`                  | `attemptSummaryView()`: counted `work.attempt` against `maxAttempts`                                                               |
-| `attempts.failed`                             | `attemptSummaryOf()`: counted failures; shutdown interruptions excluded                                                            |
-| `attempts.interrupted`                        | attempts with `interruptedByShutdown`; they use no attempt                                                                         |
-| `attempts.rechecks`                           | evidence records with `recheck: true` across the work's attempts                                                                   |
-| `attempts.neutral {used, max}`                | `work.neutralFailures` against `MAX_NEUTRAL_FAILURES`                                                                              |
-| `attempts.line`                               | `attemptSummaryLine`                                                                                                               |
-| `liveness?`                                   | `status.works[].liveness` (`quiet`, `stalled`; `active` when moving)                                                               |
-| `runtime?, model?`                            | the active attempt                                                                                                                 |
-| `blockers[]`                                  | `engine.blockers` codes                                                                                                            |
-| `question?`                                   | `status.works[].input` (`requestId, state, severity`)                                                                              |
-| `spend {calls, usd: Bounded, durationMs}`     | `stage.spend`: the work's own call records, under the report's cost rules (§3.7)                                                   |
+| Поле                                                  | Источник в harness                                                                                                                    |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `id, graphId, status, resultSha?`                     | `status.works[]`                                                                                                                      |
+| `title?`                                              | заголовок узла графа, замаскирован и обрезан до 120 символов (§9); убирается с `--no-titles`                                          |
+| `stage {name, step?, since?, next[], needs?}`         | `status.works[].stage` (alpha.54: `queued, blocked, prepare, writer, gates, review, integration, input, stopped, done, cancelled`)    |
+| `stage.typical? {p50Ms, p90Ms, samples}`              | P2: наблюдаемая длительность этого этапа в этом состоянии; нет при малом числе образцов                                               |
+| `attempts.used / max / left`                          | `attemptSummaryView()`: учтённые `work.attempt` против `maxAttempts`                                                                  |
+| `attempts.failed`                                     | `attemptSummaryOf()`: учтённые сбои; прерывания при остановке не считаются                                                            |
+| `attempts.interrupted`                                | попытки с `interruptedByShutdown`; попытку они не расходуют                                                                           |
+| `attempts.rechecks`                                   | записи доказательств с `recheck: true` по всем попыткам работы                                                                        |
+| `attempts.neutral {used, max}`                        | `work.neutralFailures` против `MAX_NEUTRAL_FAILURES`                                                                                  |
+| `attempts.line`                                       | `attemptSummaryLine`                                                                                                                  |
+| `attempts.lastFailure? {attempt, bucket, plain, at?}` | alpha.55: почему остановилась прошлая попытка; `bucket` из `failureBucketOf`, `plain` — фиксированный шаблон и замаскированная деталь |
+| `liveness?`                                           | `status.works[].liveness` (`quiet`, `stalled`; `active`, когда работа движется)                                                       |
+| `runtime?, model?`                                    | активная попытка                                                                                                                      |
+| `blockers[] {code, plain?, actor}`                    | alpha.55: коды `engine.blockers` с понятным текстом и тем, кто должен действовать (`null` — никто, работа ждёт очереди)               |
+| `dependsOn?`                                          | P2: зависимости узла в графе, для полосы плана (§5.1)                                                                                 |
+| `target? {repositoryId, ref, acceptedSha?, remote}`   | P2: принято локально; `remote.state` (`pushed`, `not-pushed`, `unknown`) по локальной remote-tracking ref, без fetch                  |
+| `question?`                                           | `status.works[].input` (`requestId, state, severity`)                                                                                 |
+| `spend {calls, usd: Bounded, durationMs}`             | `stage.spend`: собственные записи вызовов работы, по правилам стоимости отчёта (§3.7)                                                 |
 
-`Bounded = {value, bound: exact | lower | unknown}` keeps the report rule:
+`blockers[]` в черновике был массивом строк; объекты заменяют его до
+фиксации версии 1.
 
-- an unknown price shows as `unknown`;
-- a partial sum shows as `≥ $x`;
-- neither is ever shown as zero.
+`Bounded = {value, bound: exact | lower | unknown}` сохраняет правило
+отчёта:
 
-Per-attempt rows are not in this document; they are in the work detail
-document (§3.10).
+- неизвестная цена показывается как «неизвестно»;
+- частичная сумма показывается как `≥ $x`;
+- ни то ни другое никогда не показывается как ноль.
+
+Строк по попыткам в этом документе нет; они в документе деталей работы
+(§3.11).
 
 ### 3.3 reviews[]
 
-One entry per review subject: plan and contract (alpha.54
-`reviewSubjectSummary`), and code (alpha.54 `review-code` records). Limits:
-50 subjects, and 50 findings per subject.
+Одна запись на предмет ревью: план и договор (alpha.54
+`reviewSubjectSummary`) и код (записи alpha.54 `review-code`). Пределы: 50
+предметов и 50 замечаний на предмет.
 
 - `kind, subject, workId?, approved`
-- `rounds {used, max}`: `max` is `null` when the subject has no cap.
-- `open {blocking, notes}`, plus `accepted`: findings accepted as
-  limitations.
-- `reviewer`, `sameVendor`: the reviewer binding actually used.
+- `rounds {used, max}`: `max` равен `null`, если у предмета нет предела.
+- `open {blocking, notes}` и `accepted`: замечания, принятые как
+  ограничения.
+- `reviewer`, `sameVendor`: фактически использованная привязка reviewer.
 - `spend {calls, usd}`
 - `findings[] {id, severity, status, rounds?, disposition?, title?}`:
-  - `status` is one of `open`, `closed`, `withdrawn` or
+  - `status` — одно из `open`, `closed`, `withdrawn` или
     `accepted-limitation`.
-  - `disposition` is `{decision: accepted-limitation | continue, by: lead | operator, round}`.
-    The reason text is not included.
-  - `title` is the finding message, masked and then clipped to 120 chars
-    (§9).
-- `escalation? {requestId, findings[], answered}`: an open blocking finding
-  that has gone past `reviewEscalationRounds`. Only the operator decides it.
-- `line`: the harness one-line summary.
+  - `disposition` — `{decision: accepted-limitation | continue, by: lead | operator, round}`.
+    Текст причины не включается.
+  - `title` — текст замечания, замаскированный и затем обрезанный до 120
+    символов (§9).
+- `escalation? {requestId, findings[], answered}`: открытое блокирующее
+  замечание, которое прошло `reviewEscalationRounds`. Решает его только
+  оператор.
+- `line`: однострочная сводка harness.
 
-### 3.4 questions[] and escalations[]
+### 3.4 questions[] и escalations[]
 
-`questions[]` lists executor questions (`kind: question`) in every open
-input state of the harness (`inputStates`):
+`questions[]` перечисляет вопросы исполнителя (`kind: question`) во всех
+открытых состояниях ввода harness (`inputStates`):
 
 - `awaiting-answer`
 - `answered-not-applied`
@@ -193,458 +231,635 @@ input state of the harness (`inputStates`):
 - `delivered`
 - `carry-stale`
 
-Only `awaiting-answer` asks for an answer. The panel words the other states
-by who acts next:
+Ответа ждёт только `awaiting-answer`. Остальные состояния панель описывает
+через того, кто действует следующим:
 
-- `answered-not-applied`: the lead or the controller applies the answer.
-- `applied-awaiting-claim`: the answer waits for the next attempt.
-- `delivered`: nobody needs to act.
-- `carry-stale`: the lead carries the answer again or withdraws it.
+- `answered-not-applied`: ответ применяет ведущий или контроллер.
+- `applied-awaiting-claim`: ответ ждёт следующей попытки.
+- `delivered`: никому ничего делать не нужно.
+- `carry-stale`: ведущий переносит ответ заново или отзывает его.
 
-Each entry has `requestId, workId, state, version, severity, createdAt`,
-plus:
+У каждой записи есть `requestId, workId, state, version, severity,
+createdAt`, а также:
 
-- `answerableBy`: `operator-or-lead` only when `leadAnswers` is set and
-  `severity ≤ leadAnswersMaxSeverity`, the same rule as `leadMayAnswer`.
-  Otherwise it is `operator`. A reader that sees any other value treats it
-  as `operator`.
+- `answerableBy`: `operator-or-lead` только когда задан `leadAnswers` и
+  `severity ≤ leadAnswersMaxSeverity` — то же правило, что `leadMayAnswer`.
+  С alpha.55 также для вопроса с `impact: technical`, если включён
+  `leadAnswers.technical`. Иначе `operator`. Читатель, увидевший любое
+  другое значение, считает его `operator`.
+- `impact?` (alpha.55): `user-visible` — ответ меняет результат для
+  пользователя, `technical` — не меняет. Отсутствующее или неизвестное
+  значение читается как `user-visible`: отвечает только оператор.
+- `plain?` (alpha.55): одна строка обычными словами — что изменится для
+  пользователя. Замаскирована, обрезана до 200 символов.
 - `answeredBy?`: alpha.54 `input.answeredBy`.
-- `title?`: the question text, masked and then clipped to 200 chars. Options
-  and attachments are left out. The full text is behind `harness input-show`
-  until S5, when an authenticated detail route serves it (§9).
+- `title?`: текст вопроса, замаскированный и затем обрезанный до 200
+  символов. Варианты и вложения не включаются. Полный текст доступен через
+  `harness input-show` до S5, когда его отдаёт аутентифицированный маршрут
+  деталей (§9).
 
-The existing `RequestLike` has neither `workId`, question text nor answer
-actor. The node loader therefore passes sanitized question summaries
-(`OperatorQuestionInput` in proposal P1). The pure projection never reads
-raw requests.
+У существующего `RequestLike` нет ни `workId`, ни текста вопроса, ни того,
+кто ответил. Поэтому загрузчик на node передаёт очищенные сводки вопросов
+(`OperatorQuestionInput` в предложении P1). Чистая проекция сырые запросы не
+читает.
 
-`escalations[]` lists everything else that waits for a person or for the
-lead. Each entry is `{workId?, subject?, code, actor, action, since}`:
+`escalations[]` перечисляет всё остальное, что ждёт человека или ведущего.
+Каждая запись — `{workId?, subject?, code, actor, action, since}`:
 
-- stops whose `explain` diagnosis names `actor: operator | lead`;
-- review escalations;
-- a queue pause by the operator or by the budget.
+- остановки, диагноз `explain` которых называет `actor: operator | lead`;
+- эскалации ревью;
+- пауза очереди оператором или бюджетом.
 
-Limit: 50. The panel shows the actor and the action, and never acts on them.
+Предел: 50. Панель показывает исполнителя и действие и никогда не выполняет
+их сама.
 
 ### 3.5 drift[]
 
-Accepted results whose target ref has moved since acceptance. The source is
-alpha.54 `acceptedTargetSchema`:
+Принятые результаты, целевая ref которых сдвинулась после приёмки. Источник
+— alpha.54 `acceptedTargetSchema`:
 
 - `workId, repositoryId, ref, acceptedSha, head?`
 - `commitsSinceAccepted?, filesSinceAccepted?, diverged?`
-- `unavailable?`: the reason when git could not be read. It is masked and
-  clipped.
+- `unavailable?`: причина, если git прочитать не удалось. Замаскирована и
+  обрезана.
 
-Computing drift needs git, so the node loader computes it and passes it in;
-the pure projection only copies it. The list holds only rows with commits
-since acceptance, divergence, or `unavailable`. Limit: 50. Totals over all
-accepted works are in `health.drift`.
+Дрейф требует git, поэтому его вычисляет загрузчик на node и передаёт
+дальше; чистая проекция только копирует. В `serve-view` дрейф кэшируется по
+голове цели и пересчитывается не чаще раза в 30 с (решение владельца); тот
+же кэш служит состоянию удалённого репозитория (`works[].target.remote`).
+Список содержит только строки с коммитами после приёмки, расхождением или
+`unavailable`. Предел: 50. Итоги по всем принятым работам — в
+`health.drift`.
 
 ### 3.6 progress
 
-All counts are over every work order in the state, never over the
-truncated `works` list:
+Все счётчики считаются по всем поручениям состояния, а не по обрезанному
+списку `works`:
 
 - `total`, `done`, `waitingOperator`
 - `byStage: Record<stage, count>`
-- `running`: works in a slot-holding stage (prepare, writer, gates, review,
-  integration).
+- `running`: работы на этапе, занимающем слот (prepare, writer, gates,
+  review, integration).
 
-`queue {paused, reason?, detail?, actor?, action?}` comes from `queueStop`
-and `queuePause`, as in `status --detail`. `queue.detail` is free text
-derived from attempt errors, so it is masked and then clipped like a title
-(§9). With `--no-titles` it is dropped.
+`queue {paused, reason?, detail?, actor?, action?}` берётся из `queueStop`
+и `queuePause`, как в `status --detail`. `queue.detail` — свободный текст из
+ошибок попыток, поэтому он маскируется и обрезается, как заголовок (§9). С
+`--no-titles` он убирается.
 
 ### 3.7 history
 
-The series behind the charts. Every series has one value per bucket, and
-`from`, `to` and `bucketMs` are explicit. The default window is 24 h in
-15-minute buckets (96 values). The loader accepts other windows within the
-limits: up to 7 days and up to 500 buckets.
+Ряды для графиков. У каждого ряда одно значение на интервал; `from`, `to` и
+`bucketMs` заданы явно. Окно по умолчанию — 24 ч интервалами по 15 минут (96
+значений); 7 дней — по запросу (решение владельца). Загрузчик принимает и
+другие окна в пределах: до 7 дней и до 500 интервалов.
 
-| Series                       | Unit and rule                                                                                                                                                                                                                            |
-| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `load`                       | Peak number of concurrent attempts in the bucket, from `startedAt` / `finishedAt`.                                                                                                                                                       |
-| `attemptsStarted`            | Attempts claimed in the bucket.                                                                                                                                                                                                          |
-| `attemptsFailed`             | Attempts that finished `failed` or `expired` in the bucket. Shutdown interruptions are excluded (report rule).                                                                                                                           |
-| `gatesPassed`, `gatesFailed` | Applicable `attempt.gate` results in the bucket, rechecks included. A skipped or not-applicable gate is in neither series.                                                                                                               |
-| `gatesReused`                | Integration gates satisfied by reused candidate evidence. They are counted only here, not as passes.                                                                                                                                     |
-| `spendUsd`                   | Cost of calls finished in the bucket that the report counts as known.                                                                                                                                                                    |
-| `spendBound`                 | `exact` only if no call in the window has an unknown cost under the report rules. Those rules cover the call outcome, the cost source, usage completeness, and attempts with no call records (`callsRecorded`). Otherwise it is `lower`. |
-| `spendOpeningUsd`            | Spend before `from`, as a `Bounded`. The cumulative curve starts at this value, so earlier spend is not lost.                                                                                                                            |
-| `budgetUsd?`                 | The `total` budget, drawn as the "spend vs budget" line.                                                                                                                                                                                 |
+| Ряд                          | Единица и правило                                                                                                                                                                                                                  |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `load`                       | Пиковое число одновременных попыток в интервале, по `startedAt` / `finishedAt`.                                                                                                                                                    |
+| `attemptsStarted`            | Попытки, взятые в работу в интервале.                                                                                                                                                                                              |
+| `attemptsFailed`             | Попытки, завершившиеся `failed` или `expired` в интервале. Прерывания при остановке не считаются (правило отчёта).                                                                                                                 |
+| `gatesPassed`, `gatesFailed` | Применимые результаты `attempt.gate` в интервале, включая перепроверки. Пропущенный или неприменимый gate не входит ни в один ряд.                                                                                                 |
+| `gatesReused`                | Gates интеграции, закрытые повторно использованным доказательством кандидата. Считаются только здесь, не как пройденные.                                                                                                           |
+| `spendUsd`                   | Стоимость вызовов, завершённых в интервале, которую отчёт считает известной.                                                                                                                                                       |
+| `spendBound`                 | `exact`, только если ни у одного вызова в окне нет неизвестной стоимости по правилам отчёта. Эти правила учитывают исход вызова, источник стоимости, полноту usage и попытки без записей вызовов (`callsRecorded`). Иначе `lower`. |
+| `spendOpeningUsd`            | Расходы до `from`, как `Bounded`. Накопительная кривая начинается с этого значения, поэтому ранние расходы не теряются.                                                                                                            |
+| `budgetUsd?`                 | Бюджет `total`, рисуется линией «расходы против бюджета».                                                                                                                                                                          |
 
-Attempts per hour on the History screen are summed from these buckets in
-the UI. Re-bucketing is display work, not derivation.
+Попытки в час на экране истории суммируются из этих интервалов в UI.
+Перегруппировка интервалов — работа отображения, а не вывод новых данных.
 
 ### 3.8 health
 
-- `controller {present, leaseUntil?}`: from `controller()` and the lease
-  clock.
-- `stalledAttempts`, `quietAttempts`: from attempt liveness.
-- `environmentFailures`: attempts in the history window whose failure
-  bucket is `environment`.
-- `budgeting`: `off` when `budgetOverview` returns nothing, meaning the
-  policy has no budgets.
+- `controller {present, leaseUntil?}`: из `controller()` и часов аренды.
+- `stalledAttempts`, `quietAttempts`: из живости попыток.
+- `environmentFailures`: попытки в окне истории, у которых группа сбоя —
+  `environment`.
+- `budgeting`: `off`, когда `budgetOverview` ничего не возвращает, то есть
+  в политике нет бюджетов.
 - `budgets[] {scope, id?, state, spentUsd, limitUsd?, spentMs?, limitMs?}`:
-  one row for each budgeted scope instance (total, each group, each work),
-  from `budgetOverview`. The Overview shows the worst state. A work budget
-  that is exceeded while the total is within limits shows as exceeded.
-- `spentTotalUsd`: all known spend in the state, independent of budgets.
-- `drift {checked, drifted, unavailable}`: counts over all accepted works.
-  `unavailable` is shown as "not checked", never as zero drift.
-- `warnings[] {code, message}`, for example `POLICY_DIGEST_MISMATCH`,
-  `VIEW_TRUNCATED`, `DRIFT_UNAVAILABLE` or `STATE_NEWER_THAN_HARNESS`.
-  Messages are fixed templates plus masked values. Limit: 20.
+  строка на каждый экземпляр области с бюджетом (total, каждая группа,
+  каждая работа), из `budgetOverview`. Обзор показывает худшее состояние.
+  Превышенный бюджет работы при общем в пределах показывается как
+  превышенный.
+- `spentTotalUsd`: все известные расходы состояния, независимо от
+  бюджетов.
+- `drift {checked, drifted, unavailable}`: счётчики по всем принятым
+  работам. `unavailable` показывается как «не проверено», никогда как
+  нулевой дрейф.
+- `warnings[] {code, message}`, например `POLICY_DIGEST_MISMATCH`,
+  `VIEW_TRUNCATED`, `DRIFT_UNAVAILABLE` или `STATE_NEWER_THAN_HARNESS`.
+  Сообщения — фиксированные шаблоны с замаскированными значениями. Предел: 20.
 
-### 3.9 Limits, size and change token
+### 3.9 activity[] и decisions[] (P2)
 
-**Size.** Every list has a limit:
+`activity[] {at, actor, action, workId?, subject?, plain}` — кто что делал:
+ведущий и harness, writer, reviewer, контроллер, оператор. Источник —
+журнал событий; новые сверху, не больше 50, окно — то же, что у истории.
+`action` — код события, `plain` — фраза обычными словами, замаскирована и
+обрезана. Отсутствие поля значит «производитель не ведёт ленту», а не
+«ничего не происходило». Вынести ли ленту в отдельный документ — открытое
+решение (§11).
 
-| List                  | Limit |
-| --------------------- | ----- |
-| `works`               | 500   |
-| `reviews`             | 50    |
-| findings, per subject | 50    |
-| `questions`           | 50    |
-| `escalations`         | 50    |
-| `drift`               | 50    |
-| `settings.roles`      | 100   |
-| `settings.reviews`    | 100   |
-| `settings.budgets`    | 3     |
-| `warnings`            | 20    |
-| history buckets       | 500   |
+`decisions[] {id, kind, by, at, workId?, subject?, findingId?, requestId?,
+temporary, revisit?, title?, reason?}` — решения, принятые по ходу работы:
+замечание принято как ограничение, ведущий ответил на технический вопрос,
+решение продолжать. `temporary: true` с условием `revisit` (из
+`accept-limitation --revisit`) — временное решение, к которому нужно
+вернуться. Тексты замаскированы и обрезаны. Предел: 50.
 
-Every free string is masked, then clipped (§9). Settings strings are model
-names, ids and enums. Ids follow the graph and policy schemas, which bound
-their length. With these limits the largest possible document is
-computable. A test builds it with every list full and every string at its
-limit, and asserts that it is at most 256 KB of UTF-8.
+### 3.10 Пределы, размер и токен изменений
 
-- When a list goes over its limit, the projection cuts it deterministically
-  (it keeps the first entries in harness order) and `truncated` counts the
-  omitted entries for that list.
-- If a document would still exceed the cap, the projection refuses it with
-  `VIEW_TOO_LARGE` (exit 4). It never returns a partial document.
+**Размер.** У каждого списка есть предел:
 
-**Determinism.** For the same state, policy, clock and options, the output
-is the same bytes: keys are sorted and no maps are used.
+| Список                    | Предел |
+| ------------------------- | ------ |
+| `works`                   | 500    |
+| `reviews`                 | 50     |
+| замечания, на предмет     | 50     |
+| `questions`               | 50     |
+| `escalations`             | 50     |
+| `drift`                   | 50     |
+| `activity`                | 50     |
+| `decisions`               | 50     |
+| `settings.roles`          | 100    |
+| `settings.reviews`        | 100    |
+| `settings.budgets`        | 3      |
+| `warnings`                | 20     |
+| интервалы истории         | 500    |
+| `verification`, на работу | 50     |
 
-**Change token.** `source.token` is derived from content. It is the SHA-256
-of the canonical view bytes without `generatedAt` and `source.token`.
+Каждая свободная строка маскируется, затем обрезается (§9). Строки настроек
+— имена моделей, id и перечисления. Id следуют схемам графа и политики,
+которые ограничивают их длину. С этими пределами наибольший возможный
+документ вычислим. Тест строит его со всеми списками до предела и всеми
+строками максимальной длины и проверяет, что он не больше 256 КБ UTF-8.
 
-- The store counter `ExecutionView.dataVersion()` is only an invalidation
-  hint for the server. Lease expiry, liveness, git drift, policy files and
-  window boundaries all change the view without a store write.
-- The server recomputes on a hint, and at least every 5 s while any work is
-  live.
-- `ETag` and SSE events use the content token, so equal tokens really mean
-  an equal view.
+- Когда список превышает предел, проекция детерминированно его обрезает
+  (оставляет первые записи в порядке harness), а `truncated` считает
+  выброшенные записи по каждому списку.
+- Если документ всё равно превысил бы предел, проекция отказывает с
+  `VIEW_TOO_LARGE` (exit 4). Частичный документ она не возвращает.
 
-### 3.10 Work detail document
+**Детерминизм.** Для одного и того же состояния, политики, часов и опций
+результат — одни и те же байты: ключи отсортированы, Map не используются.
 
-`harness view --work <id>` (route `/api/view?work=<id>`) returns a
-`WorkDetailView`. It shares `viewVersion` and `viewRevision` with the
-overview document, and has:
+**Токен изменений.** `source.token` выводится из содержимого. Это SHA-256
+канонических байтов представления без `generatedAt` и `source.token`.
 
-- `work`: the same `WorkView`.
-- `attempts[]`: newest first, at most 20. Each row has:
+- Счётчик хранилища `ExecutionView.dataVersion()` — только подсказка серверу
+  об инвалидации. Истечение аренды, живость, дрейф git, файлы политики и
+  границы окна меняют представление без записи в хранилище.
+- Сервер пересчитывает по подсказке и не реже раза в 5 с, пока хоть одна
+  работа жива.
+- `ETag` и события SSE используют содержательный токен, поэтому равные
+  токены действительно означают равное представление.
+
+### 3.11 Документ деталей работы
+
+`harness view --work <id>` (маршрут `/api/view?work=<id>`) возвращает
+`WorkDetailView`. У него те же `viewVersion` и `viewRevision`, что у
+документа обзора, и в нём есть:
+
+- `work`: тот же `WorkView`.
+- `attempts[]`: новые сверху, не больше 20. В каждой строке:
   - `attempt, status, failureBucket?, interrupted?`
   - `runtime, model?, startedAt, finishedAt?`
   - `stages[] {stage, durationMs?, outcome?}`
-- `reviews[]`, `questions[]` and `drift?` for that work.
+- `verification[]` (alpha.55): как проверялась работа, по строке на gate и
+  на ревью — `{gate, kind: gate | review, result, how, by?, attempt?, at?}`.
+  - `result`: `passed`, `failed`, `reused`, `skipped`, `not-run`.
+  - `how`: `executed` — запущено в этой попытке; `reused` — взято прежнее
+    доказательство; `read` — reviewer прочитал diff и ничего не запускал;
+    `not-checked` — не проверялось.
+  - Отсутствие `verification` значит «нет сведений о проверках», а не
+    «проверено». Предел: 50.
+- `reviews[]`, `questions[]` и `drift?` этой работы.
 
-Per-attempt rows live only in this document, so they never inflate the
-overview.
+Строки по попыткам и проверкам живут только в этом документе и не
+раздувают обзор.
 
-## 4. Versioning and compatibility
+## 4. Версии и совместимость
 
-**Version fields.**
+**Поля версий.**
 
-- `viewVersion` is the integer major. It changes only when a field is
-  removed, renamed, or changes meaning.
-- `viewRevision` grows on additive changes: a new optional field, a new
-  enum value or a new section.
-- A new enum value is additive only when the reader's fallback is safe.
-  When no safe fallback exists, the change is a new major.
+- `viewVersion` — целая мажорная версия. Меняется только когда поле
+  удалено, переименовано или меняет смысл.
+- `viewRevision` растёт при добавлениях: новое необязательное поле, новое
+  значение перечисления или новый раздел.
+- Новое значение перечисления считается добавлением, только если
+  запасное чтение у читателя безопасно. Если безопасного чтения нет, это
+  новая мажорная версия.
 
-**Readers** (`checkView` in `src/model/compat.ts`, tested):
+**Читатели** (`checkView` в `src/model/compat.ts`, с тестами):
 
-- The UI accepts its own major and any revision, and ignores unknown
-  fields.
-- Every field a component reads is checked first. A malformed document is
-  refused with `NOT_A_VIEW` and the paths at fault, instead of throwing
-  during render.
-- Unknown values read conservatively:
-  - an unknown stage shows as raw text;
-  - an unknown cost bound shows as `unknown`;
-  - an unknown `answerableBy` means only the operator answers;
-  - an unknown question state means "inspect before acting";
-  - an unknown budget state counts as `undetermined`.
-- Lookups use own properties only, so `__proto__` and similar keys are
-  shown as text.
-- When `viewRevision` is newer than the build knows, the app shows "newer
-  data, update the panel for full detail".
-- Any other major is refused with `VIEW_VERSION_UNSUPPORTED` and a fix
-  hint. The UI does not guess.
-- An HTTP 409 keeps its code and message through `httpViewSource`.
+- UI принимает свою мажорную версию с любой ревизией и игнорирует
+  неизвестные поля.
+- Каждое поле, которое читает компонент, сначала проверяется. Искажённый
+  документ отклоняется с `NOT_A_VIEW` и путями к ошибкам, а не падает при
+  отрисовке.
+- Неизвестные значения читаются осторожно:
+  - неизвестный этап показывается как есть;
+  - неизвестная граница стоимости — как «неизвестно»;
+  - неизвестный `answerableBy` значит, что отвечает только оператор;
+  - неизвестный или отсутствующий `impact` значит `user-visible`;
+  - неизвестное состояние вопроса значит «посмотрите перед действием»;
+  - неизвестное состояние бюджета считается `undetermined`;
+  - неизвестный `how` проверки показывается как «способ неизвестен», не как
+    «проверено»;
+  - неизвестное `remote.state` — как «неизвестно», не как «отправлено».
+- Поиск идёт только по собственным свойствам, поэтому `__proto__` и похожие
+  ключи показываются как текст.
+- Когда `viewRevision` новее, чем знает сборка, приложение пишет «данные
+  новее панели — обновите панель, чтобы видеть всё».
+- Любая другая мажорная версия отклоняется с `VIEW_VERSION_UNSUPPORTED` и
+  подсказкой, как исправить. UI не угадывает.
+- HTTP 409 сохраняет код и сообщение при прохождении через
+  `httpViewSource`.
 
-**Producers.** The harness keeps a released major for the whole `0.1.x`
-alpha line. When a new major appears, `harness view --view-version N` keeps
-the previous major available for at least one minor release.
+**Производители.** Harness держит выпущенную мажорную версию всю линию
+альф `0.1.x`. Когда появляется новая мажорная, `harness view --view-version
+N` оставляет предыдущую доступной ещё минимум один минорный выпуск.
 
-**Package versions.** The peer range for `devcontour-harness`
-(`>=0.1.0-alpha.53 <0.2.0`) is advisory; the view version decides
-compatibility. `devcontour-harness-ui --check` (slice S3) runs:
+**Версии пакетов.** Диапазон peer для `devcontour-harness`
+(`>=0.1.0-alpha.53 <0.2.0`) — рекомендация; совместимость решает версия
+представления. `devcontour-harness-ui --check` (срез S3) выполняет:
 
 - `harness --version`
-- `harness capabilities`, which must list `view`
+- `harness capabilities`, где должен быть `view`
 - `harness view`
 
-It then prints `{harness, ui, viewVersion, compatible, fix?}`.
+и печатает `{harness, ui, viewVersion, compatible, fix?}`.
 
-**`stateVersion`** is copied through, so the panel can tell "old state, new
-harness" (a warning) from "no state" (an empty view).
+**`stateVersion`** копируется как есть, чтобы панель отличала «старое
+состояние, новый harness» (предупреждение) от «состояния нет» (пустое
+представление).
 
-## 5. Screens
+## 5. Экраны
 
-Six screens. Navigation is a hash route (`#/`, `#/work/<id>`, `#/reviews`,
-`#/settings`, `#/history`, `#/health`), so the standalone bundle needs no
-server routing. Every screen works at 390 px with no horizontal page
-scroll. Tables become stacked cards below 640 px. Charts keep their
-`viewBox` and are drawn in inline SVG, with no chart library. Each chart has
-a text summary and a screen-reader data table.
+Восемь экранов. Навигация — hash-маршруты (`#/`, `#/work/<id>`,
+`#/reviews`, `#/decisions`, `#/activity`, `#/settings`, `#/history`,
+`#/health`), поэтому отдельной сборке не нужна маршрутизация на сервере.
+Каждый экран работает при ширине 390 px без горизонтальной прокрутки
+страницы. Таблицы ниже 640 px превращаются в стопку карточек. Графики
+сохраняют `viewBox` и рисуются встроенным SVG, без библиотек графиков. У
+каждого графика есть текстовая сводка и таблица данных для экранного
+диктора.
 
-### 5.1 Overview (`#/`)
+Названия разделов — обычные слова. Технические названия (этапы, коды,
+gates) стоят рядом мелким шрифтом или внутри «что это значит».
+
+### 5.1 Обзор (`#/`)
 
 ```
 Desktop (≥ 1024 px)
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ Harness   [Queue running]   3 of 9 accepted   budget ≥ $6.02 / $40 [within] │
+│ Сейчас: в работе 1, в очереди 1. От вас: ответить на 1 вопрос.              │
+│ [Очередь идёт]   принято 1 из 4   бюджет ≥ $6.02 из $40 [в пределах]        │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ План: add-greeting ✓ → export-csv ● ждёт вас → docs-page ○  · locale-format ●│
 ├───────────────────────────────────┬─────────────────────────────────────────┤
-│ Needs your answer (1)             │ Working now (1 of 2 slots)              │
-│ [sev 8] export-csv                │ locale-format  [Checks] candidate-test… │
-│   Which delimiter should …        │   7m 50s · 2 attempts: 1 failed, 1 left │
-│   Only you can answer · q-17 v1   │                                         │
-├───────────────────────────────────┤ Waiting / blocked                       │
-│ Escalations (0)                   │ docs-page   [Queued] dependency         │
+│ Нужен ваш ответ (1)               │ Сейчас в работе (1 из 2 мест)           │
+│ [важность 8] export-csv           │ locale-format  Проверки · 7 мин 50 с    │
+│   Какой разделитель в CSV?        │   обычно 5–12 мин                       │
+│   Что изменится: как файл …       │   попытка 2 из 3; прошлая остановлена:  │
+│   Ответить можете только вы       │   проверка — lint нашёл лишний импорт   │
+├───────────────────────────────────┤                                         │
+│ Ждут решения (0)                  │ Ждут очереди / Остановлены              │
+│                                   │ docs-page — просто ждёт очереди,        │
+│                                   │   ничего не нужно                       │
 ├───────────────────────────────────┴─────────────────────────────────────────┤
-│ Load 24h ▁▁▁▁▂▃▂▅▃▂  Failures/h ▁▁▁▁▁▁█▁   Controller ✓  Stalled 0  Drift 1  │
+│ Нагрузка 24 ч ▁▁▂▃▂▅▃▂  Сбои/ч ▁▁▁█▁   Контроллер работает  Зависших нет    │
+│ Данные harness на 12:00; панель ничего не меняет                            │
 └─────────────────────────────────────────────────────────────────────────────┘
 
 390 px
 ┌──────────────────────────┐
-│ Harness  [Queue running] │
-│ 3 of 9 · ≥ $6.02 / $40   │
+│ Сейчас: в работе 1,      │
+│ в очереди 1. От вас:     │
+│ ответить на 1 вопрос.    │
 ├──────────────────────────┤
-│ Needs your answer (1)    │
-│ [sev 8] export-csv       │
-│ Which delimiter …        │
+│ План: ✓ → ● → ○  ·  ●    │
 ├──────────────────────────┤
-│ Working now (1 of 2)     │
-│ locale-format [Checks]   │
-│ 7m 50s · 1 left          │
+│ Нужен ваш ответ (1)      │
+│ [8] export-csv           │
+│ Какой разделитель …      │
 ├──────────────────────────┤
-│ Budget  Controller       │
-│ Stalled Drift            │
+│ Сейчас в работе (1 из 2) │
+│ locale-format Проверки   │
+│ 7 мин 50 с · осталась 1  │
+├──────────────────────────┤
+│ Ждут решения             │
+│ Ждут очереди / Останов.  │
+├──────────────────────────┤
+│ Бюджет  Контроллер       │
+│ Зависшие  Дрейф          │
+│ Данные harness на 12:00  │
 └──────────────────────────┘
 ```
 
-The order is fixed on every width: questions first, then running work, then
-health. A question that only the operator may answer says so in words.
-Until slice S5 the panel shows the request id and version and the exact
-command the operator runs. It never offers a button that answers for them.
+- **Фраза в шапке.** Первая строка — одно предложение «Сейчас: … От вас:
+  …». «Сейчас» перечисляет `progress.running`, `byStage.queued`,
+  `byStage.stopped` и паузу очереди; «От вас» — вопросы в
+  `awaiting-answer` и эскалации с `actor: operator`, иначе «ничего не
+  нужно». Это формулировка над счётчиками представления, а не новый расчёт.
+- **Полоса плана** (P2). Работы в порядке `status` со знаком этапа и
+  связями `dependsOn`; отмечено, где прогон сейчас. Если `works` обрезан,
+  полоса так и пишет. Без `dependsOn` полоса показывает только порядок.
+- **Разделы**, в этом порядке на любой ширине:
+  1. «Нужен ваш ответ»: вопросы в `awaiting-answer`. Рядом с каждым — строка
+     `plain` («что изменится»), кто может ответить, и для технических
+     вопросов при включённом `leadAnswersTechnical` — что ведущий может
+     ответить сам. До S5 панель показывает id и версию запроса и точную
+     команду, которую выполняет оператор. Кнопки, отвечающей за него, нет.
+  2. «Сейчас в работе»: этап обычными словами, сколько длится, обычный
+     диапазон `stage.typical` («обычно 5–12 мин»; без него диапазона нет),
+     строка попыток и «почему повтор» из `attempts.lastFailure`.
+  3. «Ждут решения»: эскалации и остановки, где действует оператор или
+     ведущий, с тем, кто действует и что сделать.
+  4. «Ждут очереди / Остановлены»: работы с `blockers[]`. Для каждой —
+     `plain` и кто должен действовать; `actor: null` читается как «просто
+     ждёт очереди — ничего не нужно».
+  5. Полоса здоровья и подвал.
+- **Подвал.** «Данные harness на HH:MM; панель ничего не меняет». Время —
+  `generatedAt` в часовом поясе зрителя.
 
-### 5.2 Work detail (`#/work/<id>`)
+### 5.2 Детали работы (`#/work/<id>`)
 
 ```
 ┌───────────────────────────────────────────────────────────────┐
-│ ← locale-format   Format dates by locale     [Checks] active  │
-│ Pipeline: prepare ✓ → writer ✓ → gates ● → review → integrate │
-│ Step candidate-test:unit · since 11:52 · 7m 50s               │
+│ ← locale-format   Даты по локали          Проверки · работает │
+│ Сейчас: проверки (candidate-test:unit) с 11:52, 7 мин 50 с;   │
+│ обычно 5–12 мин. Дальше: ревью, принятие.                     │
+│ Этапы: подготовка ✓ → написание ✓ → проверки ● → ревью → приём │
 ├───────────────────────────────┬───────────────────────────────┤
-│ Attempts 2 of 3 (1 left)      │ Spend ≥ $3.40 · 5 calls · 31m │
-│ #2 running  claude · writer   │ Blockers: —                   │
-│ #1 failed   check (lint)  12m │ Question: —                   │
-│ rechecks 1 · interrupted 0    │ Result: —                     │
+│ Почему повтор                 │ Расходы ≥ $3.40 · 5 вызовов   │
+│ Попытка 2 из 3 (осталась 1).  │ Что мешает: —                 │
+│ Прошлая остановлена: проверка │ Вопрос: —                     │
+│ — lint нашёл лишний импорт.   │                               │
+│ #2 идёт      claude · writer  │                               │
+│ #1 сбой      check (lint) 12м │                               │
 ├───────────────────────────────┴───────────────────────────────┤
-│ Reviews of this work: code r1 · open 0 blocking / 1 note      │
-│ Drift after acceptance: —                                     │
+│ Что проверено                                                 │
+│ lint            пройдено · запущено в попытке 2 (claude)      │
+│ unit            идёт                                          │
+│ код, ревью      прочитал diff, ничего не запускал (codex)     │
+│ e2e             не проверялось                                │
+├───────────────────────────────────────────────────────────────┤
+│ Принято: локально — нет; в удалённом репозитории — нет        │
+│ Дрейф после приёмки: —                                        │
 └───────────────────────────────────────────────────────────────┘
 ```
 
-The attempt rows come from the work detail document (§3.10). At 390 px the
-two columns stack in this order: pipeline, attempts, spend and blockers,
-reviews, drift. The pipeline becomes a vertical list.
+- Строки попыток и проверок — из документа деталей работы (§3.11).
+- **«Почему повтор»** — `attempts.lastFailure.plain`, группа сбоя и номер
+  попытки. Без `lastFailure` раздел пишет «причина прошлой остановки
+  неизвестна», если сбои были, и не показывается, если сбоев не было.
+- **«Что проверено»** — каждая строка `verification[]` говорит, что
+  проверено, как (`how`) и кем (`by`). Слова «проверено» без способа нет.
+  Ревью, которое читало diff, так и подписано: «прочитал diff, ничего не
+  запускал». Без `verification` — «нет сведений о проверках».
+- **«Принято локально / в удалённом репозитории»** — из `resultSha` и
+  `target`. Состояние удалённого репозитория берётся из локальной
+  remote-tracking ref без fetch, поэтому подпись говорит «по последнему
+  обновлению git на этой машине». `unknown` — «неизвестно», не «нет».
+- При 390 px колонки складываются так: сейчас, этапы, почему повтор,
+  что проверено, расходы и что мешает, ревью, принято, дрейф. Этапы
+  становятся вертикальным списком.
 
-### 5.3 Reviews (`#/reviews`)
+### 5.3 Ревью (`#/reviews`)
 
 ```
 ┌────────────────────────────────────────────────────────────────────┐
-│ Subject      Kind   Rounds  Open (blk/notes)  Accepted  Reviewer   │
-│ g1           plan   2 / 6   0 / 1             0         codex      │
-│ add-greeting code   1 / 6   0 / 0             0         codex      │
+│ Предмет      Вид    Раунды  Открыто (блок/зам.) Принято  Reviewer  │
+│ g1           план   2 / 6   0 / 1               0        codex     │
+│ add-greeting код    1 / 6   0 / 0               0        codex     │
 ├────────────────────────────────────────────────────────────────────┤
-│ ▸ g1 plan — approved after 2 rounds, 1 open note                   │
-│   F1 high   closed                 round 1                         │
-│   F2 note   open                   2 rounds                        │
-│   F7 high   accepted-limitation    by operator, round 4            │
-│   ⚠ escalation q-21: F9 open 3 rounds — operator decides           │
+│ ▸ g1 план — одобрен после 2 раундов, 1 открытое замечание          │
+│   F1 high   закрыто                раунд 1                         │
+│   F2 note   открыто                2 раунда                        │
+│   F7 high   принято как ограничение  оператор, раунд 4             │
+│   ⚠ эскалация q-21: F9 открыто 3 раунда — решает оператор          │
 └────────────────────────────────────────────────────────────────────┘
 ```
 
-At 390 px each subject is a card with its findings collapsed. The
-same-vendor flag shows as a badge whenever `sameVendor` is true.
+При 390 px каждый предмет — карточка со свёрнутыми замечаниями. Флаг
+одного вендора показывается значком, когда `sameVendor` истинно.
 
-### 5.4 Settings (`#/settings`, read-only)
+### 5.4 Решения (`#/decisions`, P2)
 
-The screen has these groups:
-
-- **Who works**: roles, then writer runtime, model and effort.
-- **Who reviews**: plan, contract and code, each with its reviewer,
-  alternates and vendor rule.
-- **When to ask you**: the input threshold in words ("questions of severity
-  7 and above wait for an answer; the lead may answer up to 4"), and the
-  number of critical paths.
-- **Limits**: attempts, repair budget, review round cap and escalation
-  rounds.
-- **Budgets**: per scope, and what happens on an unknown price.
-- **Timeouts**: run, lease, gate floor, quiet and stalled thresholds with
-  their action.
-- **Lean layer** and concurrency.
-
-Each value shows its unit. A value shows "default" only when its path is in
-`settings.defaulted`. Each role and repository pair shows its effective
-code reviewer and where that reviewer comes from.
-At 390 px it is a single column of definition lists. The policy digest is
-in the footer.
-
-### 5.5 History (`#/history`)
-
-Four charts share one time axis:
-
-1. Load: stacked peak of concurrent attempts per bucket, with a dashed line
-   at `concurrency`.
-2. Attempts started and failed per hour.
-3. Gates passed vs failed.
-4. Cumulative spend against the budget line. The curve is dashed and
-   labelled "lower bound" when `spendBound` is `lower`.
-
-The window selector (24 h, 7 d) applies only when the producer supplies
-that window. At 390 px the charts stack full width at 120 px height, with
-3 axis labels.
-
-### 5.6 Health (`#/health`)
-
-The screen shows:
-
-- controller presence and lease;
-- stalled and quiet attempts, linked to work detail;
-- environment failures in the window;
-- budget state;
-- drift rows (ref, accepted → head, commits and files since, diverged);
-- warnings with codes;
-- versions: harness, UI, view and state.
-
-At 390 px it is one column.
-
-### 5.7 Common rules
-
-- **States.** Each screen has four:
-  - Loading.
-  - Empty: "No state yet — run `harness run` first".
-  - Incompatible: the `checkView` message.
-  - Connection lost: the last view stays on screen with a banner.
-- **Accessibility.** Colour is never the only signal; every badge has text.
-  Focus is visible. Live regions announce the count of waiting questions
-  only.
-- **Dark mode.** `prefers-color-scheme`, overridable by `data-theme` on the
-  root.
-
-## 6. Standalone runtime
-
-```sh
-npx devcontour-harness-ui --view view.json          # bare view or the `harness view` envelope
-npx devcontour-harness-ui --demo                    # bundled sample
-npx devcontour-harness-ui --state <dir> --policy <file> [--port N]   # slice S3
-npx devcontour-harness-ui --from http://127.0.0.1:4791/              # slice S3, a running serve-view
+```
+┌────────────────────────────────────────────────────────────────────┐
+│ Временные (1)                                                      │
+│ F2 плана g1 принято как ограничение · ведущий · 11:10              │
+│   вернуться: перед релизом                                         │
+├────────────────────────────────────────────────────────────────────┤
+│ Все решения                                                        │
+│ 11:10 ведущий   принял ограничение F2 (g1)                          │
+│ 10:58 ведущий   ответил на технический вопрос q-12: причина …      │
+│ 10:31 оператор  продолжать после эскалации q-9                     │
+└────────────────────────────────────────────────────────────────────┘
 ```
 
-**Wire contract.** One contract covers both the UI CLI and the proposed
-`harness serve-view` (P3), so `httpViewSource` works against either.
+Источник — `decisions[]`. Временные решения (`temporary`) стоят сверху с
+условием `revisit`. Для каждого решения видно, кто решил, когда и почему.
+Технические ответы ведущего видны здесь, чтобы оператор мог проверить их
+задним числом. Без `decisions` экран пишет «производитель пока не сообщает
+решения».
 
-- `GET /api/view` returns the bare view, with a content `ETag` and
+### 5.5 Кто что делал (`#/activity`, P2)
+
+```
+┌────────────────────────────────────────────────────────────────────┐
+│ 11:52 harness   запустил проверку candidate-test:unit (locale-format)│
+│ 11:40 writer    задал вопрос q-17 и остановил export-csv           │
+│ 11:20 ведущий   запустил прогон графа g1                           │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+Источник — `activity[]`, новые сверху, с фильтром по работе и по
+исполнителю. Это события harness, а не пересказ агента. Без `activity`
+экран пишет «производитель пока не ведёт ленту».
+
+### 5.6 Настройки (`#/settings`, только чтение)
+
+Группы экрана:
+
+- **Кто работает**: роли, затем runtime, модель и effort writer.
+- **Кто проверяет**: план, договор и код — у каждого reviewer, запасные и
+  правило вендора.
+- **Когда спрашивать вас**: порог ввода словами («вопросы важности 7 и выше
+  ждут ответа; ведущий может ответить до 4»), строка «Технические вопросы
+  решает ведущий: да/нет; вопросы, меняющие результат для пользователя, —
+  всегда вам» (из `leadAnswersTechnical`; отсутствие — «нет») и число
+  критических путей.
+- **Пределы**: попытки, бюджет исправлений, предел раундов ревью и раунды до
+  эскалации.
+- **Бюджеты**: по областям и что происходит при неизвестной цене.
+- **Таймауты**: прогон, аренда, нижняя граница gate, пороги тишины и
+  зависания с действием.
+- **Слой lean** и параллельность.
+
+У каждого значения видна единица. «По умолчанию» стоит только у путей из
+`settings.defaulted`. Для каждой пары роли и репозитория виден действующий
+reviewer кода и откуда он взят. При 390 px это одна колонка списков
+определений. Дайджест политики — в подвале.
+
+### 5.7 История (`#/history`)
+
+Четыре графика с общей осью времени:
+
+1. Нагрузка: пик одновременных попыток в интервале стопкой, пунктир на
+   уровне `concurrency`.
+2. Начатые и неудачные попытки в час.
+3. Пройденные и проваленные gates.
+4. Накопленные расходы против линии бюджета. Кривая пунктирная и подписана
+   «нижняя граница», когда `spendBound` равно `lower`.
+
+Окно по умолчанию — 24 ч; переключатель на 7 дней работает, только когда
+производитель отдаёт это окно. При 390 px графики идут друг под другом во
+всю ширину высотой 120 px с тремя подписями оси.
+
+### 5.8 Здоровье (`#/health`)
+
+Экран говорит обычными словами, с кодом рядом:
+
+- «Контроллер работает, аренда до 12:00» / «Контроллер не запущен — работа
+  не продвигается»;
+- «Зависших попыток нет» / «Зависла 1 попытка» и «Тихих попыток: N» со
+  ссылками на детали работы;
+- «Сбоев окружения за 24 ч: N»;
+- состояние бюджета: «потрачено ≥ $6.02 из $40, в пределах»;
+- дрейф: «Изменено после приёмки: N; не проверено: M» и строки (ref,
+  принято → голова, коммиты и файлы после, расхождение);
+- предупреждения: фраза и код;
+- версии: harness, UI, представление и состояние.
+
+При 390 px — одна колонка.
+
+### 5.9 Общие правила
+
+- **Состояния.** У каждого экрана их четыре:
+  - Загрузка.
+  - Пусто: «Состояния пока нет — сначала выполните `harness run`».
+  - Несовместимо: сообщение `checkView`.
+  - Связь потеряна: последнее представление остаётся на экране с баннером.
+- **«Что это значит».** У каждого термина (этап, gate, ревью, перепроверка,
+  нейтральный сбой, нижняя граница, эскалация, принято, дрейф) есть
+  раскрываемое пояснение «что это значит» из глоссария (§12). Пояснение —
+  `<details>`, а не форма и не всплывающее окно.
+- **Слова с основанием.** «Проверено» не пишется без того, как и кем;
+  «готово» (принято) — без того, где принято (локально или в удалённом
+  репозитории) и после каких проверок; «заблокировано» — без причины и
+  того, кто должен действовать.
+- **Неизвестное — не ноль и не «в порядке».** Отсутствующее поле,
+  неизвестная граница или `unavailable` показываются словами «неизвестно»
+  или «не проверено» и никогда как 0, «нет» или зелёный значок.
+- **Доступность.** Цвет никогда не единственный сигнал; у каждого значка
+  есть текст. Фокус виден. Live-регионы объявляют только число ждущих
+  вопросов.
+- **Тёмная тема.** `prefers-color-scheme`, переопределяется `data-theme` на
+  корне.
+- **Язык.** Русский и английский с S2 (`lang`, §6, §7). Коды, id и команды
+  не переводятся.
+
+## 6. Отдельный запуск
+
+```sh
+npx devcontour-harness-ui --view view.json          # голое представление или конверт `harness view`
+npx devcontour-harness-ui --demo                    # встроенный пример
+npx devcontour-harness-ui --state <dir> --policy <file> [--port N]   # срез S3
+npx devcontour-harness-ui --from http://127.0.0.1:4791/              # срез S3, уже запущенный serve-view
+npx devcontour-harness-ui --demo --lang ru          # срез S2, язык интерфейса
+```
+
+**Язык (S2).** `--lang ru|en` задаёт язык интерфейса. Без флага язык берётся
+из системной локали: первая непустая из `LC_ALL`, `LC_MESSAGES`, `LANG`;
+значение, начинающееся с `ru`, даёт `ru`, любое другое — `en`. Русский —
+полноправный язык, а не перевод по остаточному принципу. Приложение также
+учитывает `?lang=ru|en` в адресе страницы; параметр адреса сильнее флага.
+
+**Окно истории (S3).** `--window 24h|7d` передаётся в живые маршруты
+(`--state`, `--from`) как есть. По умолчанию окно 24 ч, 7 дней — по запросу.
+Для `--view` окно задаёт тот, кто записал файл.
+
+**Контракт обмена.** Один контракт покрывает и CLI панели, и предложенный
+`harness serve-view` (P3), поэтому `httpViewSource` работает с обоими.
+
+- `GET /api/view` возвращает голое представление с содержательным `ETag` и
   `cache-control: no-store`.
-- `GET /api/view?work=<id>` returns the work detail document (§3.10).
-- `GET /api/events` is the SSE stream. It sends `event: view`, with data
-  `{token}`, whenever the content token changes.
-- `GET /api/health` returns `{ok, version, readOnly}`.
+- `GET /api/view?work=<id>` возвращает документ деталей работы (§3.11).
+- `GET /api/events` — поток SSE. Он отправляет `event: view` с данными
+  `{token}` при каждом изменении содержательного токена.
+- `GET /api/health` возвращает `{ok, version, readOnly}`.
 
-Refusals:
+Лента активности пока входит в документ обзора (`activity[]`, 50 последних
+записей). Отдельный маршрут `GET /api/view?activity=1` с более длинным
+окном — вариант, который остаётся открытым решением (§11).
 
-- 409 `{error:{code,message}}` when the view is incompatible.
-- 503 `VIEW_UNAVAILABLE` when no view exists yet.
+Отказы:
 
-`--view` accepts either the bare view or the envelope exactly as
-`harness view` prints it (`{ok:true,data}`). An error envelope is reported
-as `NOT_A_VIEW`.
+- 409 `{error:{code,message}}`, когда представление несовместимо.
+- 503 `VIEW_UNAVAILABLE`, когда представления ещё нет.
 
-**Output.** When the panel is listening, stdout gets one JSON line:
+`--view` принимает либо голое представление, либо конверт ровно в том виде,
+в каком его печатает `harness view` (`{ok:true,data}`). Конверт ошибки
+считается `NOT_A_VIEW`.
+
+**Вывод.** Когда панель начала слушать, в stdout уходит одна строка JSON:
 `{"ok":true,"url":"http://127.0.0.1:4790/","port":4790,"readOnly":true,"version":…}`.
 
-- A refusal prints `{"ok":false,"error":{code,message}}`.
-- Exit codes match the harness: 2 invalid input, 3 refusal, 4
-  infrastructure.
-- Human hints go to stderr.
+- Отказ печатает `{"ok":false,"error":{code,message}}`.
+- Коды выхода совпадают с harness: 2 — неверный ввод, 3 — отказ,
+  4 — инфраструктура.
+- Подсказки для человека идут в stderr.
 
-**Port.** With no `--port`, the CLI probes 4790–4809 and takes the first
-free port. A busy explicit `--port` is the error `PORT_BUSY`; it never
-switches silently.
+**Порт.** Без `--port` CLI перебирает 4790–4809 и берёт первый свободный.
+Занятый явный `--port` — ошибка `PORT_BUSY`; молча на другой порт CLI не
+переключается.
 
-**Bind.** The CLI binds `127.0.0.1` by default; `::1` and `localhost` are
-also allowed. Any other host, including `0.0.0.0` and `::`, is the error
-`HOST_NOT_LOOPBACK`, and no flag overrides that.
+**Адрес.** По умолчанию CLI слушает `127.0.0.1`; также допустимы `::1` и
+`localhost`. Любой другой адрес, включая `0.0.0.0` и `::`, — ошибка
+`HOST_NOT_LOOPBACK`, и никакой флаг этого не отменяет.
 
-**Request handling.**
+**Обработка запросов.**
 
-- Only GET and HEAD are served; anything else gets 405.
-- A malformed path or a NUL byte gets 400.
-- A handler failure gets 500 without stopping the server.
-- Static files must stay inside the app directory, checked both on the
-  lexical path and on the real path, so symlinks cannot escape it.
+- Обслуживаются только GET и HEAD; на всё остальное — 405.
+- Некорректный путь или байт NUL — 400.
+- Сбой обработчика — 500, сервер при этом продолжает работать.
+- Статические файлы должны оставаться внутри каталога приложения; это
+  проверяется и по лексическому пути, и по реальному, поэтому символические
+  ссылки не выводят за его пределы.
 
-**Data path.**
+**Путь данных.**
 
-- `--view`: the file is re-read on each request.
-- `--state` (S3): the CLI starts `harness serve-view` as a child process on
-  an ephemeral loopback port and proxies `/api/*` to it.
-  - The view is always computed by the harness the user installed, never
-    by this package.
-  - The child is stopped together with the panel.
-- `--from <url>` (S3) proxies to a `serve-view` that is already running.
-  The URL is checked before any request:
-  - it must use `http:`;
-  - its host must be the literal `127.0.0.1` or `[::1]`, or `localhost`
-    resolved to a loopback address;
-  - it must carry no credentials;
-  - its path must be `/` or empty.
-- The proxy never follows redirects, and it rejects any response whose
-  socket peer is not a loopback address.
+- `--view`: файл перечитывается при каждом запросе.
+- `--state` (S3): CLI запускает `harness serve-view` дочерним процессом на
+  временном loopback-порту и проксирует к нему `/api/*`.
+  - Представление всегда вычисляет harness, установленный пользователем,
+    а не этот пакет.
+  - Дочерний процесс останавливается вместе с панелью.
+- `--from <url>` (S3) проксирует к уже запущенному `serve-view`. Адрес
+  проверяется до первого запроса:
+  - схема должна быть `http:`;
+  - хост должен быть литералом `127.0.0.1` или `[::1]`, либо `localhost`,
+    разрешённым в loopback-адрес;
+  - в адресе не должно быть учётных данных;
+  - путь должен быть `/` или пустым.
+- Прокси не следует перенаправлениям и отвергает любой ответ, у которого
+  адрес собеседника сокета не loopback.
 
-**No telemetry.** No analytics, no font or CDN requests, and no update
-check. The bundle is self-contained.
+**Без телеметрии.** Нет аналитики, запросов шрифтов или CDN и проверки
+обновлений. Сборка самодостаточна.
 
-**Updates.** The app polls every 5 s with `If-None-Match`, and pauses
-polling while the tab is hidden. From S3 it also listens to
-`/api/events` and reloads the view on each event.
+**Обновления.** Приложение опрашивает сервер каждые 5 с с `If-None-Match`
+и приостанавливает опрос, пока вкладка скрыта. С S3 оно также слушает
+`/api/events` и перезагружает представление по каждому событию.
 
-## 7. Embedding API (DevContour)
+## 7. API встраивания (DevContour)
 
-DevContour adds `devcontour-harness-ui` as an exact build-time dependency
-and bundles the components with Vite. There is no runtime microfrontend,
-iframe or second server.
+DevContour подключает `devcontour-harness-ui` как точную зависимость
+времени сборки и собирает компоненты через Vite. Нет ни микрофронтенда во
+время выполнения, ни iframe, ни второго сервера.
 
 ```ts
 import {
@@ -654,6 +869,8 @@ import {
   Settings,
   History,
   Health, // S2
+  Decisions, // S2
+  Activity, // S2
   type OperatorView,
   type ViewSource,
   checkView,
@@ -666,173 +883,192 @@ interface ViewSource {
 }
 ```
 
-- **Data.** Components take `view: OperatorView` as a prop and never fetch.
-  The host owns loading. DevContour implements `ViewSource` over its store.
-  Two ways to do that:
-  - Call `operatorView(collectOperatorViewInput(...))` from the harness
-    package on the server, inside the same transaction it uses for
-    `statusOf`, and serve it at its own `/api/harness/view`.
-  - Or map its existing summaries into the view type. Only the first keeps
-    the numbers identical to `harness view`, so it is the recommended way.
-- **Navigation.** Components accept callbacks (`onOpenWork(id)`,
-  `onOpenReview(subject)`) and never touch `location`. The standalone app
-  wires them to hash routes; DevContour wires them to its query-string
-  navigation.
-- **Theming.** Every colour, radius, font and spacing value is a `--hui-*`
-  custom property on `.hui`. DevContour maps its tokens on a wrapper, for
-  example `--hui-accent: var(--data-accent)` and `--hui-bad:
-var(--status-failed)`. There are no class overrides and no Tailwind
-  dependency in this package. Styles use `:where()` so the host's
-  specificity wins.
-- **Labels.** Labels are English in `0.1`. A `labels` prop (a partial
-  dictionary) lets DevContour pass its Russian strings. It is planned for
-  S4; until then DevContour wraps the components.
-- **Writes.** The S5 answer form takes an `onAnswer(requestId, version,
-answer)` callback. The host performs the write with its own CSRF and
-  actor rules. The component never posts.
+- **Данные.** Компоненты получают `view: OperatorView` через prop и сами
+  ничего не запрашивают. Загрузкой владеет хост. DevContour реализует
+  `ViewSource` поверх своего хранилища. Это можно сделать двумя способами:
+  - Вызывать на сервере `operatorView(collectOperatorViewInput(...))` из
+    пакета harness внутри той же транзакции, что и для `statusOf`, и
+    отдавать результат по своему `/api/harness/view`.
+  - Или отображать свои существующие сводки в тип представления. Только
+    первый способ сохраняет числа идентичными `harness view`, поэтому
+    рекомендуется он.
+- **Навигация.** Компоненты принимают обратные вызовы (`onOpenWork(id)`,
+  `onOpenReview(subject)`) и никогда не трогают `location`. Отдельное
+  приложение связывает их с hash-маршрутами, DevContour — со своей
+  навигацией через строку запроса.
+- **Оформление.** Каждый цвет, радиус, шрифт и отступ — custom property
+  `--hui-*` на `.hui`. DevContour сопоставляет свои токены на обёртке,
+  например `--hui-accent: var(--data-accent)` и `--hui-bad:
+var(--status-failed)`. В пакете нет переопределений классов и зависимости
+  от Tailwind. Стили используют `:where()`, поэтому специфичность хоста
+  побеждает.
+- **Язык и подписи.** Компоненты двуязычны с S2: prop `lang: 'ru' | 'en'`.
+  Русский — полноправный язык. Сейчас локализованы только фраза в шапке
+  Overview и подвал; остальные подписи переводятся в S2. Частичный словарь
+  `labels`, которым хост переопределяет отдельные подписи, остаётся в S4.
+- **Запись.** Форма ответа S5 принимает обратный вызов `onAnswer(requestId,
+version, answer)`. Запись выполняет хост со своими правилами CSRF и
+  actor. Компонент сам ничего не отправляет.
 
-## 8. What moves from DevContour and what stays
+## 8. Что переезжает из DevContour и что остаётся
 
-Harness-generic parts move here as view-driven components. Each one is
-replaced in DevContour by the package component once that component's
-slice lands.
+Общие для harness части переезжают сюда как компоненты, работающие от
+представления. Каждая заменяется в DevContour компонентом пакета, когда
+срез этого компонента готов.
 
-| DevContour part (src/web)                                                                      | Goes to                                                | Slice |
-| ---------------------------------------------------------------------------------------------- | ------------------------------------------------------ | ----- |
-| Home "harness" tile: slots, attempts 24 h by kind, failing gates, budget, usage, server health | `Health` + Overview strip                              | S2    |
-| `LoadChart`, `HourlyChart` (hand SVG)                                                          | `History` charts                                       | S2    |
-| `Workers.tsx`: `Phases`, `WorkerCards` (without the activity tail)                             | Overview "working now", Work detail pipeline           | S2    |
-| `LiveWork.tsx`: attempt rows, `LivenessNote`, `AttemptTimeline`                                | Overview, Work detail                                  | S2    |
-| `ProgressPanel.tsx`: stage sentence, gate coverage table, review/findings list, setup          | Work detail, Reviews, Settings                         | S2    |
-| `Settings.tsx` model slots and `InputPolicy.tsx` threshold, **read view only**                 | Settings                                               | S2    |
-| `CheckPanel.tsx` (properties, cases, recovery)                                                 | later: needs a check section in the view (revision 1+) | —     |
+| Часть DevContour (src/web)                                                                           | Куда                                               | Срез |
+| ---------------------------------------------------------------------------------------------------- | -------------------------------------------------- | ---- |
+| Плитка «harness» на главной: слоты, попытки за 24 ч по видам, падающие gates, бюджет, расход, сервер | `Health` + полоса Overview                         | S2   |
+| `LoadChart`, `HourlyChart` (SVG вручную)                                                             | графики `History`                                  | S2   |
+| `Workers.tsx`: `Phases`, `WorkerCards` (без хвоста активности)                                       | «Сейчас в работе» в Overview, конвейер Work detail | S2   |
+| `LiveWork.tsx`: строки попыток, `LivenessNote`, `AttemptTimeline`                                    | Overview, Work detail                              | S2   |
+| `ProgressPanel.tsx`: фраза о стадии, таблица покрытия gates, список ревью и находок, настройка       | Work detail, Reviews, Settings                     | S2   |
+| `Settings.tsx` слоты моделей и порог `InputPolicy.tsx`, **только просмотр**                          | Settings                                           | S2   |
+| `CheckPanel.tsx` (свойства, случаи, восстановление)                                                  | пока остаётся в DevContour (решение владельца)     | —    |
 
-These stay in DevContour:
+`CheckPanel` переедет только как более поздняя ревизия представления с
+разделом проверок, когда договор property-check устоится.
 
-- product preparation tiles (product, architecture, design);
-- releases, ChangeSets and coverage;
-- board and ChangeSet workflow rows;
-- the product journal labels;
-- the editable model and threshold forms (they write DevContour's
-  workspace config through its own two-step preview/apply);
-- the live activity tail of a run (`api/runs/:id/activity`), which carries
-  executor output and is not part of the view;
-- layout tokens (sidebar, inspector, canvas).
+В DevContour остаются:
 
-The coupling to cut on the way:
+- плитки подготовки продукта (продукт, архитектура, дизайн);
+- релизы, ChangeSets и покрытие;
+- доска и строки процесса ChangeSet;
+- подписи продуктового журнала;
+- редактируемые формы моделей и порога (они пишут конфигурацию workspace
+  DevContour через его собственный двухшаговый preview/apply);
+- живой хвост активности прогона (`api/runs/:id/activity`), который несёт
+  вывод исполнителя и не входит в представление;
+- токены раскладки (боковая панель, инспектор, холст).
 
-- Components fetch `/api/...` themselves; they will take data as props.
-- Types are imported from `core/model.ts`; they will come from the view
-  type.
-- Labels are hard-coded.
-- Styling relies on Tailwind classes; it will move to `--hui-*` variables.
+Связи, которые нужно разорвать по пути:
 
-## 9. Security
+- Компоненты сами запрашивают `/api/...`; они будут получать данные через
+  props.
+- Типы импортируются из `core/model.ts`; они будут браться из типа
+  представления.
+- Подписи зашиты в код.
+- Стили опираются на классы Tailwind; они перейдут на переменные `--hui-*`.
 
-**Network.**
+## 9. Безопасность
 
-- The panel listens on loopback only (§6), and nothing overrides that.
-- Each request's `Host` header must name the loopback listener:
-  `127.0.0.1:<port>`, `localhost:<port>` or `[::1]:<port>`. Anything else
-  gets 421, which guards against DNS rebinding.
-- The `--from` proxy target is restricted to loopback, with no redirects
-  (§6).
+**Сеть.**
 
-**Response headers.**
+- Панель слушает только loopback (§6), и ничто этого не отменяет.
+- Заголовок `Host` каждого запроса должен называть loopback-слушателя:
+  `127.0.0.1:<port>`, `localhost:<port>` или `[::1]:<port>`. На всё
+  остальное — 421; это защищает от DNS rebinding.
+- Цель прокси `--from` ограничена loopback, перенаправления не
+  выполняются (§6).
+- Состояние удалённого репозитория (`target.remote`) читается только из
+  локальной remote-tracking ссылки. Ни панель, ни harness не запускают
+  `git fetch` и не обращаются к удалённому репозиторию.
+
+**Заголовки ответа.**
 
 - `Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'`
 - `X-Content-Type-Options: nosniff`
 - `Referrer-Policy: no-referrer`
 - `X-Frame-Options: DENY`
 
-**Static files.** A file must stay inside the app directory on both its
-lexical path and its real path. A symlink that leaves the directory gets
-404, and a malformed path gets 400. Both rules are tested.
+**Статические файлы.** Файл должен оставаться внутри каталога приложения и
+по лексическому, и по реальному пути. Символическая ссылка за пределы
+каталога получает 404, некорректный путь — 400. Оба правила покрыты
+тестами.
 
-**What the view never contains.**
+**Чего в представлении никогда нет.**
 
-- prompts, executor output, logs or log paths;
-- environment variables or tokens;
-- gate commands or tool profiles;
-- absolute paths: the home directory becomes `~`, and other paths stay
-  relative to the repository;
-- finding or question bodies beyond the masked, clipped title.
+- промптов, вывода исполнителя, логов и путей к логам;
+- переменных окружения и токенов;
+- команд gates и профилей инструментов;
+- абсолютных путей: домашний каталог становится `~`, остальные пути
+  остаются относительными к репозиторию;
+- текстов находок и вопросов сверх маскированного и обрезанного заголовка.
 
-**Masking.** It applies to every free-text field of the view, not only
-titles:
+**Маскирование.** Оно применяется к каждому свободному тексту
+представления, а не только к заголовкам:
 
-- titles;
+- заголовки;
 - `progress.queue.detail`;
 - `warnings[].message`;
 - `drift[].unavailable`;
 - `stage.step`;
-- `line` fields.
+- поля `line`;
+- `attempts.lastFailure.plain`;
+- `blockers[].plain`;
+- `questions[].plain`;
+- `activity[].plain`;
+- `decisions[].title`, `decisions[].reason` и `decisions[].revisit`;
+- `target.remote.reason`.
 
-A secret could be cut in half at the clip boundary and slip through, so
-masking runs **before** clipping. The masking step:
+Секрет может разрезаться пополам на границе обрезки и проскочить, поэтому
+маскирование выполняется **до** обрезки. Шаг маскирования:
 
-1. Replaces token-like strings with `‹masked›`. These are provider key
-   prefixes, `Bearer …`, long base64 or hex runs, and `user:pass@` in URLs.
-2. Replaces the home directory with `~`.
-3. Clips the text to the field limit.
+1. Заменяет похожие на токены строки на `‹masked›`. Это префиксы ключей
+   провайдеров, `Bearer …`, длинные последовательности base64 или hex и
+   `user:pass@` в URL.
+2. Заменяет домашний каталог на `~`.
+3. Обрезает текст до предела поля.
 
-`--no-titles` drops titles, `queue.detail` and finding titles, as
-`report --no-titles` does.
+`--no-titles` убирает заголовки, `queue.detail` и заголовки находок, как
+это делает `report --no-titles`.
 
-The P1 tests plant a provider key, a bearer token, URL credentials and the
-home path into a work title, a question, a finding, an attempt error that
-feeds `queue.detail`, and a git error that feeds drift. One case places the
-key across the clip boundary. In every case the view bytes must not contain
-any of the planted values.
+Тесты P1 подкладывают ключ провайдера, bearer-токен, учётные данные в URL и
+домашний путь в заголовок работы, вопрос, находку, ошибку попытки, которая
+попадает в `queue.detail`, и ошибку git, которая попадает в drift. В одном
+случае ключ стоит поперёк границы обрезки. Во всех случаях байты
+представления не должны содержать ни одного подложенного значения.
 
-**Write path (S5).**
+**Путь записи (S5).**
 
-There is one origin. The browser only ever talks to the UI CLI. The UI CLI
-proxies `POST /api/answers` and `GET /api/questions/<id>` to its
-`serve-view` child. `connect-src 'self'` therefore holds, and the browser
-never makes a cross-port request.
+Дизайн S5 ждёт одобрения владельца; до него путь записи не реализуется.
 
-The browser is authenticated by a one-time code exchanged for a session
-cookie:
+Источник (origin) один. Браузер общается только с CLI панели. CLI панели
+проксирует `POST /api/answers` и `GET /api/questions/<id>` к своему
+дочернему `serve-view`. Поэтому `connect-src 'self'` соблюдается, и браузер
+никогда не делает запросов на другой порт.
 
-- When writes are enabled, the UI CLI prints a URL that carries a one-time
-  code in the fragment (`#code=…`).
-- On first load, the app sends the code once in the body of `POST
+Браузер аутентифицируется одноразовым кодом, который обменивается на
+сессионную cookie:
+
+- Когда запись включена, CLI панели печатает URL с одноразовым кодом во
+  фрагменте (`#code=…`).
+- При первой загрузке приложение один раз отправляет код в теле `POST
 /api/session`.
-- The server answers with an `HttpOnly; SameSite=Strict; Path=/api` cookie
-  and invalidates the code.
-- The app removes the fragment with `history.replaceState`.
-- A code that leaked into a log or chat is useless after that first
-  exchange.
-- Codes expire after 10 minutes. Ordinary log lines never print the code;
-  only the one startup line does.
+- Сервер отвечает cookie `HttpOnly; SameSite=Strict; Path=/api` и
+  аннулирует код.
+- Приложение убирает фрагмент через `history.replaceState`.
+- Код, утёкший в лог или чат, после первого обмена бесполезен.
+- Коды истекают через 10 минут. Обычные строки лога код не печатают;
+  печатает только одна стартовая строка.
 
-The CLI and `serve-view` share a separate secret:
+У CLI и `serve-view` есть отдельный общий секрет:
 
-- The UI CLI generates a random 32-byte secret.
-- It hands the secret to the `serve-view` child through the child's stdin,
-  never through argv, the environment or stdout.
-- It sends the secret as `Authorization: Bearer` on every proxied write.
-- `serve-view --allow-answers` reads the secret from stdin and accepts
-  writes only with it.
+- CLI панели генерирует случайный 32-байтовый секрет.
+- Он передаёт секрет дочернему `serve-view` через его stdin, никогда через
+  argv, окружение или stdout.
+- Он отправляет секрет как `Authorization: Bearer` в каждой проксируемой
+  записи.
+- `serve-view --allow-answers` читает секрет из stdin и принимает записи
+  только с ним.
 
-Every write must also pass these checks:
+Каждая запись также должна пройти проверки:
 
-- the session cookie;
-- `Origin` equal to the panel origin;
+- сессионная cookie;
+- `Origin`, равный origin панели;
 - `content-type: application/json`;
-- a body of at most 16 KB.
+- тело не больше 16 КБ.
 
-What a failed check returns:
+Что возвращает проваленная проверка:
 
-| Failure                       | Response |
-| ----------------------------- | -------- |
-| missing or bad session cookie | 403      |
-| wrong `Origin`                | 403      |
-| body is not JSON              | 415      |
-| body over 16 KB               | 413      |
+| Сбой                                  | Ответ |
+| ------------------------------------- | ----- |
+| нет сессионной cookie или она неверна | 403   |
+| неверный `Origin`                     | 403   |
+| тело не JSON                          | 415   |
+| тело больше 16 КБ                     | 413   |
 
-**Answer contract.** The request body maps one to one onto `harness
+**Договор ответа.** Тело запроса один к одному соответствует `harness
 input-answer`:
 
 ```
@@ -840,182 +1076,246 @@ input-answer`:
   optionId?, text }
 ```
 
-- `text` is required, because `answerInput` requires it.
-- `kind` defaults to `clarification` only when the user picks nothing.
-- The form shows the full decision context before it allows an answer:
-  - the unclipped (but masked) question text;
-  - the options with their consequences;
-  - the severity;
-  - who may answer.
+- `text` обязателен, потому что его требует `answerInput`.
+- `kind` по умолчанию `clarification`, только если пользователь ничего не
+  выбрал.
+- Прежде чем разрешить ответ, форма показывает полный контекст решения:
+  - необрезанный (но маскированный) текст вопроса;
+  - варианты с их последствиями;
+  - серьёзность;
+  - кто может ответить.
 
-  It reads this context from the authenticated `GET /api/questions/<id>`.
+  Этот контекст она читает из аутентифицированного `GET /api/questions/<id>`.
 
-- The harness records the answer with `actor: operator`. A stale version
-  gets `REQUEST_VERSION_STALE` and is shown. Requests the operator may not
-  answer, and any lead path, are not exposed.
-- Agents never use this path, and the skill forbids answering for the user.
+- Harness записывает ответ с `actor: operator`. Устаревшая версия получает
+  `REQUEST_VERSION_STALE`, и это показывается. Запросы, на которые оператор
+  отвечать не может, и любой путь ведущего не открываются.
+- Агенты никогда не используют этот путь, а skill запрещает отвечать за
+  пользователя.
 
-**Supply chain.** Dependencies are exact versions. The runtime bundle
-contains only React, and the CLI imports only `node:*`.
+**Цепочка поставки.** Зависимости — точные версии. Сборка времени
+выполнения содержит только React, а CLI импортирует только `node:*`.
 
-## 10. Slices
+## 10. Срезы
 
-Every slice ends green on `npm test && npm run typecheck && npm run build`.
-Tests use no network beyond loopback, and their fixtures live in
-`fixtures/`. A slice that touches the harness lands there first, under the
-harness rules: independent acceptance and a round limit. Acceptance
-criteria check the meaning shown on screen, not just that rendering
-succeeds.
+Каждый срез заканчивается зелёным `npm test && npm run typecheck && npm run
+build`. Тесты не используют сеть дальше loopback, их фикстуры лежат в
+`fixtures/`. Срез, который затрагивает harness, сначала попадает туда, по
+правилам harness: независимая приёмка и предел раундов. Критерии приёмки
+проверяют смысл на экране, а не только то, что отрисовка прошла.
 
-**S0: scaffold (this repository's first commits).**
+**S0: каркас (первые коммиты этого репозитория).**
 
-- Contents:
-  - the view type and `checkView`, which validates nested fields;
-  - `ViewSource`, with typed 409 refusals;
-  - Overview;
-  - the loopback CLI with `--view` (bare view or envelope) and `--demo`;
-  - the sample fixture and the skill.
-- Acceptance and tests (`tests/*.test.ts*`):
-  - Hosting refusals:
-    - `0.0.0.0`, `::` and LAN addresses are refused;
-    - a busy explicit port is an error;
-    - a foreign `Host` gets 421;
-    - POST gets 405;
-    - a malformed path gets 400, and the server keeps serving;
-    - a symlink escape gets 404.
-  - View handling:
-    - an incompatible view gets 409 and keeps its message through
+- Состав:
+  - тип представления и `checkView`, который проверяет вложенные поля;
+  - `ViewSource` с типизированными отказами 409;
+  - Обзор с фразой в шапке и подвалом на русском и английском;
+  - loopback CLI с `--view` (голое представление или конверт) и `--demo`;
+  - пример-фикстура и навык.
+- Приёмка и тесты (`tests/*.test.ts*`):
+  - Отказы хостинга:
+    - `0.0.0.0`, `::` и адреса LAN отклоняются;
+    - занятый явный порт — ошибка;
+    - чужой `Host` получает 421;
+    - POST получает 405;
+    - искажённый путь получает 400, и сервер продолжает работать;
+    - выход по symlink получает 404.
+  - Обработка представления:
+    - несовместимое представление получает 409 и сохраняет сообщение через
       `httpViewSource`;
-    - malformed sections are refused before render;
-    - unknown values read conservatively.
-  - Overview rendering:
-    - only `awaiting-answer` questions are asked;
-    - the running count comes from `progress`, with a truncation note;
-    - the worst budget scope is shown, and "no budget" when there are none;
-    - drift that could not be checked is not shown as zero;
-    - no form elements.
-  - `--hui-*` custom properties are declared only on `:root`.
+    - искажённые разделы отклоняются до отрисовки;
+    - неизвестные значения читаются осторожно.
+  - Отрисовка обзора:
+    - спрашиваются только вопросы `awaiting-answer`;
+    - число работающих берётся из `progress`, с пометкой об обрезке;
+    - показывается худшая область бюджета и «бюджета нет», когда их нет;
+    - дрейф, который не удалось проверить, не показывается как ноль;
+    - фраза «Сейчас… От вас: …» и подвал «Данные harness на HH:MM; панель
+      ничего не меняет» на русском, с английским запасным вариантом;
+    - нет элементов форм.
+  - Пользовательские свойства `--hui-*` объявлены только на `:root`.
 
-**S1: schema in the harness** (proposals P1, P2).
+**S1: схема в harness** (предложения P1, P2; поля P6.1–P6.4 — в alpha.55).
 
-- Contents:
-  - `operatorView` and `harness view` land in the harness.
-  - The UI imports the type from `devcontour-harness/projections`.
-  - A contract test checks every fixture against
+- Состав:
+  - `operatorView` и `harness view` попадают в harness.
+  - UI импортирует тип из `devcontour-harness/projections`.
+  - Договорный тест проверяет каждую фикстуру по
     `schemas/operator-view.schema.json`.
-- The fixture set:
-  - empty state;
-  - busy, paused by the operator;
-  - work budget exceeded while the total is within limits;
-  - large spend before the window;
-  - escalated review;
-  - drift, including drift that could not be checked;
-  - a question in each input state, one of them only the operator may
-    answer;
-  - every list truncated;
-  - a newer revision;
-  - a worst-case size document.
-- Acceptance:
-  - Every fixture passes the schema.
-  - The view of the harness `single-task` example equals `harness view`
-    output byte for byte.
-  - Numbers match `status` and `report` on the same state: attempts, the
-    neutral counter, rechecks, spend bounds, gates (skipped and reused
-    separately) and stage.
-  - The secret-planting test passes, including a key across the clip
-    boundary.
-  - The worst-case document is at most 256 KB.
-  - The content token changes when a lease expires with no store write.
+- Набор фикстур:
+  - пустое состояние;
+  - занято, пауза от оператора;
+  - бюджет работы превышен при общем в пределах;
+  - большие расходы до окна;
+  - эскалированное ревью;
+  - дрейф, включая дрейф, который не удалось проверить;
+  - вопрос в каждом состоянии ввода, один из них отвечает только оператор;
+  - технический вопрос при `leadAnswersTechnical` и вопрос с `impact`
+    `user-visible` при том же флаге;
+  - повторная попытка с `lastFailure` каждой группы сбоя;
+  - каждый код блокировки с `plain` и `actor`, включая `actor: null`;
+  - работа с `verification[]` всех видов `how`;
+  - все списки обрезаны;
+  - более новая ревизия;
+  - документ наибольшего размера.
+- Приёмка:
+  - Каждая фикстура проходит схему.
+  - Представление примера harness `single-task` совпадает с выводом
+    `harness view` байт в байт.
+  - Числа совпадают с `status` и `report` на том же состоянии: попытки,
+    нейтральный счётчик, перепроверки, границы расходов, gates (пропущенные
+    и повторно использованные отдельно) и этап.
+  - `lastFailure.plain` совпадает с причиной в строке этапа `status`.
+  - Ревью кода даёт в `verification[]` строку с `how: read`, а не
+    `executed`.
+  - Тест подброшенных секретов проходит, включая ключ на границе обрезки.
+  - Документ наибольшего размера — не больше 256 КБ.
+  - Токен содержимого меняется при истечении аренды без записи в хранилище.
 
-**S2: read-only screens.**
+**S2: экраны только для чтения, два языка.**
 
-- Contents:
-  - Work detail (using the `--work` document), Reviews, Settings (with
-    `defaulted` provenance and scoped review rules), History, Health;
-  - hash routing;
-  - empty, incompatible, lost and newer-revision states;
-  - dark mode.
-- Acceptance:
-  - For each fixture, every screen shows the expected key text: counts,
-    bounds, actors and states.
-  - Playwright at 1280 px and 390 px shows no horizontal scroll.
-  - axe reports no serious violations.
-  - Charts have text summaries.
-  - The cumulative spend chart starts at `spendOpeningUsd`.
-  - There is no `<form>` element anywhere.
-  - A browser test confirms that `--hui-*` set on a wrapper changes the
-    computed colours.
-- Tests:
-  - `renderToStaticMarkup` for each screen and fixture;
-  - one Playwright smoke run against `--demo`.
+- Состав:
+  - Детали работы (по документу `--work`) с «Почему повтор», «Что
+    проверено», «Принято локально / в удалённом репозитории»; Ревью;
+    Решения; Кто что делал; Настройки (с происхождением `defaulted`,
+    областями правил ревью и строкой о технических вопросах); История;
+    Здоровье обычными словами;
+  - понятные названия разделов обзора и полоса плана;
+  - «что это значит» у каждого термина по глоссарию (§12);
+  - `lang: 'ru' | 'en'` у всех компонентов и `--lang` в CLI с умолчанием из
+    системной локали;
+  - hash-маршруты;
+  - состояния «пусто», «несовместимо», «связь потеряна» и «новая ревизия»;
+  - тёмная тема.
+- Приёмка:
+  - Для каждой фикстуры каждый экран показывает ожидаемый ключевой текст:
+    счётчики, границы, исполнителей и состояния — на обоих языках.
+  - Ни на одном экране нет слов «проверено», «готово» или «заблокировано»
+    без способа, исполнителя или причины рядом (тест по разметке).
+  - Отсутствующие поля P2 показываются как «нет сведений», не как ноль,
+    «нет» или «в порядке».
+  - `blockers[]` с `actor: null` читается как «просто ждёт очереди — ничего
+    не нужно».
+  - Playwright при 1280 px и 390 px не показывает горизонтальной прокрутки.
+  - axe не находит серьёзных нарушений.
+  - У графиков есть текстовые сводки.
+  - Накопительный график расходов начинается с `spendOpeningUsd`.
+  - Нигде нет элемента `<form>`.
+  - Браузерный тест подтверждает, что `--hui-*`, заданные на обёртке, меняют
+    вычисленные цвета.
+- Тесты:
+  - `renderToStaticMarkup` для каждого экрана, фикстуры и языка;
+  - один прогон Playwright против `--demo`.
 
-**S3: live runtime** (proposal P3).
+**S3: живой запуск** (предложение P3).
 
-- Contents:
-  - `--state/--policy` through a `serve-view` child;
-  - `--from <url>`, with the loopback-only checks;
+- Состав:
+  - `--state/--policy` через дочерний `serve-view`;
+  - `--from <url>` с проверками только loopback;
+  - `--window 24h|7d`;
   - SSE;
   - `--check`;
-  - the skill updated to the live route.
-- Acceptance:
-  - A change in state reaches the browser within 2 s.
-  - Killing the panel stops the child.
-  - A mismatched harness prints `compatible:false` with a fix.
-  - A missing state directory together with a policy gives an empty view.
-    Without a policy it gives `POLICY_REQUIRED`, and no directory is
-    created.
-  - `--from` refuses non-loopback, credentialed and redirecting targets.
-- Tests: CLI integration on the harness fixture runtime, with no live
-  models.
+  - навык переходит на живой маршрут и предлагает панель в начале долгого
+    прогона.
+- Приёмка:
+  - Изменение состояния доходит до браузера за 2 с.
+  - Остановка панели останавливает дочерний процесс.
+  - Несовпадающий harness печатает `compatible:false` с исправлением.
+  - Отсутствующий каталог состояния вместе с политикой даёт пустое
+    представление. Без политики — `POLICY_REQUIRED`, и каталог не создаётся.
+  - `--from` отклоняет не-loopback цели, цели с учётными данными и
+    перенаправлениями.
+  - Дрейф и состояние удалённого репозитория пересчитываются не чаще раза в
+    30 с на голову цели; `git fetch` не запускается ни разу (тест по
+    журналу команд git).
+- Тесты: интеграция CLI на fixture runtime harness, без живых моделей.
 
-**S4: DevContour embedding.**
+**S4: встраивание в DevContour.**
 
-- Contents:
-  - a `labels` prop;
-  - adapter guidance for DevContour;
-  - the parts listed in §8 replaced in DevContour.
-- Acceptance:
-  - DevContour's e2e and visual checks stay green.
-  - The token mapping covers every `--hui-*` variable.
-  - Each screen has one implementation, with no copies left in DevContour.
+- Состав:
+  - prop `labels` для переопределений хоста;
+  - руководство по адаптеру для DevContour;
+  - части из §8 заменены в DevContour.
+- Приёмка:
+  - e2e и визуальные проверки DevContour остаются зелёными.
+  - Сопоставление токенов покрывает каждую переменную `--hui-*`.
+  - У каждого экрана одна реализация, копий в DevContour не осталось.
 
-**S5: operator answers** (proposal P4).
+**S5: ответы оператора** (предложение P4; дизайн записи утверждает
+владелец, §11).
 
-- Contents: an answer form for `awaiting-answer` questions the operator
-  may answer, through the single-origin proxy described in §9.
-- Acceptance:
-  - The answer is recorded with `actor: operator`, the request version and
-    `kind`.
-  - The full masked question and its options are shown before answering.
-  - A stale version is refused and shown.
-  - Each refusal returns its status:
-    - missing or used code, or missing cookie: 403;
-    - wrong `Origin`: 403;
-    - non-JSON body: 415;
-    - body over 16 KB: 413.
-  - The code and the shared secret never appear in logs, view responses or
-    argv.
-- Tests:
-  - server tests for each refusal;
-  - a browser test that answers end to end on the fixture runtime;
-  - a component test showing the form does nothing without `onAnswer`.
+- Состав: форма ответа для вопросов `awaiting-answer`, на которые может
+  ответить оператор, через прокси с одним origin из §9.
+- Приёмка:
+  - Ответ записан с `actor: operator`, версией запроса и `kind`.
+  - До ответа видны полный замаскированный вопрос, его варианты и для
+    каждого — что изменится для пользователя.
+  - Устаревшая версия отклоняется и показывается.
+  - Каждый отказ возвращает свой статус:
+    - нет кода, код уже использован или нет cookie: 403;
+    - неверный `Origin`: 403;
+    - тело не JSON: 415;
+    - тело больше 16 КБ: 413.
+  - Код и общий секрет никогда не появляются в журналах, ответах
+    представления и argv.
+- Тесты:
+  - серверные тесты на каждый отказ;
+  - браузерный тест, который отвечает от начала до конца на fixture
+    runtime;
+  - компонентный тест, что без `onAnswer` форма ничего не делает.
 
-## 11. Open decisions
+## 11. Открытые решения
 
-1. **Language.** Labels are English, with Russian supplied through `labels`
-   (S4). The alternative is bilingual labels from S2.
-2. **Drift cost in `serve-view`.** Drift needs git. The proposal caches it
-   per target head and recomputes at most every 30 s. The alternative is to
-   compute it only on explicit refresh.
-3. **CheckPanel.** It could move as a view revision with a check section.
-   Or it could stay in DevContour while the property-check contract is
-   still changing.
-4. **History windows.** The proposal is 24 h by default and 7 days on
-   request. Longer windows would need pre-aggregation in the harness.
-5. **Package home.** This package could stay a separate repository, as now,
-   or become a workspace of the harness repository. A separate repository
-   keeps React out of the harness. A workspace puts the schema and the UI in
-   one PR.
-6. **First write.** S5 needs the owner's approval of the single-origin
-   design. That design covers the one-time code, the cookie, and the secret
-   piped to the child over stdin.
+Решено владельцем (2026-11-19):
+
+- **Язык.** Интерфейс двуязычный с S2: русский — полноправный, английский —
+  запасной; `--lang ru|en`, по умолчанию из системной локали. Документация —
+  на русском, как у harness; идентификаторы в коде — на английском.
+- **Стоимость дрейфа в `serve-view`.** Кэш по голове цели, пересчёт не чаще
+  раза в 30 с.
+- **CheckPanel.** Пока остаётся в DevContour.
+- **Окна истории.** 24 ч по умолчанию, 7 дней по запросу. Более длинные
+  окна потребовали бы предварительной агрегации в harness.
+- **Дом пакета.** Остаётся отдельным репозиторием.
+
+Открыто:
+
+1. **Первая запись.** S5 ждёт утверждения владельцем дизайна с одним
+   origin: одноразовый код, cookie и секрет, переданный дочернему процессу
+   через stdin.
+2. **Маршрут ленты действий.** Сейчас `activity[]` (50 последних) входит в
+   документ обзора. Альтернатива — отдельный документ `GET
+/api/view?activity=1` с более длинным окном и постраничным чтением; тогда
+   лента не раздувает обзор.
+3. **Наблюдаемое время по умолчанию.** Показывать ли `stage.typical` сразу
+   или только по раскрытию; минимальное число образцов (предложено 5) и
+   окно, по которому оно считается (всё состояние или последние 7 дней).
+4. **Удалённый репозиторий — только локально.** Состояние берётся из
+   локальной remote-tracking ref без fetch, поэтому оно может отставать.
+   Решить, достаточно ли подписи «по последнему обновлению git на этой
+   машине» или нужен явный возраст ref (время последнего fetch из reflog).
+
+## 12. Глоссарий
+
+Тексты «что это значит» на экране берутся отсюда.
+
+| Термин                   | Что это значит                                                                                                                                                                                    |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Ведущий (lead)           | Агент, который ведёт проект от вашего имени: запускает harness, читает результаты, отвечает на вопросы, которые ему разрешены.                                                                    |
+| Исполнитель, writer      | Агент, который пишет код одной работы в отдельной копии репозитория.                                                                                                                              |
+| Reviewer, ревью          | Другой агент читает план или изменения и пишет замечания. Ревью кода читает diff и ничего не запускает, если это не сказано отдельно.                                                             |
+| Проверки, gates          | Команды проекта (тесты, lint, сборка), которые harness запускает над изменением. Результат пишется вместе со способом: запущено, взято прежнее, не проверялось.                                   |
+| Перепроверка             | Повторный запуск проверки на той же попытке, чтобы отличить настоящую ошибку от случайной.                                                                                                        |
+| Попытка                  | Один заход исполнителя над работой. У работы ограниченное число попыток; прерывание при остановке попытку не расходует.                                                                           |
+| Нейтральный сбой         | Сбой не по вине кода (например, окружение), который не расходует попытку, но имеет свой предел.                                                                                                   |
+| Интеграция               | Перенос принятого изменения в целевую ветку с проверками на результате.                                                                                                                           |
+| Принято                  | Работа прошла проверки и ревью, и harness записал результат в целевую ветку локально. «В удалённом репозитории» — отдельный факт: туда результат отправляет человек или ведущий по вашей просьбе. |
+| Дрейф                    | Целевая ветка изменилась после приёмки, и принятый результат стоит не на её вершине.                                                                                                              |
+| Эскалация                | Блокирующее замечание не решилось за несколько раундов ревью, и решение переходит к вам.                                                                                                          |
+| Временное решение        | Решение «пока так», с условием, когда к нему вернуться.                                                                                                                                           |
+| Технический вопрос       | Вопрос, ответ на который не меняет результат для пользователя. Его может решать ведущий, если это включено в настройках.                                                                          |
+| Нижняя граница (`≥`)     | Часть цен неизвестна, поэтому показанная сумма — минимум, настоящая может быть больше.                                                                                                            |
+| Неизвестно, не проверено | У harness нет сведений. Это не ноль и не «в порядке».                                                                                                                                             |
+| Контроллер               | Процесс harness, который сейчас ведёт очередь. Без него работа не продвигается.                                                                                                                   |
+| Зависшая / тихая попытка | Попытка давно не подавала признаков жизни (тихая) или дольше порога (зависшая).                                                                                                                   |
+| Ждёт очереди             | Работа ждёт свободного места или окончания работ, от которых зависит. Ничего делать не нужно.                                                                                                     |

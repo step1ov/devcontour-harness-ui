@@ -1,81 +1,95 @@
 # devcontour-harness-ui
 
-Read-only operator panel for [devcontour-harness](https://github.com/step1ov/devcontour-harness).
-It is two things:
+Панель оператора для [devcontour-harness](https://github.com/step1ov/devcontour-harness),
+только для чтения. Пакет состоит из двух частей:
 
-- a React component library;
-- a small standalone app that a local CLI serves on `127.0.0.1`.
+- библиотека React-компонентов;
+- небольшое самостоятельное приложение, которое локальный CLI раздаёт на
+  `127.0.0.1`.
 
-Both render the harness _operator view_: one versioned JSON document that
-the harness computes from its state and policy. The panel derives no
-numbers of its own.
+Обе части показывают _операторское представление_ harness (operator view):
+один версионированный JSON-документ, который harness вычисляет из своего
+состояния и политики. Панель не вычисляет собственных чисел.
 
-> Status: `0.1.0-alpha.0`, a scaffold. The Overview screen works from a
-> view file. The live `--state` route waits for `harness view` /
-> `harness serve-view`; see the [harness proposals](docs/harness-proposals.md).
-> [Design](docs/design.md) covers the schema, the screens, security and the
-> slices.
+Цель панели — понятность без технической подготовки. Панель показывает
+данные harness, а не пересказ агента: что ждёт вашего ответа, что идёт
+сейчас, как именно проверена работа и где лежит принятый результат.
 
-## Quick start
+> Статус: `0.1.0-alpha.0`, заготовка. Экран Overview работает по файлу
+> представления. Живой маршрут `--state` ждёт `harness view` /
+> `harness serve-view`; см. [предложения для harness](docs/harness-proposals.md).
+> [Дизайн](docs/design.md) описывает схему, экраны, безопасность и этапы.
 
-Requires Node.js ≥ 24.3.
+## Язык
+
+Интерфейс двуязычный начиная с этапа S2: `--lang ru|en`, по умолчанию язык
+берётся из системной локали, русский — полноправный язык интерфейса. Сейчас
+заготовка локализует только фразу в шапке Overview («Сейчас… От вас: …») и
+подвал; компоненты принимают проп `lang`. Документация на русском,
+идентификаторы в коде — на английском.
+
+## Быстрый старт
+
+Нужен Node.js ≥ 24.3.
 
 ```sh
 npm install
 npm test
 npm run build
-node dist/lib/cli.js --demo          # sample data
+node dist/lib/cli.js --demo          # демонстрационные данные
 # → {"ok":true,"url":"http://127.0.0.1:4790/","port":4790,"readOnly":true,...}
 ```
 
-Open the printed URL. To show a real project, write the view with a harness
-that has `harness view` and serve the file:
+Откройте напечатанный URL. Чтобы показать настоящий проект, запишите
+представление через harness, в котором есть `harness view`, и раздайте файл:
 
 ```sh
-harness view --state <state> --policy .harness/policy.json > view.json   # envelope is accepted
+harness view --state <state> --policy .harness/policy.json > view.json   # конверт тоже принимается
 node dist/lib/cli.js --view view.json
 ```
 
-CLI flags:
+Флаги CLI:
 
-- `--view <file>` and `--demo`;
-- `--port N` (exact; busy means an error). Without it, ports 4790–4809 are
-  probed.
-- `--host`, loopback only: `127.0.0.1`, `::1` or `localhost`. Anything else
-  is refused.
+- `--view <file>` и `--demo`;
+- `--port N` (точный порт; занятый порт — ошибка). Без флага перебираются
+  порты 4790–4809.
+- `--host`, только loopback: `127.0.0.1`, `::1` или `localhost`. Всё
+  остальное отклоняется.
+- `--lang ru|en` — с этапа S2.
 
-stdout gets one JSON line, and hints go to stderr. Exit codes are 0, 2
-(input), 3 (refusal) and 4 (infrastructure).
+В stdout печатается одна строка JSON, подсказки идут в stderr. Коды
+выхода: 0, 2 (ввод), 3 (отказ) и 4 (инфраструктура).
 
-The skill [`skills/harness-ui/SKILL.md`](skills/harness-ui/SKILL.md) lets a
-project's lead agent start the panel and explain it to the user.
+Skill [`skills/harness-ui/SKILL.md`](skills/harness-ui/SKILL.md) позволяет
+ведущему агенту проекта запустить панель и объяснить её пользователю.
 
-## Embedding
+## Встраивание
 
 ```tsx
 import { Overview, staticViewSource, checkView } from 'devcontour-harness-ui';
 import 'devcontour-harness-ui/styles.css';
 
-<Overview view={view} onOpenWork={(id) => navigate(id)} />;
+<Overview view={view} lang="ru" onOpenWork={(id) => navigate(id)} />;
 ```
 
-- Components take the view as a prop and never fetch.
-- Hosts implement `ViewSource` over their own store.
-- Theming is done with `--hui-*` CSS variables on an ancestor element.
+- Компоненты получают представление пропом и ничего не загружают сами.
+- Хост реализует `ViewSource` поверх своего хранилища.
+- Оформление задаётся CSS-переменными `--hui-*` на элементе-предке.
 
-`devcontour-harness-ui/model` exports the types, `checkView` and the data
-sources without React.
+`devcontour-harness-ui/model` экспортирует типы, `checkView` и источники
+данных без React.
 
-## Security
+## Безопасность
 
-- Loopback only, with no override.
-- The `Host` header must name the loopback listener.
-- GET and HEAD only.
-- A strict CSP.
-- No telemetry and no outbound requests.
+- Только loopback, без способа это отключить.
+- Заголовок `Host` должен называть loopback-адрес слушателя.
+- Только GET и HEAD.
+- Строгий CSP.
+- Нет телеметрии и исходящих запросов.
 
-The view contains no prompts, logs, tokens or absolute paths; see design §9.
+Представление не содержит промптов, логов, токенов и абсолютных путей; см.
+дизайн, §9.
 
-## License
+## Лицензия
 
 MIT

@@ -1,74 +1,91 @@
 ---
 name: harness-ui
-description: Start the read-only devcontour-harness operator panel for the current project on a local port, give the user the URL, and explain in plain words what they see — what waits for their answer, what runs now, reviews, settings, history and health. Use when the user wants to watch harness work in a browser, asks "what is the harness doing", or wants a dashboard of attempts, questions, budgets or reviews. Never exposes the panel beyond the local machine and never answers operator questions for the user.
+description: Запустить панель оператора devcontour-harness (только чтение) для текущего проекта на локальном порту, дать пользователю URL и простыми словами объяснить, что он видит, — что ждёт его ответа, что идёт сейчас, что и как проверено, решения, кто что делал, настройки, история и здоровье. Используй, когда пользователь хочет следить за работой harness в браузере, спрашивает «что делает harness», хочет dashboard попыток, вопросов, бюджетов или ревью, или когда начинается долгий запуск harness. Никогда не открывает панель за пределы локальной машины и никогда не отвечает на вопросы оператора за пользователя.
 ---
 
-# Harness panel
+# Панель harness
 
-`devcontour-harness-ui` shows harness state in a browser. It is read-only:
-it can not start, stop, retry or answer anything. It listens only on the
-local machine (`127.0.0.1`).
+`devcontour-harness-ui` показывает состояние harness в браузере. Панель
+только читает: она не может запустить, остановить, повторить или ответить
+на что-либо. Она слушает только локальную машину (`127.0.0.1`).
 
-Below, `$H` is the project's harness CLI
-(`<tooldir>/node_modules/.bin/harness`, see the `harness` skill) and `$UI`
-is the panel CLI (`<tooldir>/node_modules/.bin/devcontour-harness-ui`, or
-`npx devcontour-harness-ui@<exact version>`).
+Панель показывает данные harness, а не твой пересказ. Пересказывай то, что
+показывает панель, и никогда не подменяй панель своим пересказом: если
+пользователь спрашивает «готово ли», «проверено ли», «почему опять» — веди
+его к соответствующему разделу панели и читай оттуда.
 
-## Hard rules
+Ниже `$H` — CLI harness проекта (`<tooldir>/node_modules/.bin/harness`, см.
+skill `harness`), а `$UI` — CLI панели
+(`<tooldir>/node_modules/.bin/devcontour-harness-ui` или
+`npx devcontour-harness-ui@<точная версия>`).
 
-- **Never** pass `--host 0.0.0.0`, `::` or a LAN address, and never put the
-  panel behind a tunnel, a proxy or port forwarding. The CLI refuses
-  non-loopback hosts. Do not work around that.
-- **Never answer operator questions on the user's behalf.** The panel lists
-  questions with "Only you can answer this question". Tell the user what is
-  asked and the exact command or place to answer. Do not run
-  `harness input-answer --actor operator` yourself. Questions the policy
-  lets the lead answer are handled by the `harness` skill rules, not by this
-  panel.
-- Do not edit the state directory, the policy or the view file to "fix" what
-  the panel shows. The panel shows the harness. A wrong number is a finding
-  for the harness, and you report it.
+## Жёсткие правила
 
-## 1. Find the paths
+- **Никогда** не передавай `--host 0.0.0.0`, `::` или адрес локальной сети и
+  никогда не ставь панель за туннель, прокси или проброс портов. CLI
+  отклоняет не-loopback адреса. Не обходи это.
+- **Никогда не отвечай на вопросы оператора за пользователя.** Панель
+  помечает такие вопросы «Only you can answer this question» (с S2 —
+  по-русски). Скажи пользователю, о чём спрашивают, и точную команду или
+  место для ответа. Не запускай `harness input-answer --actor operator` сам.
+- Технические вопросы ведущий может решать сам только тогда, когда в
+  настройках панели написано «Технические вопросы решает ведущий: да», и
+  по правилам skill `harness`. Вопросы, меняющие результат для
+  пользователя, — всегда пользователю, при любой настройке.
+- Не правь каталог состояния, политику или файл представления, чтобы
+  «исправить» то, что показывает панель. Панель показывает harness.
+  Неверное число — находка для harness, сообщи о ней.
+- Не говори «проверено», «готово» или «заблокировано» без того, как, кем и
+  почему, — так же, как этого не делает панель.
 
-1. Repository root: `git rev-parse --show-toplevel`.
-2. Policy: `<repo>/.harness/policy.json`.
-3. State: `paths.state` in `<repo>/.harness/project.json`. It is outside the
-   repository. If it does not exist yet, nothing has run: say so, and offer
-   `--demo` to show the panel with sample data.
-4. If there is no `.harness/`, the project is not set up. Use the
-   `harness-setup` skill first, and do not invent paths.
+## 0. Предложить панель в начале долгого запуска
 
-## 2. Check versions
+Когда начинается долгий запуск harness (несколько поручений или работа,
+которая займёт больше нескольких минут), сразу предложи пользователю панель:
+запусти её (шаги 1–4) и дай URL. Если панель недоступна, предложи текстовое
+наблюдение `$H status --state <state> --human --watch` (шаг 6).
+
+## 1. Найти пути
+
+1. Корень репозитория: `git rev-parse --show-toplevel`.
+2. Политика: `<repo>/.harness/policy.json`.
+3. Состояние: `paths.state` в `<repo>/.harness/project.json`. Оно лежит вне
+   репозитория. Если его ещё нет, ничего не запускалось: скажи об этом и
+   предложи `--demo`, чтобы показать панель на примере.
+4. Если `.harness/` нет, проект не настроен. Сначала используй skill
+   `harness-setup` и не выдумывай пути.
+
+## 2. Проверить версии
 
 ```sh
-VIEW_DIR=$(mktemp -d)        # scratch for this panel, outside the repository
+VIEW_DIR=$(mktemp -d)        # рабочий каталог этой панели, вне репозитория
 $H --version
 $UI --version
 ```
 
-The panel reads the operator view of the harness (`viewVersion`). Each
-panel release supports one view major. A mismatch is not fatal to the
-user's work: the panel shows `View version N is not supported` with a fix.
-Install the matching panel version.
+Панель читает операторское представление harness (`viewVersion`). Каждый
+выпуск панели поддерживает одну мажорную версию представления. Расхождение
+не мешает работе пользователя: панель показывает
+`View version N is not supported` с подсказкой. Установи подходящую версию
+панели.
 
-Live data needs a harness that has the `view` operation. Check the
-catalog, not an error guess:
+Живым данным нужен harness с операцией `view`. Проверь каталог операций, а
+не угадывай по ошибке:
 
 ```sh
-$H capabilities > "$VIEW_DIR/caps.json"     # read-only
+$H capabilities > "$VIEW_DIR/caps.json"     # только чтение
 ```
 
-`view` is supported when `data` in that envelope lists an operation named
-`view`. If it is not listed, this harness is older. Do not run `$H view`.
-Use the demo, or the text status (step 6), and tell the user that live
-panel data needs a newer harness.
+`view` поддерживается, если `data` в этом конверте содержит операцию с
+именем `view`. Если её нет, harness старее. Не запускай `$H view`. Используй
+демо или текстовый статус (шаг 6) и скажи пользователю, что живым данным
+панели нужен более новый harness.
 
-## 3. Start the panel in the background
+## 3. Запустить панель в фоне
 
-With `view` available: write a snapshot outside the repository and serve
-it. The panel accepts the harness envelope as is. The file is re-read on
-every request, so writing it again updates the open page.
+Если `view` есть: запиши снимок вне репозитория и раздай его. Панель
+принимает конверт harness как есть. Файл перечитывается на каждый запрос,
+поэтому повторная запись обновляет открытую страницу.
 
 ```sh
 $H view --state <state> --policy .harness/policy.json > "$VIEW_DIR/view.json"
@@ -76,76 +93,113 @@ $UI --view "$VIEW_DIR/view.json" > "$VIEW_DIR/panel.out" 2> "$VIEW_DIR/panel.err
 echo $! > "$VIEW_DIR/panel.pid"
 ```
 
-If `$H view` exits non-zero, read its error envelope (`error.code`) and
-report it to the user. `POLICY_REQUIRED` means the policy path is wrong.
-Do not serve a stale file.
+Если `$H view` завершился с ненулевым кодом, прочитай его конверт ошибки
+(`error.code`) и сообщи пользователю. `POLICY_REQUIRED` значит, что путь к
+политике неверен. Не раздавай устаревший файл.
 
-Later panel releases (with `--state`) replace this with
-`$UI --state <state> --policy .harness/policy.json`, which keeps itself
-current. Prefer that when `$UI --help` lists `--state` as available.
+Более поздние выпуски панели (с `--state`) заменяют это на
+`$UI --state <state> --policy .harness/policy.json`, и панель сама остаётся
+актуальной. Предпочитай этот путь, когда `$UI --help` перечисляет `--state`.
 
-Without `view`: `$UI --demo` serves the bundled sample. Say clearly
-that this is sample data, not their project.
+Язык: с этапа S2 у CLI есть `--lang ru|en` (по умолчанию — из системной
+локали). Если пользователь говорит по-русски и `$UI --help` перечисляет
+`--lang`, передай `--lang ru`.
 
-Port: leave `--port` out. The CLI probes 4790–4809 and takes the first free
-one. Pass `--port N` only if the user asks for a specific port.
+Без `view`: `$UI --demo` раздаёт встроенный пример. Ясно скажи, что это
+демонстрационные данные, а не их проект.
 
-## 4. Print the URL
+Порт: не указывай `--port`. CLI перебирает 4790–4809 и берёт первый
+свободный. Передавай `--port N`, только если пользователь просит конкретный
+порт.
 
-The first stdout line is JSON:
+## 4. Дать URL
+
+Первая строка stdout — JSON:
 
 ```json
 { "ok": true, "url": "http://127.0.0.1:4790/", "port": 4790, "readOnly": true }
 ```
 
-Wait for that line in `panel.out` (poll with a timeout of a few seconds),
-then give the user the `url` exactly. If the line is `"ok": false`, go to
-troubleshooting with its `error.code`.
+Дождись этой строки в `panel.out` (опрашивай с таймаутом в несколько
+секунд), затем дай пользователю `url` в точности. Если в строке
+`"ok": false`, переходи к разделу «Неполадки» с её `error.code`.
 
-## 5. Tell the user what they will see
+## 5. Рассказать пользователю, что он увидит
 
-Say it in plain words, short:
+Коротко и простыми словами, по тому, что на экране:
 
-- **Needs your answer**: questions from the executor that wait for you, how
-  serious each one is, and whether only you can answer it. Questions that
-  are already answered, or waiting to be applied, are listed separately with
-  who acts next. To read a whole question, use
-  `harness input-show --state <state> --request <id>`. Show the user its
-  text. Do not answer it.
-- **Working now**: which task runs, at which stage (preparing, writing,
-  checks, review, integrating), for how long, and how many attempts are used
-  and left.
-- **Health**: money spent so far against the budget (`≥` means at least,
-  because some prices are unknown; `unknown` is never zero), whether the
-  controller is alive, stalled attempts, and accepted results that changed
-  afterwards.
-- It is read-only: nothing they click changes the work.
-- With a snapshot (`--view`), the page shows the moment of the snapshot.
-  Offer to refresh it by rerunning the `$H view` lines.
+- **Шапка.** Начни с фразы в шапке Overview «Сейчас… От вас: …» и прочитай
+  её пользователю как есть: что идёт сейчас и что нужно от него. Если «От
+  вас» пусто — от него ничего не нужно.
+- **Нужен ваш ответ**: вопросы, которые ждут именно его, насколько каждый
+  серьёзен и может ли ответить только он. Вопросы, которые уже отвечены или
+  ждут применения ответа, перечислены отдельно — с тем, кто действует
+  дальше. Чтобы прочитать вопрос целиком, используй
+  `harness input-show --state <state> --request <id>`. Покажи пользователю
+  текст. Не отвечай на него.
+- **Сейчас в работе**: какая задача идёт, на каком этапе (подготовка,
+  написание, проверки, ревью, интеграция), сколько времени и сколько
+  попыток израсходовано и осталось.
+- **Ждут решения**: работа, которая стоит, пока кто-то (вы, ведущий или
+  внешний участник) не примет решение; панель называет, кто и что.
+- **Ждут очереди / Остановлены**: «ждёт очереди» значит «просто ждёт
+  очереди — ничего не нужно». «Остановлено» — с причиной простыми словами
+  и тем, кто действует дальше.
+- **Карточка работы**:
+  - «Что проверено» — как сделана каждая проверка: выполнена, переиспользован
+    прежний результат, прочитана ревьюером без запуска, не проверялась.
+    Никогда не говори «проверено» или «готово», не назвав, как и кем.
+  - «Почему повтор» — простыми словами, чем закончилась прошлая попытка
+    (например, «окружение — порт занят»).
+  - «Принято локально / в удалённом репозитории». Состояние удалённого
+    репозитория берётся из локальной remote-tracking ссылки без `fetch`,
+    то есть «по последним сведениям git». Если результат принят только
+    локально, предложи push, но не делай его без просьбы пользователя.
+- **Решения**: какие решения приняты (ведущим или пользователем), включая
+  временные — с условием, когда их пересмотреть.
+- **Кто что делал**: кто — ведущий, harness, исполнитель, ревьюер или вы —
+  что и когда сделал.
+- **Здоровье**: потрачено против бюджета (`≥` значит «не меньше», потому что
+  часть цен неизвестна; `unknown` никогда не ноль), жив ли контроллер,
+  зависшие попытки и принятые результаты, которые потом изменились.
+- **Подвал** «Данные harness на HH:MM; панель ничего не меняет»: время
+  снимка и напоминание, что нажатия ничего не меняют в работе.
+- У каждого термина есть «что это значит» — предложи раскрыть его, а не
+  объясняй своими словами вместо панели. Неизвестное панель никогда не
+  показывает как ноль или «в порядке»; не делай этого и ты.
+- Со снимком (`--view`) страница показывает момент снимка. Предложи
+  обновить его, повторив строки `$H view`.
 
-## 6. Stop it
+Сейчас (до S2) часть разделов и подписей ещё английская или отсутствует;
+называй то, что реально видно на экране.
+
+## 6. Остановить
 
 ```sh
 kill "$(cat "$VIEW_DIR/panel.pid")"
 ```
 
-Ctrl-C also stops it when it runs in the foreground. Stopping the panel
-does not affect harness work.
+Ctrl-C тоже останавливает панель, если она работает на переднем плане.
+Остановка панели не влияет на работу harness.
 
-For a text view instead, run `$H status --state <state> --human`. Add
-`--watch` only if `$H --version` is `0.1.0-alpha.54` or newer, since older
-releases refuse that flag. Rerun the plain command to refresh it.
+Для текстового вида вместо панели запусти
+`$H status --state <state> --human`. Добавляй `--watch`, только если
+`$H --version` — `0.1.0-alpha.54` или новее: старые выпуски отклоняют этот
+флаг. Чтобы обновить, повтори простую команду.
 
-## Troubleshooting
+## Неполадки
 
-| Symptom (`error.code` or page text)     | Meaning                                              | Do                                                                                               |
-| --------------------------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `PORT_BUSY`                             | the explicit port, or all of 4790–4809, are taken    | omit `--port`, or pick a free one; another panel may already be running: check `panel.pid` files |
-| `HOST_NOT_LOOPBACK`                     | a non-local `--host` was passed                      | remove `--host`; never expose the panel                                                          |
-| `View version N is not supported`       | harness and panel majors differ                      | install the panel version matching the harness; report both versions                             |
-| "newer data, update the panel"          | harness added fields this panel ignores              | works; suggest updating the panel                                                                |
-| `VIEW_UNAVAILABLE` / "not readable yet" | the view file is missing                             | rerun the `$H view` lines                                                                        |
-| `HARNESS_VIEW_UNAVAILABLE`              | `--state` used with a panel or harness that lacks it | use the snapshot route (step 3)                                                                  |
-| `NOT_A_VIEW` "malformed: …"             | the file is not a view, or is an error envelope      | regenerate it with `$H view`; report the harness error if there is one                           |
-| empty panel, "No state yet"             | nothing has run in this state directory              | normal before the first `harness run`                                                            |
-| "The app bundle is not built"           | running from a source checkout                       | `npm run build` in the panel checkout                                                            |
+Тексты страницы ниже — английские, как в текущей сборке; русские тексты
+появятся на этапе S2.
+
+| Симптом (`error.code` или текст страницы) | Что значит                                           | Что делать                                                                                           |
+| ----------------------------------------- | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `PORT_BUSY`                               | заданный порт или все порты 4790–4809 заняты         | убери `--port` или выбери свободный; возможно, другая панель уже запущена: проверь файлы `panel.pid` |
+| `HOST_NOT_LOOPBACK`                       | передан не локальный `--host`                        | убери `--host`; никогда не открывай панель наружу                                                    |
+| `View version N is not supported`         | мажорные версии harness и панели различаются         | установи версию панели, подходящую к harness; сообщи обе версии                                      |
+| "newer data, update the panel"            | harness добавил поля, которые эта панель пропускает  | панель работает; предложи обновить её                                                                |
+| `VIEW_UNAVAILABLE` / "not readable yet"   | файла представления нет                              | повтори строки `$H view`                                                                             |
+| `HARNESS_VIEW_UNAVAILABLE`                | `--state` использован с панелью или harness без него | используй маршрут через снимок (шаг 3)                                                               |
+| `NOT_A_VIEW` "malformed: …"               | файл не представление или конверт ошибки             | создай его заново через `$H view`; если есть ошибка harness, сообщи её                               |
+| пустая панель, "No state yet"             | в этом каталоге состояния ничего не запускалось      | нормально до первого `harness run`                                                                   |
+| "The app bundle is not built"             | запуск из исходного checkout                         | `npm run build` в checkout панели                                                                    |

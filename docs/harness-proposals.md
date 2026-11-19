@@ -1,57 +1,66 @@
-# Proposed additions to devcontour-harness
+# Предлагаемые дополнения к devcontour-harness
 
-These are proposals for the harness repository; none of it is implemented
-here. Together they give the operator panel ([design.md](design.md)) one
-read-only, versioned data source.
+Это предложения для репозитория harness; здесь ничего из этого не
+реализовано. Вместе они дают панели оператора ([design.md](design.md)) один
+источник данных: только для чтения и с версией.
 
-They build on alpha.54 work:
+Цель панели — чтобы её понимал оператор без технической подготовки. Панель
+показывает данные harness, а не пересказ агента. Поэтому всё, что панель
+говорит простыми словами (почему повтор, чего ждёт работа, что и как
+проверено), считает и формулирует harness, а панель только выводит.
 
-- the work stage in `status`;
-- review-loop summaries;
-- `review-code` records;
-- drift of accepted targets.
+Предложения опираются на работу alpha.54:
 
-They also follow existing harness patterns:
+- этап работы в `status`;
+- сводки циклов ревью;
+- записи `review-code`;
+- дрейф принятых целей.
 
-- a pure projection plus a node loader, as with `valueReport` and
+Они также следуют существующим образцам harness:
+
+- чистая проекция плюс загрузчик для node, как у `valueReport` и
   `collectReportInput`;
-- one JSON envelope on stdout;
-- the same exit codes.
+- один JSON-конверт в stdout;
+- те же коды выхода.
 
-Sizes count production lines, without generated schemas: S is under 200, M
-is 200–600, L is over 600.
+Размеры считаются в строках production-кода без сгенерированных схем:
+S — до 200, M — 200–600, L — больше 600.
 
-## P1. `operatorView` projection and contract (M–L)
+## P1. Проекция `operatorView` и договор (M–L)
 
-### Contract
+### Договор
 
-`src/contracts/operator-view.ts` holds:
+`src/contracts/operator-view.ts` содержит:
 
-- a Zod `operatorViewSchema` and a `workDetailViewSchema`;
-- the constants `OPERATOR_VIEW_VERSION = 1` and `OPERATOR_VIEW_REVISION = 0`;
-- the limits:
+- Zod-схемы `operatorViewSchema` и `workDetailViewSchema`;
+- константы `OPERATOR_VIEW_VERSION = 1` и `OPERATOR_VIEW_REVISION = 0`;
+- пределы:
   ```ts
   OPERATOR_VIEW_LIMITS = {
     works: 500, reviews: 50, findingsPerSubject: 50, questions: 50,
     escalations: 50, drift: 50, roles: 100, reviewRules: 100, warnings: 20,
     detailAttempts: 20, buckets: 500, windowMs: 7 days, bytes: 262144,
+    activity: 50, decisions: 50, verificationPerWork: 50,
   };
   ```
 
-`npm run schemas` generates the JSON Schema
-`schemas/operator-view.schema.json`. The field set is in design.md §3. The
-TypeScript in this repository, `src/model/view.ts`, is the draft.
+`npm run schemas` генерирует JSON Schema
+`schemas/operator-view.schema.json`. Набор полей описан в design.md §3.
+TypeScript в этом репозитории, `src/model/view.ts`, — черновик.
 
-### Projection
+Окно истории по умолчанию — 24 ч; 7 дней — по запросу (`--window 7d`).
+Более длинные окна потребовали бы предварительной агрегации в harness.
 
-`src/projections/operator-view.ts` is exported from
-`devcontour-harness/projections` and from the package root. It uses no
-`node:*` and no zod at runtime, so the projections module stays
-browser-safe.
+### Проекция
+
+`src/projections/operator-view.ts` экспортируется из
+`devcontour-harness/projections` и из корня пакета. Она не использует
+`node:*` и zod во время выполнения, поэтому модуль projections остаётся
+пригодным для браузера.
 
 ```ts
 export interface OperatorQuestionInput {
-  // built by the loader, already sanitized
+  // строит загрузчик, уже очищено
   id: string;
   workId: string;
   kind: 'question';
@@ -59,20 +68,20 @@ export interface OperatorQuestionInput {
   version: number;
   effectiveSeverity: number;
   createdAt: string;
-  text?: string; // raw; the projection masks, then clips
+  text?: string; // сырой текст; проекция маскирует, затем обрезает
   answeredBy?: 'operator' | 'lead' | 'host';
 }
 export interface OperatorViewInput {
-  now: number; // injected clock
+  now: number; // внедрённые часы
   harnessVersion: string;
   stateVersion: number;
-  policy: ExecutionPolicyLike; // fields of design §3.1
-  policyDefaults: readonly string[]; // paths filled from defaults
-  manifestLayers?: readonly string[]; // project manifest profile.layers
-  works: readonly OperatorWorkInput[]; // status work + stage + attemptSummaryView
-  // + rechecks (evidence with recheck: true)
-  counts: { byStage: Record<string, number> }; // over ALL works, before truncation
-  reviews: readonly ReviewSubjectSummary[]; // alpha.54 h14 + code review records
+  policy: ExecutionPolicyLike; // поля design §3.1
+  policyDefaults: readonly string[]; // пути, заполненные по умолчанию
+  manifestLayers?: readonly string[]; // profile.layers манифеста проекта
+  works: readonly OperatorWorkInput[]; // работа из status + stage + attemptSummaryView
+  // + rechecks (доказательства с recheck: true)
+  counts: { byStage: Record<string, number> }; // по ВСЕМ работам, до усечения
+  reviews: readonly ReviewSubjectSummary[]; // alpha.54 h14 + записи code review
   questions: readonly OperatorQuestionInput[];
   stops: readonly {
     workId?: string;
@@ -82,9 +91,9 @@ export interface OperatorViewInput {
     code: string;
     since: string;
   }[];
-  targets: readonly AcceptedTarget[]; // alpha.54 h10, computed by the loader
+  targets: readonly AcceptedTarget[]; // alpha.54 h10, считает загрузчик
   attempts: readonly AttemptHistoryInput[]; // startedAt, finishedAt, status,
-  // failure bucket, interrupted, callsRecorded
+  // корзина сбоя, interrupted, callsRecorded
   gateEvents: readonly {
     at: string;
     passed: boolean;
@@ -92,84 +101,85 @@ export interface OperatorViewInput {
     recheck?: boolean;
     reused?: boolean;
   }[];
-  calls: ValueReportInput['calls']; // the report's call input, unchanged,
-  // so cost bounds follow the report rules
+  calls: ValueReportInput['calls']; // вход вызовов отчёта без изменений,
+  // поэтому границы стоимости следуют правилам отчёта
   controller?: { leaseUntil: number };
-  budgets: BudgetOverview | undefined; // undefined = budgeting off
+  budgets: BudgetOverview | undefined; // undefined = бюджеты выключены
   queue: QueueStopView & Partial<QueuePause>;
 }
 export interface OperatorViewOptions {
-  titles?: boolean; // default true; false = --no-titles
-  windowMs?: number; // default 24 h
-  bucketMs?: number; // default 15 min
+  titles?: boolean; // по умолчанию true; false = --no-titles
+  windowMs?: number; // по умолчанию 24 ч
+  bucketMs?: number; // по умолчанию 15 мин
 }
 export function operatorView(i: OperatorViewInput, o?: OperatorViewOptions): OperatorView;
 export function workDetailView(i: WorkDetailInput, o?: OperatorViewOptions): WorkDetailView;
-export function maskText(text: string, max: number): string; // mask first, then clip
-export function viewToken(view: OperatorView | WorkDetailView): string; // sha256 of
-// canonical bytes without generatedAt/token
+export function maskText(text: string, max: number): string; // сначала маскировать, затем обрезать
+export function viewToken(view: OperatorView | WorkDetailView): string; // sha256
+// канонических байтов без generatedAt/token
 ```
 
-The projection reuses existing code instead of re-deriving anything:
+Проекция переиспользует существующий код и ничего не выводит заново:
 
-| Harness code                                                                            | Used for                                             |
-| --------------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| `attemptSummaryOf`, `attemptSummaryView`, `attemptSummaryLine`                          | attempt counters and the summary line                |
-| `workStageOf` (alpha.54 `src/control/stage.ts`)                                         | the work stage; its pure part moves into projections |
-| `queueStop`, `queuePause`, `leadMayAnswer` (alpha.54)                                   | queue state and who may answer                       |
-| review subject summaries (alpha.54 `src/control/review-summary.ts`)                     | `reviews[]`                                          |
-| `failureBucketOf`, `interruptedByShutdown`, `callCostKnown` and the report spend bounds | failure buckets, interruptions and spend             |
+| Код harness                                                                           | Для чего                                               |
+| ------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| `attemptSummaryOf`, `attemptSummaryView`, `attemptSummaryLine`                        | счётчики попыток и строка сводки                       |
+| `workStageOf` (alpha.54 `src/control/stage.ts`)                                       | этап работы; его чистая часть переезжает в projections |
+| `queueStop`, `queuePause`, `leadMayAnswer` (alpha.54)                                 | состояние очереди и кто может ответить                 |
+| сводки предметов ревью (alpha.54 `src/control/review-summary.ts`)                     | `reviews[]`                                            |
+| `failureBucketOf`, `interruptedByShutdown`, `callCostKnown` и границы расходов отчёта | корзины сбоев, прерывания и расходы                    |
 
-A missing input that the report would count as unknown cost (an abandoned
-call, incomplete usage, an attempt without call records) makes the bound
-`lower`, never an exact zero.
+Недостающий вход, который отчёт посчитал бы неизвестной стоимостью
+(брошенный вызов, неполный usage, попытка без записей вызовов), делает
+границу `lower` и никогда не даёт точный ноль.
 
-### Loader
+### Загрузчик
 
-`collectOperatorViewInput(source, options)` in
-`src/control/operator-view.ts` runs in node.
+`collectOperatorViewInput(source, options)` в
+`src/control/operator-view.ts` работает в node.
 
-Inside one `engine.read`, so it takes the same snapshot as `statusOf`, it
-reads:
+Внутри одного `engine.read`, то есть на том же снимке, что и `statusOf`, он
+читает:
 
-- works, attempts and input requests (mapped to `OperatorQuestionInput`);
-- call records, through the report's collection;
-- gate events from the event log, filtered to the window, plus the spend
-  before the window;
-- local review records.
+- работы, попытки и запросы ввода (отображаются в `OperatorQuestionInput`);
+- записи вызовов через сбор данных отчёта;
+- события gates из журнала событий, отфильтрованные по окну, плюс расходы
+  до начала окна;
+- локальные записи ревью.
 
-After the read it:
+После чтения он:
 
-- runs git for `acceptedTargets`;
-- reads the project manifest, if one is found next to the policy;
-- computes `policyDefaults` by comparing the policy file with the parsed
-  policy that has defaults applied.
+- запускает git для `acceptedTargets`;
+- читает манифест проекта, если он найден рядом с политикой;
+- вычисляет `policyDefaults`, сравнивая файл политики с разобранной
+  политикой, в которую подставлены значения по умолчанию.
 
-### Tests (about 500 lines)
+### Тесты (около 500 строк)
 
 - `tests/operator-view.test.ts`:
-  - fixture states: empty, busy, paused, a work budget exceeded while the
-    total is within, large spend before the window, escalated, drift
-    including drift that could not be checked, every list truncated;
-  - byte determinism under a fixed clock;
-  - numbers equal to `status.works[].attemptSummary`, `stage` and the
-    report totals on the same state;
-  - gate series with skipped, reused, failed and rechecked gates;
-  - spend with abandoned calls, incomplete usage and attempts without call
-    records.
-- `tests/operator-view-secrets.test.ts`: plants a provider key, a
-  `Bearer …` token, `user:pass@` and the home path into a work title, a
-  question, a finding, an attempt error (which reaches `queue.detail`) and a
-  git error (which reaches drift). One case places the key across the clip
-  boundary. None of them may appear in `JSON.stringify(view)`.
+  - состояния-фикстуры: пустое, занятое, на паузе, бюджет работы превышен
+    при общем бюджете в пределах, большие расходы до окна, эскалация,
+    дрейф, включая дрейф, который не удалось проверить, все списки усечены;
+  - побайтовый детерминизм при фиксированных часах;
+  - числа равны `status.works[].attemptSummary`, `stage` и итогам отчёта на
+    том же состоянии;
+  - ряды gates с пропущенными, переиспользованными, упавшими и
+    перепроверенными gates;
+  - расходы с брошенными вызовами, неполным usage и попытками без записей
+    вызовов.
+- `tests/operator-view-secrets.test.ts`: подкладывает ключ провайдера,
+  токен `Bearer …`, `user:pass@` и домашний путь в заголовок работы, вопрос,
+  находку, ошибку попытки (которая попадает в `queue.detail`) и ошибку git
+  (которая попадает в дрейф). В одном случае ключ лежит поперёк границы
+  обрезки. Ни одно из значений не должно появиться в `JSON.stringify(view)`.
 - `tests/operator-view-limits.test.ts`:
-  - a worst-case document, with every list full and every string at its
-    limit, is at most 256 KB of UTF-8;
-  - `truncated` counts every cut list;
-  - `VIEW_TOO_LARGE` instead of a partial document.
-- `tests/operator-view-token.test.ts`: the token changes when a lease
-  expires with no store write, and stays the same for an identical view.
-- A schema test that checks the output against
+  - документ худшего случая, где каждый список полон и каждая строка на
+    пределе, занимает не больше 256 КБ UTF-8;
+  - `truncated` считает каждый усечённый список;
+  - `VIEW_TOO_LARGE` вместо частичного документа.
+- `tests/operator-view-token.test.ts`: токен меняется, когда аренда истекает
+  без записи в хранилище, и остаётся тем же для идентичного view.
+- Тест схемы, который сверяет вывод с
   `schemas/operator-view.schema.json`.
 
 ## P2. `harness view` (S)
@@ -179,39 +189,39 @@ harness view --state D --policy F [--work ID] [--no-titles] [--window 24h|7d]
              [--bucket 15m|1h] [--view-version N]
 ```
 
-- **Read-only.** It never writes to or creates the state directory. It is
-  listed in `capabilities` with `readOnly: true` and its input and response
-  schemas.
-- **stdout.** The envelope `{ ok: true, data: OperatorView | WorkDetailView }`.
-  There is no `--human`; the text views stay `status --human` and
+- **Только чтение.** Команда никогда не пишет в каталог состояния и не
+  создаёт его. Она указана в `capabilities` с `readOnly: true` и схемами
+  входа и ответа.
+- **stdout.** Конверт `{ ok: true, data: OperatorView | WorkDetailView }`.
+  `--human` нет; текстовыми видами остаются `status --human` и
   `explain --human`.
-- **Policy.**
-  - `--policy` is optional only when the state has a binding.
-  - If `--policy` differs from the binding, the view carries a
-    `POLICY_DIGEST_MISMATCH` warning and is not refused.
-  - A missing state directory with `--policy` gives a valid empty view, with
-    settings taken from that policy. This lets a panel opened before the
-    first run say "no state yet".
-  - A missing state directory without `--policy` is `POLICY_REQUIRED`
-    (exit 2), and nothing is created.
-- **Errors.**
-  - Exit 2: invalid input, an unknown `--view-version`, an unknown `--work`.
-  - Exit 3: `STATE_NEWER_THAN_HARNESS`, the same rule as `doctor`.
-  - Exit 4: infrastructure, or `VIEW_TOO_LARGE`.
-- **Changes in the harness.**
-  - `view` in `src/cli.ts`, with its entries in `allowed` and `flags`.
-  - A `docs/contracts.md` section "OperatorView".
-  - A README row in the command table.
-  - One line in the `harness` skill: "the operator panel reads `harness
-view`".
-- **Tests.** CLI tests on the `single-task` example with the fixture
-  runtime:
-  - after `run`, the view has one `done` work whose `resultSha` equals the
-    one from `harness result`;
-  - `--work` returns attempt rows;
-  - `--no-titles` leaves no titles;
-  - a missing state with and without `--policy` behaves as above, and no
-    directory is created.
+- **Политика.**
+  - `--policy` необязателен, только если у состояния есть привязка.
+  - Если `--policy` отличается от привязки, view получает предупреждение
+    `POLICY_DIGEST_MISMATCH` и не отклоняется.
+  - Отсутствующий каталог состояния с `--policy` даёт корректный пустой
+    view с настройками из этой политики. Так панель, открытая до первого
+    запуска, может сказать «состояния пока нет».
+  - Отсутствующий каталог состояния без `--policy` — `POLICY_REQUIRED`
+    (выход 2), и ничего не создаётся.
+- **Ошибки.**
+  - Выход 2: неверный ввод, неизвестный `--view-version`, неизвестный
+    `--work`.
+  - Выход 3: `STATE_NEWER_THAN_HARNESS`, то же правило, что у `doctor`.
+  - Выход 4: инфраструктура или `VIEW_TOO_LARGE`.
+- **Изменения в harness.**
+  - `view` в `src/cli.ts` с записями в `allowed` и `flags`.
+  - Раздел `docs/contracts.md` «OperatorView».
+  - Строка README в таблице команд.
+  - Одна строка в skill `harness`: «панель оператора читает `harness
+view`».
+- **Тесты.** Тесты CLI на примере `single-task` с fixture runtime:
+  - после `run` view содержит одну работу `done`, чей `resultSha` равен
+    значению из `harness result`;
+  - `--work` возвращает строки попыток;
+  - `--no-titles` не оставляет заголовков;
+  - отсутствующее состояние с `--policy` и без него ведёт себя, как описано
+    выше, и каталог не создаётся.
 
 ## P3. `harness serve-view` (M)
 
@@ -220,105 +230,241 @@ harness serve-view --state D --policy F [--port N] [--host 127.0.0.1] [--no-titl
                    [--static DIR] [--allow-answers]
 ```
 
-- **No UI dependencies.** It uses `node:http` only. `--static DIR`
-  optionally serves prebuilt files from a directory that the caller names.
-  The harness ships no UI.
-- **Routes.** They are the same as the UI CLI's (design.md §6), so that
-  `httpViewSource` works against both. All are GET or HEAD; anything else
-  gets 405 until P4.
-  - `/api/view`: content `ETag` from `viewToken`, `cache-control: no-store`.
+- **Без зависимостей UI.** Используется только `node:http`. `--static DIR`
+  по желанию отдаёт заранее собранные файлы из каталога, который называет
+  вызывающий. Harness не поставляет UI.
+- **Маршруты.** Те же, что у CLI панели (design.md §6), чтобы
+  `httpViewSource` работал с обоими. Все — GET или HEAD; всё остальное
+  получает 405 до P4.
+  - `/api/view`: `ETag` по содержимому из `viewToken`,
+    `cache-control: no-store`.
   - `/api/view?work=<id>`
-  - `/api/events`: SSE, `event: view` with data `{ token }` on every token
-    change, and a comment heartbeat every 15 s.
+  - `/api/events`: SSE, `event: view` с данными `{ token }` при каждой смене
+    токена и heartbeat-комментарий каждые 15 с.
   - `/api/health`: `{ ok, version, viewVersion, readOnly }`.
-- **Recomputing.**
-  - `ExecutionView.dataVersion()`, polled every 1 s, is only an
-    invalidation hint.
-  - The view is also recomputed every 5 s while any work is live, so that
-    lease expiry and liveness, which change without a store write, are
-    picked up.
-  - Drift (git) is recomputed at most every 30 s, keyed by target head.
-  - An event is sent only when the content token changes.
-- **Network.** It binds only to loopback addresses, with the same rules as
-  the UI CLI:
-  - allowed hosts are `127.0.0.1`, `::1` and `localhost`;
-  - any other host is `HOST_NOT_LOOPBACK`;
-  - a foreign `Host` header gets 421;
-  - a malformed path gets 400;
-  - the same CSP and nosniff headers are sent.
-- **Port.** Without `--port` it probes from 4791. A busy explicit port is
-  `PORT_BUSY`, exit 4.
-- **Startup output.** One JSON line on stdout once it is listening:
-  `{ ok, url, port, readOnly }`. SIGINT, SIGTERM and stdin EOF close it
-  cleanly. Stdin EOF covers the case where the parent UI CLI dies.
-- **No lease.** It holds no controller lease and never claims work. It
-  reads like `status` does, so it can run next to `harness run`.
-- **Tests.**
-  - On the fixture state, `/api/view` equals the output of `harness view`.
-  - An SSE event arrives after a `pause`.
-  - An SSE event arrives after a lease expiry with no store write.
-  - The loopback, Host and 400 refusals.
-  - 405 on POST without `--allow-answers`.
-  - It runs at the same time as `run` without a lease conflict.
+- **Пересчёт.**
+  - `ExecutionView.dataVersion()`, опрашиваемый каждую 1 с, — только
+    подсказка для инвалидации.
+  - View также пересчитывается каждые 5 с, пока хоть одна работа активна,
+    чтобы подхватить истечение аренды и liveness, которые меняются без
+    записи в хранилище.
+  - Дрейф (git) и состояние в удалённом репозитории (P6.8) кешируются по
+    head цели и пересчитываются не чаще раза в 30 с (решение владельца).
+  - Событие отправляется только при смене токена содержимого.
+- **Сеть.** Привязка только к loopback-адресам, по тем же правилам, что у
+  CLI панели:
+  - разрешены хосты `127.0.0.1`, `::1` и `localhost`;
+  - любой другой хост — `HOST_NOT_LOOPBACK`;
+  - чужой заголовок `Host` получает 421;
+  - некорректный путь получает 400;
+  - отправляются те же заголовки CSP и nosniff.
+- **Порт.** Без `--port` перебирает порты начиная с 4791. Занятый явный
+  порт — `PORT_BUSY`, выход 4.
+- **Вывод при старте.** Одна JSON-строка в stdout, когда сервер слушает:
+  `{ ok, url, port, readOnly }`. SIGINT, SIGTERM и EOF на stdin чисто его
+  закрывают. EOF на stdin покрывает случай, когда родительский CLI панели
+  умер.
+- **Без аренды.** Не держит аренду контроллера и никогда не забирает
+  работу. Читает так же, как `status`, поэтому может работать рядом с
+  `harness run`.
+- **Тесты.**
+  - На состоянии-фикстуре `/api/view` равен выводу `harness view`.
+  - Событие SSE приходит после `pause`.
+  - Событие SSE приходит после истечения аренды без записи в хранилище.
+  - Отказы loopback, Host и 400.
+  - 405 на POST без `--allow-answers`.
+  - Работает одновременно с `run` без конфликта аренды.
 
-## P4. Operator answers through `serve-view` (S–M, after the UI's S2)
+## P4. Ответы оператора через `serve-view` (S–M, после S2 в UI)
 
-Transport (design.md §9):
+Транспорт (design.md §9):
 
-- The browser talks only to the UI CLI, which proxies to `serve-view`.
-- `serve-view --allow-answers` reads a 32-byte shared secret from stdin as
-  its first line. The UI CLI generates the secret. It never appears in
-  argv, the environment or stdout.
-- A write is accepted only with all of these:
+- Браузер говорит только с CLI панели, который проксирует в `serve-view`.
+- `serve-view --allow-answers` читает 32-байтовый общий секрет из stdin
+  первой строкой. Секрет генерирует CLI панели. Он никогда не появляется в
+  argv, окружении или stdout.
+- Запись принимается только при выполнении всех условий:
   - `Authorization: Bearer <secret>`;
-  - `Origin` equal to the origin the UI CLI passes along with the secret;
+  - `Origin` равен origin, который CLI панели передаёт вместе с секретом;
   - `content-type: application/json`;
-  - a body of at most 16 KB.
+  - тело не больше 16 КБ.
 
 ```
 GET  /api/questions/<id>   → { requestId, version, state, severity, answerableBy,
-                               text (masked, unclipped up to 8 KB),
-                               options[{ id, label, consequence }] }
+                               impact, text (маскирован, без обрезки до 8 КБ),
+                               options[{ id, label, consequence, plain }] }
 POST /api/answers          { requestId, requestVersion,
                              kind: 'clarification' | 'requirement-change',
                              optionId?, text }
 ```
 
-- **Answer handling.** The handler calls the same code as `harness
+- **Обработка ответа.** Обработчик вызывает тот же код, что и `harness
 input-answer --actor operator --request-version V --kind K [--option O]
 --text T`:
-  - `text` is required.
-  - Stale versions are refused.
-  - `OPERATOR_ANSWER_REQUIRED` keeps its meaning.
-  - `--actor lead` is never accepted on this path.
-  - Only `awaiting-answer` requests are answerable.
-- **Tests.**
-  - Every refusal:
-    - no secret, or a wrong one;
-    - wrong `Origin`;
-    - a non-JSON body;
-    - a body over 16 KB;
-    - a stale version;
-    - a request that is already answered;
-    - a lead-only request.
-  - A successful answer records `answeredBy: operator` and the `kind`.
-  - The secret never appears in logs or responses.
+  - `text` обязателен.
+  - Устаревшие версии отклоняются.
+  - `OPERATOR_ANSWER_REQUIRED` сохраняет свой смысл.
+  - `--actor lead` на этом пути никогда не принимается.
+  - Отвечать можно только на запросы в `awaiting-answer`.
+- **Тесты.**
+  - Каждый отказ:
+    - секрета нет или он неверный;
+    - неверный `Origin`;
+    - тело не JSON;
+    - тело больше 16 КБ;
+    - устаревшая версия;
+    - запрос, на который уже ответили;
+    - запрос, на который может ответить только ведущий.
+  - Успешный ответ записывает `answeredBy: operator` и `kind`.
+  - Секрет никогда не появляется в журналах или ответах.
+- Дизайн записи (одноразовый код, cookie, секрет через stdin) утверждает
+  владелец отдельно, до начала P4.
 
-## P5. Docs and catalog (S)
+## P5. Документация и каталог (S)
 
-- `docs/contracts.md`: a new section "OperatorView" with the versioning
-  rules (design.md §4), the limits and the masking rules.
-- `capabilities`: entries for `view` and `serve-view`.
-- `ROADMAP.md`: one entry, "Operator view", with the criteria above. It
-  names this package and refers to none of its internals.
+- `docs/contracts.md`: новый раздел «OperatorView» с правилами версий
+  (design.md §4), пределами и правилами маскирования.
+- `capabilities`: записи для `view` и `serve-view`.
+- `ROADMAP.md`: одна запись «Operator view» с критериями выше. Она называет
+  этот пакет и не ссылается на его внутренности.
 
-## Order and dependencies
+## P6. Поля для понятной панели
 
-1. Merge alpha.54: the h12 stage, the h14 review loop, h10 review-code and
-   drift. All three touch `statusDataSchema` and `statusText`, so merge
-   them one after another.
-2. P1 and P2 ship together in one release.
-3. P3 ships in the next release.
-4. P5 ships alongside P1–P3.
-5. P4 comes only after the UI has its read-only screens and the owner has
-   approved the first write path.
+Оператор без технической подготовки должен понимать, почему работа
+повторяется, чего она ждёт, что и как проверено, где лежит принятый
+результат и кто что делал. Эти тексты harness формирует сам, по
+фиксированным шаблонам и с маскированием (design.md §9). Панель их только
+показывает и ничего не перефразирует. Если поля нет, панель говорит «нет
+сведений», а не ноль и не «всё в порядке».
+
+Все поля ниже необязательны в view: производитель заполняет их, когда его
+harness уже даёт эти данные. Пункты P1 входят в harness
+**0.1.0-alpha.55**. Пункты P2 — в следующие релизы, номер пока не назначен.
+
+### P6.1. Последний сбой попытки (P1, alpha.55, S)
+
+- **Что.** Строка этапа в `status` говорит, почему идёт повтор, например:
+  «попытка 3 из 6; прошлая остановлена: окружение — порт занят».
+- **Источник.** Последняя упавшая попытка работы: корзина из
+  `failureBucketOf`, деталь из ошибки попытки.
+- **Поле view.** `works[].attempts.lastFailure {attempt, bucket, plain, at?}`.
+  `bucket` — корзина `failureBucketOf`. `plain` — фиксированный шаблон для
+  корзины плюс маскированная и обрезанная деталь, всего до 160 символов.
+
+### P6.2. Понятные причины ожидания (P1, alpha.55, S)
+
+- **Что.** Для каждого кода блокировки движка — простой текст и тот, кто
+  должен действовать. Для `queued` и `DEPENDENCY_INCOMPLETE` текст такой:
+  «просто ждёт очереди — ничего не нужно».
+- **Источник.** Коды `engine.blockers` и таблица текстов в harness.
+- **Поле view.** `works[].blockers[] {code, plain?, actor}`. `actor` — кто
+  должен действовать; `null` означает «никто». Это **заменяет** прежнее
+  `blockers: string[]` в черновике view 1. View 1 ещё не выпущен; он
+  фиксируется только с выходом P1.
+
+### P6.3. Что проверено и как (P1, alpha.55, M)
+
+- **Что.** Для каждой проверки работы — результат и способ. Строка ревью
+  честно говорит «прочитал diff, ничего не запускал». Голого «проверено»
+  нет нигде.
+- **Источник.** Доказательства `attempt.gate`, переиспользованные
+  доказательства кандидата, записи ревью.
+- **Поле view.** `WorkDetailView.verification[] {gate, kind: gate|review,
+result: passed|failed|reused|skipped|not-run,
+how: executed|reused|read|not-checked, by?, attempt?, at?}`. Предел — 50
+  строк на работу.
+
+### P6.4. Влияние вопроса и технические ответы ведущего (P1, alpha.55, M)
+
+- **Что.**
+  - Вопросы исполнителя получают `impact: user-visible | technical`, а
+    каждый вариант ответа — простое «что изменится для пользователя».
+  - Политика по желанию: `inputPolicy.leadAnswers.technical: true`
+    разрешает ведущему отвечать на технические вопросы с записанной
+    причиной. Причина видна в отчёте и в решениях view (P6.10).
+  - Вопросы, меняющие результат для пользователя (`user-visible`), всегда
+    остаются за оператором, при любом флаге.
+  - `harness init` спрашивает об этом флаге.
+  - Skill `harness` добавляет одну строку простого объяснения и никогда не
+    переформулирует варианты.
+- **Источник.** Запрос ввода исполнителя, политика.
+- **Поля view.** `questions[].impact?`, `questions[].plain?` (маскирован,
+  до 200 символов), `settings.thresholds.leadAnswersTechnical?`. Когда флаг
+  включён, `answerableBy` для технических вопросов становится
+  `operator-or-lead`. Отсутствующий `impact` читается как `user-visible`.
+
+### P6.5. Skill запускает панель (P1, alpha.55, S)
+
+- **Что.** В начале долгого запуска skill `harness` запускает панель
+  (skill `harness-ui`) и даёт пользователю URL. Если панель недоступна —
+  предлагает `status --watch`.
+- **Источник.** Только текст skill; данных не добавляет.
+
+### P6.6. Лента действий (P2, S–M)
+
+- **Что.** Кто что делал: ведущий ↔ harness, writer, reviewer,
+  контроллер, оператор.
+- **Источник.** Журнал событий, новые сверху, окно 24 ч.
+- **Поле view.** `activity[] {at, actor, action, workId?, subject?, plain}`,
+  предел 50. Открытое решение: остаётся ли лента в обзорном документе или
+  переезжает в свой маршрут документа.
+
+### P6.7. Наблюдаемое время этапов (P2, S)
+
+- **Что.** Сколько обычно занимает этап, по уже завершённым этапам этого
+  состояния.
+- **Поле view.** `works[].stage.typical {p50Ms, p90Ms, samples}`. Поля нет,
+  если образцов меньше 5. Показывается как диапазон и никогда как
+  обещание.
+
+### P6.8. Принято локально / в удалённом репозитории (P2, S)
+
+- **Что.** Есть ли принятый результат только локально или уже в удалённом
+  репозитории.
+- **Источник.** Только локальная remote-tracking ref, без `fetch`. Кеш по
+  head на 30 с вместе с дрейфом. Skill предлагает push; harness никогда не
+  делает push сам.
+- **Поле view.** `works[].target {repositoryId, ref, acceptedSha?,
+remote: {state: pushed|not-pushed|unknown, trackingRef?, reason?}}`.
+
+### P6.9. План выполнения (P2, S)
+
+- **Что.** Полоса плана: порядок работ, зависимости, где идёт работа
+  сейчас.
+- **Источник.** Граф; порядок — порядок `status`.
+- **Поле view.** `works[].dependsOn?: string[]`.
+
+### P6.10. Решения и временные решения (P2, M)
+
+- **Что.** Какие решения приняты, кем и какие из них временные.
+  `accept-limitation --revisit <условие>` отмечает решение как временное с
+  условием пересмотра. В отчёте появляется раздел решений.
+- **Источник.** Решения по находкам, технические ответы ведущего (P6.4).
+- **Поле view.** `decisions[] {id, kind: accepted-limitation|technical-answer|continue,
+by: lead|operator, at, workId?, subject?, findingId?, requestId?,
+temporary, revisit?, title?, reason?}`, предел 50. Тексты маскируются и
+  обрезаются.
+
+### P6.11. Объём приёмки (P2, S)
+
+- **Что.** Необязательное поле поручения `acceptanceScope` (например,
+  end-to-end или только вёрстка) и предупреждение plan-check, когда
+  работа, видимая пользователю, принимается только по вёрстке.
+- **Поле view.** Позже, отдельной ревизией.
+
+### P6.12. Руководство оператора на русском (P2, S)
+
+- **Что.** `docs/operator-guide.md` в harness: термины и действия простыми
+  словами. Панель ссылается на него из раскрытий «что это значит».
+
+## Порядок и зависимости
+
+1. Работа alpha.54 слита: этап h12, цикл ревью h14, h10 review-code и
+   дрейф.
+2. Harness **0.1.0-alpha.55** несёт P6.1–P6.5.
+3. P1 и P2 (`operatorView` и `harness view`) выходят вместе в одном релизе.
+4. P3 выходит в следующем релизе.
+5. P5 выходит вместе с P1–P3.
+6. P6.6–P6.12 — после P3.
+7. P4 — только после экранов S2 в UI и после того, как владелец утвердит
+   дизайн записи.
