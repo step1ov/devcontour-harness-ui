@@ -15,7 +15,7 @@
 данные harness, а не пересказ агента: что ждёт вашего ответа, что идёт
 сейчас, как именно проверена работа и где лежит принятый результат.
 
-> Статус: `0.1.0-alpha.2`. Все экраны только для чтения: обзор, детали
+> Статус: `0.1.0-alpha.3`. Все экраны только для чтения: обзор, детали
 > работы, ревью, решения, кто что делал, настройки, история и здоровье, на
 > русском и английском. Данные — файл представления или живой
 > `harness view` (`--state`, harness `0.1.0-alpha.55` и новее). Схемой
@@ -26,7 +26,7 @@
 > делал» и есть ли принятая работа в удалённой ветке (по копии ветки на этой
 > машине, без сети). С alpha.55 и alpha.56 всё прочее работает, как раньше.
 > [Дизайн](docs/design.md) описывает схему, экраны, безопасность и этапы;
-> изменения — в заметках к выпускам [0.1.0-alpha.2](docs/release-notes/0.1.0-alpha.2.md)
+> изменения — в заметках к выпускам [0.1.0-alpha.3](docs/release-notes/0.1.0-alpha.3.md), [0.1.0-alpha.2](docs/release-notes/0.1.0-alpha.2.md)
 > и [0.1.0-alpha.1](docs/release-notes/0.1.0-alpha.1.md).
 
 ## Язык
@@ -44,7 +44,7 @@
 версия, как и у harness):
 
 ```sh
-npm install --save-dev --save-exact devcontour-harness@0.1.0-alpha.57 devcontour-harness-ui@0.1.0-alpha.2
+npm install --save-dev --save-exact devcontour-harness@0.1.0-alpha.58 devcontour-harness-ui@0.1.0-alpha.3
 npx devcontour-harness-ui --demo --lang ru      # демонстрационные данные
 # → {"ok":true,"url":"http://127.0.0.1:4790/","port":4790,"readOnly":true,...}
 ```
