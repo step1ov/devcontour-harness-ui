@@ -114,7 +114,7 @@ test('overview: one plain sentence first, the whole scope, problems on the way i
   );
   assert.match(text, /Сделано 1 из 4 · в работе 1 · ждут 2/);
   assert.match(text, /Осталось: 1,5–2,5 ч на 3 работы — если каждой хватит одной попытки/);
-  assert.match(text, /попытка в среднем длится 50 мин \(по 11 попыткам за окно истории\)/);
+  assert.match(text, /попытка в среднем длится 50 мин \(по 11 попыткам, начатым в окне истории\)/);
   assert.match(text, /Проблемы по ходу \(2\)/);
   assert.match(
     text,
@@ -126,7 +126,20 @@ test('overview: one plain sentence first, the whole scope, problems on the way i
   // Unknown is never zero: without attempt totals no range is shown.
   const { totals: _t, ...history } = view.history;
   const noTotals = shown(html(<Overview view={{ ...view, history }} lang="ru" />));
-  assert.match(noTotals, /Сколько осталось, пока сказать нельзя: нужно хотя бы 3 попытки/);
+  assert.match(noTotals, /пока сказать нельзя: эта версия harness не сообщает итоги окна истории/);
+  // Totals with too few attempts: that reason, not the missing totals.
+  const few = shown(
+    html(
+      <Overview
+        view={{
+          ...view,
+          history: { ...view.history, totals: { ...view.history.totals!, attemptsStarted: 2 } },
+        }}
+        lang="ru"
+      />,
+    ),
+  );
+  assert.match(few, /Сколько осталось, пока сказать нельзя: нужно хотя бы 3 попытки/);
   assert.doesNotMatch(noTotals, /Осталось: 0|0 мин/);
 });
 
@@ -156,7 +169,7 @@ test('the queue stands when no controller runs: never «Очередь идёт�
   assert.doesNotMatch(ru, /Очередь идёт/);
   assert.match(
     shown(ru),
-    /harness не запущен, и сама очередь не пойдёт — запустить заново \(harness run\) нужно ведущему/,
+    /harness не запущен, и сама очередь не пойдёт — ведущему нужно снова запустить harness/,
   );
   assert.match(shown(ru), /очередь стоит: harness не запущен/);
   // Raw codes only under «подробности» (F-AA).
@@ -180,4 +193,61 @@ test('settings: the appearance choice only when the host lets the viewer pick', 
   assert.match(ru, /Оформление/);
   assert.match(ru, /role="radiogroup"[^>]*aria-label="Тема"/);
   assert.match(ru, /aria-checked="true"[^>]*value="dark"|value="dark"[^>]*aria-checked="true"/);
+});
+
+test('review fixes: cancelled, tasks outside with all harness work done, who acts in problems', () => {
+  // All harness works done or cancelled: «Все работы приняты: 3 из 3; отменено 1», nothing stands.
+  const done: OperatorView = {
+    ...view,
+    progress: {
+      ...view.progress,
+      total: 4,
+      done: 3,
+      running: 0,
+      byStage: { done: 3, cancelled: 1 },
+    },
+    works: view.works.filter((w) => w.id === 'add-greeting'),
+    questions: [],
+    health: { ...view.health, controller: { present: false } },
+  };
+  const ru = html(<Overview view={done} lang="ru" />);
+  assert.match(ru, /Все работы приняты: 3 из 3; отменено 1\./);
+  assert.match(shown(ru), /Сделано 3 из 4 · в работе 0 · ждут 0 · отменено 1/);
+  assert.match(ru, /data-testid="queue-state">Всё принято</);
+  // Tasks outside the harness are the lead's to hand over: the queue does not «stand».
+  const outside = {
+    ...done,
+    scope: { tasks: [{ id: 'T-9', title: 'Поиск', state: 'not-handed-over' }] },
+  } as OperatorView;
+  const o = html(<Overview view={outside} lang="ru" />);
+  assert.doesNotMatch(o, /Очередь стоит/);
+  assert.match(
+    o,
+    /Все работы harness приняты \(3\); ещё 1 задача не передана в harness — их передаёт ведущий\./,
+  );
+  // A stopped work whose only blocker names nobody, while the stage names the lead.
+  const stop: OperatorView = {
+    ...view,
+    works: view.works.map((w) =>
+      w.id === 'docs-page'
+        ? {
+            ...w,
+            stage: {
+              ...w.stage,
+              name: 'stopped',
+              needs: { actor: 'lead', action: 'diagnose-failure' },
+            },
+            dependsOn: [],
+            blockers: [{ code: 'GATE_FAILED', plain: 'проверка не прошла', actor: null }],
+          }
+        : w,
+    ),
+  };
+  const problems = shown(
+    html(<Overview view={stop} lang="ru" />)
+      .split('data-testid="problems"')[1]!
+      .split('data-testid="now"')[0]!,
+  );
+  assert.match(problems, /docs-page : проверка не прошла — действует: ведущий/);
+  assert.doesNotMatch(problems, /никто — просто ждёт очереди/);
 });

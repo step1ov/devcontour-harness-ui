@@ -17,7 +17,7 @@ const screens: [string, string, RegExp][] = [
   [
     'tasks',
     '#/tasks',
-    /Попытки: израсходовано 2 из 3, осталось 1[\s\S]*Дальше действует: вы[\s\S]*раунды 2 из 6/,
+    /Format dates by locale[^]*Попытки: израсходовано 2 из 3, осталось 1[^]*Дальше действует: harness[^]*Export report as CSV[^]*Дальше действует: вы[^]*раунды 2 из 6/,
   ],
   ['work', '#/work/locale-format', /Что проверено/],
   [
@@ -289,18 +289,24 @@ test('an open tab offers a reload when the panel server serves a new build (F-AF
   page,
 }) => {
   await open(page, '#/');
+  // The page carries its build; the same build served again asks nothing.
+  await expect(page.locator('meta[name="hui-build"]')).toHaveAttribute('content', /^[0-9a-f]{16}$/);
+  const checked = page.waitForResponse('**/api/health');
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  await checked;
+  await page.waitForTimeout(200);
   await expect(page.getByTestId('new-build')).toHaveCount(0);
+  // Only the build decides: the same version with a new build still prompts.
   await page.route('**/api/health', async (route) => {
     const res = await route.fetch();
     const body = await res.json();
-    await route.fulfill({
-      response: res,
-      json: { ...body, build: 'f'.repeat(16), version: '9.9.9' },
-    });
+    await route.fulfill({ response: res, json: { ...body, build: 'f'.repeat(16) } });
   });
   // The tab checks when it becomes visible again (and every minute).
   await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
   const prompt = page.getByTestId('new-build');
-  await expect(prompt).toContainText('Панель обновилась (версия 9.9.9)');
+  await expect(prompt).toContainText(
+    /Панель обновилась \(версия [^)]+\): на этой вкладке открыта прежняя сборка\./,
+  );
   await expect(prompt.getByRole('button', { name: 'Обновить страницу' })).toBeVisible();
 });

@@ -13,6 +13,8 @@ const dot: Record<string, string> = {
   current: 'hui:bg-primary hui:border-primary',
   ahead: 'hui:bg-card hui:border-muted-foreground',
   skipped: 'hui:bg-track hui:border-track',
+  next: 'hui:bg-card hui:border-muted-foreground',
+  'not-needed': 'hui:bg-track hui:border-track',
   unknown: 'hui:bg-warn-soft hui:border-warn',
 };
 
@@ -44,12 +46,12 @@ export function Timeline({
       )}
       data-testid={testid}
     >
-      {steps.map((s) => {
+      {steps.map((s, i) => {
         const state = label(t.timeline.state, s.state);
         const duration = s.durationMs !== undefined ? formatDuration(s.durationMs, lang) : '';
         return (
           <li
-            key={s.stage}
+            key={i}
             data-state={s.state}
             className={cn(
               'hui:flex hui:min-w-0 hui:items-start hui:gap-2 hui:rounded-control hui:border hui:border-border hui:p-2',

@@ -141,12 +141,6 @@ export function WorkDetail({
         </Heading>
         <p>
           <StageStatus w={work} lang={lang} linkProps={links} verificationHref={verificationHref} />
-          {work.stage.step ? (
-            <>
-              {' '}
-              (<code>{work.stage.step}</code>)
-            </>
-          ) : null}
           {work.stage.since
             ? ' ' +
               w.since(
@@ -155,11 +149,12 @@ export function WorkDetail({
               )
             : ''}
           {typical ? '; ' + typical : ''}
-          {work.stage.step || work.stage.since || typical ? '.' : ''}{' '}
+          {work.stage.since || typical ? '.' : ''}{' '}
           {work.stage.next.length
             ? w.next(work.stage.next.map((s) => stageLabel(s, lang).toLowerCase()).join(', '))
             : w.nothingNext}
         </p>
+        {work.stage.step ? <Codes t={t} codes={[work.stage.step]} /> : null}
         {work.stage.needs ? (
           <p data-status="blocked">
             {w.needs(
@@ -199,8 +194,8 @@ export function WorkDetail({
           <details className="hui-term hui-earlier" data-testid="earlier-attempts">
             <summary>{t.timeline.earlier(earlier.length)}</summary>
             <div className="hui:mt-2 hui:grid hui:gap-3">
-              {earlier.map((l) => (
-                <div key={l.attempt!.attempt} className="hui:grid hui:gap-1">
+              {earlier.map((l, i) => (
+                <div key={i} className="hui:grid hui:gap-1">
                   <span className="hui:text-sm hui:font-medium">
                     {t.timeline.attempt(l.attempt!.attempt)}
                     {l.attempt!.failureBucket
@@ -260,8 +255,8 @@ export function WorkDetail({
           <p className="hui-muted">{w.noAttempts}</p>
         ) : (
           <ul className="hui-list">
-            {detail.attempts.map((r) => (
-              <li key={r.attempt} className="hui-item">
+            {detail.attempts.map((r, i) => (
+              <li key={i} className="hui-item">
                 <strong>{w.attemptRow(r.attempt)}</strong>{' '}
                 <span className="hui-badge">{label(w.attemptStatus, r.status)}</span>{' '}
                 {r.failureBucket ? <span>{label(t.bucket, r.failureBucket)} · </span> : null}
@@ -362,7 +357,7 @@ export function WorkDetail({
           <ul className="hui-list">
             {detail.questions.map((q) => (
               <li key={q.requestId} className="hui-item">
-                <code>{q.requestId}</code>{' '}
+                <Codes t={t} codes={[q.requestId, t.question.version(q.version)]} />
                 <span className="hui-badge">{t.question.severity(q.severity)}</span>{' '}
                 {q.title ? <span>{q.title}</span> : null}
                 {q.plain ? (

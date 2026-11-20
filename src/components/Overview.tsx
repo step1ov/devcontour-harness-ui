@@ -20,6 +20,7 @@ import { instantMs } from '../model/compat.ts';
 import { dict, knownLabel, label, type Dict, type Lang } from '../model/dict.ts';
 import { footerSentence, headerSentence } from '../model/i18n.ts';
 import {
+  actorsOn,
   dependencyState,
   nextSteps,
   withWorkNames,
@@ -116,6 +117,16 @@ export function Overview({
     Object.hasOwn(progress.byStage, stage) ? Number(progress.byStage[stage]) || 0 : 0;
   const clipped = Boolean(view.truncated?.questions || view.truncated?.escalations);
   const oddState = view.questions.some((q) => !KNOWN_QUESTION_STATES.has(String(q.state)));
+  const leadOnlyWorks = new Set(
+    leadAsking
+      .map((q) => q.workId)
+      .filter(
+        (id) =>
+          !asking.some((q) => q.workId === id) &&
+          !steps.operator.some((s) => s.workIds.includes(id)) &&
+          !steps.unlistedAnswers.includes(id),
+      ),
+  );
   const sentence = headerSentence(
     {
       running: progress.running,
@@ -128,7 +139,8 @@ export function Overview({
         asking.length === 0 &&
         steps.operator.length > 0 &&
         steps.operator.every((s) => s.after.length > 0),
-      waitingOperator: Math.max(0, progress.waitingOperator - leadAsking.length),
+      // Works counted as waiting for you only because of a question the lead answers.
+      waitingOperator: Math.max(0, progress.waitingOperator - leadOnlyWorks.size),
       // A clipped list or a question state this build does not know makes the
       // count a floor: the sentence then never says "nothing is needed".
       incomplete: clipped || oddState,
@@ -141,15 +153,28 @@ export function Overview({
   const left = scopeLeft(view);
   const average = attemptAverage(view);
   const unfinished = overall.total - overall.done - overall.cancelled;
+  // Harness works only: tasks outside the harness are the lead's to hand over, not the queue's.
+  const harnessLeft = progress.total - progress.done - overall.cancelled;
+  const outsideLeft = (overall.outside ?? 0) + overall.outsideUnlisted;
   // F-X: the queue does not move by itself when no controller runs and nothing works.
   const standing =
     !progress.queue.paused &&
     !health.controller.present &&
     progress.running === 0 &&
-    unfinished > 0;
-  const allDone = progress.total > 0 && unfinished === 0;
-  const story = storySentence({ view, running, t, lang, standing, allDone, yours });
-  const problems = problemsOf(view, t, lang, standing);
+    harnessLeft > 0;
+  const allDone = progress.total > 0 && harnessLeft === 0;
+  const story = storySentence({
+    view,
+    running,
+    t,
+    lang,
+    standing,
+    allDone,
+    yours,
+    cancelled: overall.cancelled,
+    outsideLeft,
+  });
+  const problems = problemsOf(view, steps, t, lang, standing);
 
   return (
     <section
@@ -167,7 +192,7 @@ export function Overview({
           </p>
           <div className="hui:flex hui:flex-wrap hui:items-center hui:gap-2 hui-header">
             <Badge
-              tone={progress.queue.paused || standing ? 'warn' : allDone ? 'ok' : 'ok'}
+              tone={progress.queue.paused || standing ? 'warn' : 'ok'}
               data-testid="queue-state"
             >
               {progress.queue.paused
@@ -203,7 +228,8 @@ export function Overview({
       <Block t={t} title={o.scopeTitle} testid="scope" term="stage">
         <p className="hui:text-sm" data-testid="scope-counts">
           {o.scopeCounts(overall.done, overall.total, overall.running, overall.waiting)}
-          {overall.outside ? ' ' + o.scopeOutside(overall.outside + overall.outsideUnlisted) : ''}
+          {overall.cancelled ? ' ' + o.scopeCancelled(overall.cancelled) : ''}
+          {outsideLeft ? ' ' + o.scopeOutside(outsideLeft) : ''}
         </p>
         <Progress
           value={overall.done}
@@ -212,6 +238,7 @@ export function Overview({
           segments={[
             { value: overall.running, className: 'hui:bg-primary' },
             { value: overall.waiting, className: 'hui:bg-wait' },
+            { value: overall.cancelled, className: 'hui:bg-muted-foreground' },
           ]}
         />
         <ul
@@ -242,7 +269,9 @@ export function Overview({
             ? o.etaNothingLeft
             : left.range
               ? o.etaLeft(formatRange(left.range, lang), left.works)
-              : o.etaUnknown(MIN_ATTEMPT_SAMPLES)}
+              : view.history.totals
+                ? o.etaUnknown(MIN_ATTEMPT_SAMPLES)
+                : o.etaNoTotals}
         </p>
         {left.range && left.average ? (
           <p className="hui:text-xs hui:text-muted-foreground" data-testid="eta-basis">
@@ -441,7 +470,7 @@ export function Overview({
                       <strong>{workName(view, w.id)}</strong>
                     </WorkRef>
                     <Badge tone="info">{stageLabel(w.stage.name, lang)}</Badge>
-                    {w.stage.step ? <code className="hui-muted">{w.stage.step}</code> : null}
+                    {w.stage.step ? <Codes t={t} codes={[w.stage.step]} /> : null}
                     {w.liveness && w.liveness !== 'active' ? (
                       <Badge tone="warn">{label(t.liveness, w.liveness)}</Badge>
                     ) : null}
@@ -700,6 +729,8 @@ function storySentence({
   standing,
   allDone,
   yours,
+  cancelled,
+  outsideLeft,
 }: {
   view: OperatorView;
   running: WorkView[];
@@ -708,10 +739,15 @@ function storySentence({
   standing: boolean;
   allDone: boolean;
   yours: number;
+  cancelled: number;
+  outsideLeft: number;
 }): string {
   const s = t.story;
-  if (view.progress.total === 0) return s.empty;
-  if (allDone) return s.allDone(view.progress.done, view.progress.total);
+  if (view.progress.total === 0) return outsideLeft ? s.onlyOutside(outsideLeft) : s.empty;
+  if (allDone)
+    return outsideLeft
+      ? s.harnessDone(view.progress.done, outsideLeft)
+      : s.allDone(view.progress.done, view.progress.done, cancelled);
   if (running.length)
     return s.running(
       running.map((w) => s.workAt(workName(view, w.id), stageLabel(w.stage.name, lang))),
@@ -740,7 +776,13 @@ interface Problem {
  * acts, a queue that stands, stalled attempts, environment failures, budget
  * and drift. Every line is a view record; codes only under «подробности».
  */
-function problemsOf(view: OperatorView, t: Dict, lang: Lang, standing: boolean): Problem[] {
+function problemsOf(
+  view: OperatorView,
+  steps: NextSteps,
+  t: Dict,
+  lang: Lang,
+  standing: boolean,
+): Problem[] {
   const p = t.problems;
   const out: Problem[] = [];
   if (standing)
@@ -765,16 +807,19 @@ function problemsOf(view: OperatorView, t: Dict, lang: Lang, standing: boolean):
       });
     if (w.stage.name === 'stopped') {
       const b = w.blockers.find((x) => x.actor !== null) ?? w.blockers[0];
+      // Who acts: the same people as «Нужно от вас» and «Остальные ожидания».
+      const actors = actorsOn(steps, w.id);
+      const needs = w.stage.needs?.actor;
       out.push({
         kind: p.kindStopped,
         tone: 'warn',
         workId: w.id,
         text: b?.plain?.trim() ? withWorkNames(view, b.plain) : p.stoppedNoReason,
-        who: !b
-          ? t.blocker.whoActs(t.unknown)
-          : b.actor === null
-            ? t.blocker.nobody
-            : t.blocker.whoActs(actorLabel(t, b.actor)),
+        who: actors.length
+          ? t.blocker.whoActs(actors.map((a) => actorLabel(t, a)).join(t.overview.then))
+          : needs
+            ? t.blocker.whoActs(actorLabel(t, needs))
+            : t.blocker.whoActs(t.unknown),
         codes: w.blockers.map((x) => x.code),
         blocked: true,
       });

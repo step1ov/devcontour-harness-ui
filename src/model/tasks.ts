@@ -75,9 +75,11 @@ export function taskCard(view: OperatorView, steps: NextSteps, w: WorkView): Tas
     phase = 'cancelled';
     next = { kind: 'nobody' };
   } else if (SLOT_STAGES.has(w.stage.name)) {
-    // A running work is never "waiting" (F-J): the harness acts.
+    // A running work is never "waiting" (F-J): the harness acts, unless the
+    // view names someone else for it (the same people as on the Overview).
     phase = 'running';
-    next = { kind: 'harness', stage: w.stage.name };
+    const actors = actorsOn(steps, w.id);
+    next = actors.length ? { kind: 'actors', actors } : { kind: 'harness', stage: w.stage.name };
   } else {
     let actors = actorsOn(steps, w.id);
     // Questions the lead answers by the policy name the lead, not you (F-W);
@@ -127,7 +129,12 @@ export function taskCards(view: OperatorView, steps: NextSteps): TaskCard[] {
 export interface TimelineStep {
   /** Stage name: `prepare`, `writer`, `gates`, `review`, `integration`, `acceptance`, or a newer one. */
   stage: string;
-  state: 'passed' | 'failed' | 'current' | 'ahead' | 'skipped' | 'unknown';
+  /**
+   * `skipped`: an earlier attempt stopped before it; `next`: the latest
+   * attempt stopped before it and the next attempt gets there; `not-needed`:
+   * the work was accepted without it.
+   */
+  state: 'passed' | 'failed' | 'current' | 'ahead' | 'skipped' | 'next' | 'not-needed' | 'unknown';
   durationMs?: number;
 }
 
@@ -157,18 +164,31 @@ export function timelineOf(
   const known = PROCESS.filter((s) => s !== 'acceptance');
   // Stages a newer harness reports that this build does not know keep their place after the known ones.
   const extra = (row?.stages ?? []).map((s) => s.stage).filter((s) => !PROCESS.includes(s));
+  const order = [...known, ...extra];
+  // The stopped latest attempt of a work with attempts left: the rest comes in the next one.
+  const notReached: TimelineStep['state'] = !latest
+    ? 'skipped'
+    : work.attempts.left > 0
+      ? 'next'
+      : 'skipped';
+  const startedAfter = (i: number) =>
+    order.slice(i + 1).some((x) => seen.has(x) || (latest && work.stage.name === x));
   let failed = false;
   const out: TimelineStep[] = [];
-  for (const stage of [...known, ...extra]) {
+  for (const [i, stage] of order.entries()) {
     const s = seen.get(stage);
     let state: TimelineStep['state'];
     if (s?.outcome === 'passed') state = 'passed';
     else if (s?.outcome === 'failed') state = 'failed';
-    else if (latest && work.stage.name === stage && SLOT_STAGES.has(stage)) state = 'current';
-    else if (s) state = latest && !row?.finishedAt ? 'current' : 'unknown';
-    else if (failed || !latest) state = 'skipped';
-    else if (ahead.has(stage)) state = 'ahead';
-    else state = isAccepted ? 'skipped' : 'ahead';
+    // Only the work's own stage runs now, never two at once.
+    else if (latest && !isAccepted && work.stage.name === stage && SLOT_STAGES.has(stage))
+      state = 'current';
+    // Seen without an outcome: passed when a later stage started, else unknown.
+    else if (s) state = startedAfter(i) ? 'passed' : 'unknown';
+    else if (failed) state = notReached;
+    else if (!latest) state = 'skipped';
+    else if (isAccepted) state = 'not-needed';
+    else state = 'ahead';
     if (state === 'failed') failed = true;
     out.push({
       stage,
@@ -178,7 +198,7 @@ export function timelineOf(
   }
   out.push({
     stage: 'acceptance',
-    state: isAccepted && latest ? 'passed' : failed || !latest ? 'skipped' : 'ahead',
+    state: isAccepted && latest ? 'passed' : !latest ? 'skipped' : failed ? notReached : 'ahead',
   });
   return out;
 }

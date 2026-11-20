@@ -9,9 +9,10 @@
    scripts/build-css.mjs scopes Tailwind's property fallback to `.hui`, and
    tests/styles.test.ts checks every selector of the built file. */
 
-@layer theme, base, components, utilities;
-@import 'tailwindcss/theme.css' layer(theme) prefix(hui);
-@import 'tailwindcss/utilities.css' layer(utilities) source(none);
+/* Own layer names, so a host's `base` or `utilities` layers never reorder ours. */
+@layer hui-theme, hui-base, hui-components, hui-utilities;
+@import 'tailwindcss/theme.css' layer(hui-theme) prefix(hui);
+@import 'tailwindcss/utilities.css' layer(hui-utilities) source(none);
 @source '../components';
 @source '../app';
 
@@ -124,7 +125,7 @@
 }
 
 /* Scoped reset: only inside the panel, never on the host page. */
-@layer base {
+@layer hui-base {
   .hui,
   .hui *,
   .hui ::before,
@@ -139,7 +140,7 @@
   }
 }
 
-@layer components {
+@layer hui-components {
   .hui {
     overflow-wrap: anywhere;
     font-family: var(--hui-font);

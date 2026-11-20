@@ -390,14 +390,16 @@ async function serveStatic(res: ServerResponse, appDir: string, pathname: string
     if (!inside(root, real) || !(await stat(real)).isFile()) return notFound();
     // The page names the hashed bundle files: it is revalidated on every
     // load, so a new panel build reaches an open tab on its next reload (F-AF).
-    const page = wanted === '/index.html' ? { 'cache-control': 'no-cache' } : {};
-    return send(
-      res,
-      200,
-      await readFile(real),
-      types[extname(real)] ?? 'application/octet-stream',
-      page,
-    );
+    const body = await readFile(real);
+    if (wanted !== '/index.html')
+      return send(res, 200, body, types[extname(real)] ?? 'application/octet-stream');
+    // The page carries the id of its own build, so an open tab compares the
+    // bundle it really runs with the one served now (F-AF).
+    const build = hashOf(body).slice(0, 16);
+    const page = body
+      .toString('utf8')
+      .replace('<head>', `<head>\n    <meta name="hui-build" content="${build}" />`);
+    return send(res, 200, page, types['.html']!, { 'cache-control': 'no-cache' });
   } catch {
     if (wanted === '/index.html') return send(res, 200, fallbackPage, types['.html']!);
     return notFound();

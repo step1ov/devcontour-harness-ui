@@ -242,3 +242,94 @@ test('process timeline: stages with time and outcome; review is a stage; accepta
   );
   assert.ok(fresh.every((s) => s.state === 'ahead'));
 });
+
+test('review fixes: accepted works ask nothing; running works keep named actors; one current stage', () => {
+  // An accepted work with stale records of the lead and you: no step, no count (F-AY).
+  const stale: OperatorView = {
+    ...view,
+    works: view.works.map((w) =>
+      w.id === 'add-greeting'
+        ? {
+            ...w,
+            blockers: [{ code: 'APPROVAL_STALE', plain: 'approve again', actor: 'lead' }],
+            stage: { ...w.stage, needs: { actor: 'operator', action: 'reset-attempts' } },
+          }
+        : w.id === 'locale-format'
+          ? {
+              ...w,
+              // A running work: "not ready" is dropped, a named fix stays (F-J).
+              blockers: [
+                { code: 'NOT_READY', plain: 'already in work', actor: 'controller' },
+                { code: 'ACCESS_DENIED', plain: 'no access to the registry', actor: 'operator' },
+              ],
+              stage: { ...w.stage, needs: { actor: 'operator', action: 'fix-access' } },
+            }
+          : w,
+    ),
+  };
+  const steps = nextSteps(stale);
+  assert.ok(![...steps.lead, ...steps.operator].some((s) => s.workIds.includes('add-greeting')));
+  const access = steps.operator.filter((s) => s.workIds.includes('locale-format'));
+  assert.ok(access.some((s) => s.code === 'ACCESS_DENIED'));
+  assert.ok(access.some((s) => s.action === 'fix-access'));
+  assert.ok(!access.some((s) => s.code === 'NOT_READY'));
+  assert.ok(!steps.other.some((s) => s.workIds.includes('locale-format')));
+  // The task card names the same people as the Overview.
+  const card = taskCards(stale, steps).find((c) => c.work.id === 'locale-format')!;
+  assert.equal(card.phase, 'running');
+  assert.deepEqual(card.next, { kind: 'actors', actors: ['operator'] });
+
+  // Stages seen without an outcome before the current one: passed, and only one runs now.
+  const row = {
+    ...running.attempts[0]!,
+    stages: [{ stage: 'prepare' }, { stage: 'writer' }, { stage: 'gates' }],
+  };
+  assert.deepEqual(
+    timelineOf(row, running.work, true).map((s) => s.state),
+    ['passed', 'passed', 'current', 'ahead', 'ahead', 'ahead'],
+  );
+  // A latest attempt that failed with attempts left: the rest comes in the next attempt.
+  const failedRow = {
+    ...running.attempts[1]!,
+  };
+  const retrying = {
+    ...running.work,
+    stage: { name: 'queued', next: [] },
+    attempts: { ...running.work.attempts, left: 1 },
+  };
+  assert.deepEqual(
+    timelineOf(failedRow, retrying, true).map((s) => s.state),
+    ['passed', 'passed', 'failed', 'next', 'next', 'next'],
+  );
+  // Out of attempts: not reached, no promise of a next attempt.
+  const out = { ...retrying, attempts: { ...retrying.attempts, left: 0 } };
+  assert.equal(timelineOf(failedRow, out, true).at(-1)!.state, 'skipped');
+  // An accepted work without a review stage: «не понадобилось», not «не дошло».
+  const accepted = read<WorkDetailView>('../fixtures/work.accepted.sample.json');
+  const noReview = timelineOf(
+    {
+      ...accepted.attempts[0]!,
+      stages: accepted.attempts[0]!.stages.filter((s) => s.stage !== 'review'),
+    },
+    accepted.work,
+    true,
+  );
+  assert.equal(noReview.find((s) => s.stage === 'review')!.state, 'not-needed');
+});
+
+test('cancelled works are counted apart, never as waiting', () => {
+  const v: OperatorView = {
+    ...view,
+    progress: {
+      ...view.progress,
+      total: 4,
+      done: 3,
+      running: 0,
+      byStage: { done: 3, cancelled: 1 },
+    },
+  };
+  const o = overallProgress(v);
+  assert.equal(o.cancelled, 1);
+  assert.equal(o.waiting, 0);
+  assert.equal(scopeLeft(v).works, 0);
+});

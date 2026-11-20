@@ -164,7 +164,11 @@ function entriesOf(
   // A running work holds a slot: its "not ready to start" blockers describe
   // the attempt already under way, not a wait (F-J).
   const running = w !== undefined && SLOT_STAGES.has(w.stage.name);
-  for (const b of running ? [] : (w?.blockers ?? [])) {
+  for (const b of w?.blockers ?? []) {
+    // Only the reasons that mean "not ready to start" (or nobody acts) are
+    // dropped for a running work; a reason that names an actor stays.
+    if (running && (b.actor === null || b.code === 'NOT_READY' || b.code.startsWith('DEPENDENCY_')))
+      continue;
     const actor = actorOf(b.actor);
     const record: StepRecord = { source: 'blocker', code: b.code, actor: b.actor };
     const same = find(actor, b.code);
@@ -294,6 +298,9 @@ export function nextSteps(view: OperatorView): NextSteps {
   ];
   for (const id of [...new Set(ids)]) {
     const w = byId.get(id);
+    // An accepted or cancelled work asks nothing of anyone (F-AY): its stale
+    // records name no step, no wait and no count.
+    if (w && isTerminal(w)) continue;
     const waitsOn = (w?.dependsOn ?? []).filter(unfinished);
     const entries = entriesOf(w, id, view.escalations, waitsOn.length > 0);
     const dep: DependencyWait | undefined = waitsOn.length

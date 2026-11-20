@@ -95,6 +95,14 @@ test('every rule of the built stylesheet is scoped to the panel', () => {
     }
   }
   assert.ok(utilities > 50, `prefixed utilities found: ${utilities}`);
+  // Own layer names: a host's `base`/`utilities` layers neither merge with nor reorder ours.
+  for (const m of noComments.matchAll(/@layer ([^{;]+)[{;]/g))
+    for (const name of m[1]!.split(',').map((x) => x.trim()))
+      assert.match(name, /^(hui-[a-z]+|properties)$/, `layer ${name}`);
+  // No sibling or descendant reach out of the panel: `.hui ~ p`, `.hui-x + *`.
+  for (const { selector } of rules(noComments))
+    for (const part of parts(selector))
+      assert.doesNotMatch(part, /^\.hui[\w-]*\s*[~+](?!\s*\.hui)/, `reaches a sibling: ${part}`);
   // Tailwind's custom property fallback is scoped to the panel by build-css.mjs.
   assert.doesNotMatch(noComments, /\*, ::before, ::after, ::backdrop/);
 });

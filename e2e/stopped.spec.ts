@@ -42,7 +42,7 @@ test('stopped run: one decision for you after the lead, the waits say whose turn
   // No controller and nothing running: the queue stands, it does not «go» (F-X).
   await expect(main.getByTestId('queue-state')).toHaveText('Очередь стоит');
   await expect(main.getByTestId('story')).toHaveText(
-    'Сейчас ничего не выполняется: работа ждёт вашего решения.',
+    'Сейчас ничего не выполняется: работа ждёт вашего ответа или решения.',
   );
   await expect(main.getByTestId('problems')).toContainText('очередь стоит: harness не запущен');
   await expect(main.getByTestId('sentence')).toHaveText(

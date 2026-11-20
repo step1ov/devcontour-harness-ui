@@ -40,8 +40,12 @@ let lang: Lang = 'ru';
 let t: Dict = dict(lang);
 let source: ViewSource;
 let uiVersion: string | undefined;
-/** The app build the page booted with (`/api/health` `build`, F-AF). */
-let bootBuild: string | undefined;
+/**
+ * The app build this page runs (F-AF): the id the server wrote into the
+ * page it served (`<meta name="hui-build">`), else the first `/api/health`.
+ */
+let bootBuild: string | undefined =
+  document.querySelector<HTMLMetaElement>('meta[name="hui-build"]')?.content || undefined;
 /** What the server watches (`/api/health`): a live `harness view` or a file. */
 let liveRoute: 'state' | 'file' | undefined;
 
@@ -85,14 +89,15 @@ const BUILD_CHECK_MS = 60_000;
 function useNewBuild(): { version: string } | undefined {
   const [fresh, setFresh] = useState<{ version: string } | undefined>();
   useEffect(() => {
-    if (!bootBuild) return;
     let stopped = false;
     const check = async () => {
       if (document.hidden) return;
       try {
         const r = await fetch(new URL('./api/health', window.location.href), { cache: 'no-store' });
         const h = (await r.json()) as { build?: unknown; version?: unknown };
-        if (!stopped && typeof h.build === 'string' && h.build !== bootBuild)
+        // No baseline yet (the boot check failed): the first answer is it.
+        if (typeof h.build === 'string' && bootBuild === undefined) bootBuild = h.build;
+        else if (!stopped && typeof h.build === 'string' && h.build !== bootBuild)
           setFresh({ version: typeof h.version === 'string' ? h.version : '' });
       } catch {
         // The panel server is away: the connection banner says so.
@@ -422,7 +427,7 @@ const journal: [string, 'activity' | 'history' | 'health'][] = [
 const navOf = (s: Route['screen']): NavKey | undefined =>
   s === 'overview' || s === 'tasks' || s === 'decisions' || s === 'settings'
     ? s
-    : s === 'work'
+    : s === 'work' || s === 'reviews'
       ? 'tasks'
       : s === 'activity' || s === 'history' || s === 'health'
         ? 'journal'
@@ -432,12 +437,14 @@ const titleOf = (r: Route): string =>
     ? (r.workId ?? '')
     : r.screen === 'activity' || r.screen === 'history' || r.screen === 'health'
       ? t.nav[r.screen]
-      : r.screen === 'overview' ||
-          r.screen === 'tasks' ||
-          r.screen === 'decisions' ||
-          r.screen === 'settings'
-        ? t.nav[r.screen]
-        : t.app.notFound;
+      : r.screen === 'reviews'
+        ? t.nav.tasks
+        : r.screen === 'overview' ||
+            r.screen === 'tasks' ||
+            r.screen === 'decisions' ||
+            r.screen === 'settings'
+          ? t.nav[r.screen]
+          : t.app.notFound;
 
 function Nav({ route }: { route: Route }) {
   const other = lang === 'ru' ? 'en' : 'ru';
@@ -556,7 +563,7 @@ function App() {
   const redirect = redirectOf(route);
   useEffect(() => {
     // An old link (`#/reviews`) lands where its content lives now.
-    if (redirect) window.location.replace(redirect);
+    if (redirect) window.location.replace(redirect + (route.anchor ? '#' + route.anchor : ''));
   }, [redirect]);
   const { value: check, live } = useLive<ViewCheck & Digested>(
     (signal) => source.load(signal),
@@ -656,6 +663,8 @@ function App() {
  * locale), which `/api/health` reports; then the browser locale (design §6).
  */
 async function boot() {
+  // The viewer's theme first: no flash of the other theme while health loads.
+  applyTheme(readTheme());
   const param = new URLSearchParams(window.location.search).get('lang');
   let served: string | undefined;
   try {
@@ -666,7 +675,7 @@ async function boot() {
       live?: unknown;
     };
     if (typeof h.version === 'string') uiVersion = h.version;
-    if (typeof h.build === 'string') bootBuild = h.build;
+    if (typeof h.build === 'string') bootBuild ??= h.build;
     if (h.live === 'state' || h.live === 'file') liveRoute = h.live;
     if (typeof h.lang === 'string') served = h.lang;
   } catch {
@@ -676,7 +685,6 @@ async function boot() {
   lang = pickLang(asked, [...(navigator.languages ?? []), navigator.language]);
   t = dict(lang);
   document.documentElement.lang = lang;
-  applyTheme(readTheme());
   // The UI language goes to the view source too: the harness writes the plain
   // strings (`plain`, `line`, warnings) in it (`harness view --lang`).
   source = httpViewSource(new URL('./', window.location.href).toString(), fetch, { lang });

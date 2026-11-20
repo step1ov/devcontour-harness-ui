@@ -7,7 +7,7 @@
 import { instantMs } from '../model/compat.ts';
 import { dict, knownLabel, label, type Dict, type Lang } from '../model/dict.ts';
 import { formatElapsed, questionStatus, stageLabel } from '../model/format.ts';
-import { attemptAverage, outsideHarness, scopeOf } from '../model/scope.ts';
+import { attemptAverage, outsideHarness, overallProgress, scopeOf } from '../model/scope.ts';
 import { nextSteps, workName, withWorkNames } from '../model/steps.ts';
 import { leadAnswers, taskCards, type TaskCard as Card_, type TaskPhase } from '../model/tasks.ts';
 import type { OperatorView } from '../model/view.ts';
@@ -51,6 +51,7 @@ export function Tasks({ view, lang = 'ru', now, onOpenWork, workHref, timeZone }
   const cards = taskCards(view, steps);
   const scope = scopeOf(view);
   const outside = outsideHarness(scope);
+  const unlisted = overallProgress(view).outsideUnlisted;
   const other = view.reviews.filter((r) => r.workId === undefined);
   return (
     <section
@@ -81,8 +82,8 @@ export function Tasks({ view, lang = 'ru', now, onOpenWork, workHref, timeZone }
       </ul>
       {view.truncated?.works ? <p className="hui-muted">{t.overview.planClipped}</p> : null}
       {scope ? (
-        outside.length ? (
-          <Block t={t} title={k.outside(outside.length)} testid="tasks-outside">
+        outside.length || unlisted ? (
+          <Block t={t} title={k.outside(outside.length + unlisted)} testid="tasks-outside">
             <ul className="hui:grid hui:list-none hui:gap-2">
               {outside.map((task) => (
                 <li
@@ -96,6 +97,7 @@ export function Tasks({ view, lang = 'ru', now, onOpenWork, workHref, timeZone }
                 </li>
               ))}
             </ul>
+            {unlisted ? <p className="hui-muted">{t.listClipped(unlisted)}</p> : null}
           </Block>
         ) : null
       ) : (
@@ -156,10 +158,10 @@ function TaskCardView({
               w.stage.since ? formatElapsed(w.stage.since, clock, lang) : '',
             )
           : firstBlocker?.plain?.trim()
-            ? k.nowWaits(withWorkNames(view, firstBlocker.plain))
+            ? k.nowWaits(withWorkNames(view, firstBlocker.plain).replace(/[.\s]+$/, ''))
             : c.phase === 'queued'
               ? k.nowQueued
-              : k.nowWaits(stageLabel(w.stage.name, lang).toLowerCase());
+              : k.nowStage(stageLabel(w.stage.name, lang));
   const next =
     c.next.kind === 'nobody'
       ? k.next.nobody

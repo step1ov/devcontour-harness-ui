@@ -49,6 +49,9 @@ test('components write no visible text of their own: every JSX text node is punc
       .filter((x) => x.endsWith('.tsx'))
       .map((f) => new URL(f, dir)),
   ];
+  // The scan covers the screens and the shadcn/ui pieces, and finds text at all.
+  assert.ok(files.length >= 15, `files scanned: ${files.length}`);
+  assert.ok(files.some((u) => u.pathname.endsWith('/ui/card.tsx')));
   // The scan itself finds text: a literal word between tags is caught.
   assert.match('<p>Готово</p>', />([^<>{}]*[A-Za-zА-Яа-яЁё][^<>{}]*)</);
   for (const url of files) {

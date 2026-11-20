@@ -20,7 +20,12 @@ execFileSync(process.execPath, [cli, '-i', 'src/components/styles.css', '-o', ou
   cwd: root,
   stdio: ['ignore', 'ignore', 'inherit'],
 });
-writeFileSync(out, scopeGlobals(readFileSync(out, 'utf8')));
+const css = scopeGlobals(readFileSync(out, 'utf8'));
+// A newer Tailwind that writes the global rule differently must fail the build, not leak.
+if (/(^|[\s{}])\*\s*,\s*:{1,2}before/.test(css.replace(/\.hui \*/g, ''))) {
+  throw new Error('build-css: an unscoped universal rule survived; update scopeGlobals');
+}
+writeFileSync(out, css);
 
 /** `*, ::before, ::after, ::backdrop` → the same inside `.hui` only. */
 export function scopeGlobals(css) {

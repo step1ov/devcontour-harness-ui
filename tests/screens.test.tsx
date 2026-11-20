@@ -94,7 +94,7 @@ const text = (s: string) => s.replace(/<[^>]+>/g, '');
 
 test('work detail (RU): now, stages, why a retry, what was checked and how', () => {
   const ru = html(<WorkDetail detail={running} lang="ru" timeZone={TZ} workHref={workHref} />);
-  assert.match(text(ru), /Проверки \(candidate-test:unit\) с 11:52, 7 мин 50 с; обычно 5–12 мин\./);
+  assert.match(text(ru), /Проверки с 11:52, 7 мин 50 с; обычно 5–12 мин\./);
   assert.match(ru, /Дальше: ревью, интеграция\./);
   // The process timeline of the latest attempt: each stage with its state and time.
   const tl = text(ru.slice(ru.indexOf('data-testid="timeline"')));
@@ -510,7 +510,7 @@ test('who did what: harness lines as written, actor chips, times with «вчер
   // A work link per event with a work; none for the plan event.
   assert.match(
     a,
-    /<a class="hui-link" href="#\/work\/export-csv"><span class="hui-sr">открыть работу <\/span><code>export-csv<\/code><\/a>/,
+    /<a class="hui-link" href="#\/work\/export-csv"><span class="hui-sr">открыть работу <\/span>export-csv<\/a>/,
   );
   assert.equal((a.match(/href="#\/work\/[^"#]*"/g) ?? []).length, 15);
   assert.equal((a.match(/href="#\/work\/add-greeting#verification"/g) ?? []).length, 1);

@@ -588,14 +588,19 @@ const ru = {
   // First line of the Overview.
   story: {
     empty: 'Работ пока нет.',
-    allDone: (done: number, total: number) => `Все работы приняты: ${done} из ${total}.`,
+    allDone: (done: number, total: number, cancelled: number) =>
+      `Все работы приняты: ${done} из ${total}${cancelled ? `; отменено ${cancelled}` : ''}.`,
+    harnessDone: (done: number, outside: number) =>
+      `Все работы harness приняты (${done}); ещё ${rp(outside, 'задача не передана', 'задачи не переданы', 'задач не передано')} в harness — их передаёт ведущий.`,
+    onlyOutside: (outside: number) =>
+      `В harness пока нет работ; ${rp(outside, 'задача ждёт', 'задачи ждут', 'задач ждут')} передачи от ведущего.`,
     workAt: (name: string, stage: string) => `${name} (этап «${stage}»)`,
     running: (works: string[], more: number) =>
       `Сейчас harness работает над ${works.join(' и ')}${more ? ` и ещё ${rp(more, 'работой', 'работами', 'работами')}` : ''}.`,
     runningUnlisted: (n: number) =>
       `Сейчас harness работает над ${rp(n, 'работой', 'работами', 'работами')}.`,
     paused: 'Сейчас ничего не выполняется: очередь на паузе.',
-    waitsYou: 'Сейчас ничего не выполняется: работа ждёт вашего решения.',
+    waitsYou: 'Сейчас ничего не выполняется: работа ждёт вашего ответа или решения.',
     standing: 'Сейчас ничего не выполняется: harness не запущен.',
     waitsOthers: 'Сейчас ничего не выполняется: работы ждут своей очереди или ведущего.',
   },
@@ -610,7 +615,7 @@ const ru = {
       'очередь стоит: harness не запущен, и после ответа или сброса работа сама не продолжится',
     lastFailure: (attempt: number, plain: string) => `попытка ${attempt} остановилась: ${plain}`,
     stoppedNoReason: 'остановлена, причина не сообщена',
-    stalled: (n: number) => `${rp(n, 'попытка зависла', 'попытки зависли', 'попыток зависли')}`,
+    stalled: (n: number) => `${rp(n, 'попытка зависла', 'попытки зависли', 'попыток зависло')}`,
     environment: (n: number) => `сбоев окружения: ${n}`,
     budgetExceeded: (spent: string, scope: string) =>
       `бюджет превышен (${scope}): потрачено ${spent}`,
@@ -656,6 +661,7 @@ const ru = {
     nowCancelled: 'Отменена.',
     nowWaits: (reason: string) => `Сейчас: ${reason}.`,
     nowQueued: 'Сейчас: ждёт своей очереди.',
+    nowStage: (stage: string) => `Сейчас: этап «${stage}».`,
     attempts: (used: number, max: number, left: number) =>
       `Попытки: израсходовано ${used} из ${max}, осталось ${left}`,
     reviewRounds: (used: number, max: number | null) =>
@@ -693,6 +699,8 @@ const ru = {
       current: 'идёт сейчас',
       ahead: 'впереди',
       skipped: 'не дошло',
+      next: 'в следующей попытке',
+      'not-needed': 'не понадобилось',
       unknown: 'итог неизвестен',
     } as Labels,
     attempt: (n: number) => `Попытка ${n}`,
@@ -790,11 +798,14 @@ const ru = {
     queueStanding: 'Очередь стоит',
     queueDone: 'Всё принято',
     standingWhy: 'harness не запущен, и сама очередь не пойдёт',
-    standingWho: 'запустить заново (harness run) нужно ведущему',
+    standingWho: 'ведущему нужно снова запустить harness',
     scopeTitle: 'Весь объём работ',
     scopeCounts: (done: number, total: number, running: number, waiting: number) =>
       `Сделано ${done} из ${total} · в работе ${running} · ждут ${waiting}`,
     scopeOutside: (n: number) => `· ещё не переданы в harness: ${n}`,
+    scopeCancelled: (n: number) => `· отменено ${n}`,
+    etaNoTotals:
+      'Сколько осталось, пока сказать нельзя: эта версия harness не сообщает итоги окна истории (время попыток).',
     legendDone: 'приняты',
     legendRunning: 'в работе',
     legendWaiting: 'ждут',
@@ -805,7 +816,7 @@ const ru = {
     etaUnknown: (n: number) =>
       `Сколько осталось, пока сказать нельзя: нужно хотя бы ${rp(n, 'попытка', 'попытки', 'попыток')} за окно истории, чтобы знать их обычную длину.`,
     etaBasis: (avg: string, n: number) =>
-      `Оценка по фактическому времени: попытка в среднем длится ${avg} (по ${n} ${ruPlural(n, ['попытке', 'попыткам', 'попыткам'])} за окно истории).`,
+      `Оценка по фактическому времени: попытка в среднем длится ${avg} (по ${n} ${ruPlural(n, ['попытке', 'попыткам', 'попыткам'])}, начатым в окне истории).`,
     outsideTitle: (n: number) => `Ещё не переданы в harness (${n})`,
     outsideState: {
       'not-handed-over': 'не передана в harness',
@@ -1379,14 +1390,19 @@ const en: Dict = {
   },
   story: {
     empty: 'There are no work orders yet.',
-    allDone: (done: number, total: number) => `All work is accepted: ${done} of ${total}.`,
+    allDone: (done: number, total: number, cancelled: number) =>
+      `All work is accepted: ${done} of ${total}${cancelled ? `; ${cancelled} cancelled` : ''}.`,
+    harnessDone: (done: number, outside: number) =>
+      `All harness work is accepted (${done}); ${ep(outside, 'more task is', 'more tasks are')} not handed to the harness yet — the lead agent hands them over.`,
+    onlyOutside: (outside: number) =>
+      `The harness has no work orders yet; ${ep(outside, 'task waits', 'tasks wait')} to be handed over by the lead agent.`,
     workAt: (name: string, stage: string) => `${name} (stage “${stage}”)`,
     running: (works: string[], more: number) =>
       `The harness is working on ${works.join(' and ')}${more ? ` and ${ep(more, 'more work order', 'more work orders')}` : ''}.`,
     runningUnlisted: (n: number) =>
       `The harness is working on ${ep(n, 'work order', 'work orders')}.`,
     paused: 'Nothing runs now: the queue is paused.',
-    waitsYou: 'Nothing runs now: the work waits for your decision.',
+    waitsYou: 'Nothing runs now: the work waits for your answer or decision.',
     standing: 'Nothing runs now: the harness is not running.',
     waitsOthers: 'Nothing runs now: the work waits its turn or for the lead agent.',
   },
@@ -1430,7 +1446,7 @@ const en: Dict = {
     phase: {
       accepted: 'Accepted',
       cancelled: 'Cancelled',
-      running: 'In work',
+      running: 'In progress',
       question: 'Waits for an answer',
       stopped: 'Stopped',
       dependency: 'Waits for other work',
@@ -1443,6 +1459,7 @@ const en: Dict = {
     nowCancelled: 'Cancelled.',
     nowWaits: (reason: string) => `Now: ${reason}.`,
     nowQueued: 'Now: waits its turn.',
+    nowStage: (stage: string) => `Now: stage “${stage}”.`,
     attempts: (used: number, max: number, left: number) =>
       `Attempts: ${used} of ${max} used, ${left} left`,
     reviewRounds: (used: number, max: number | null) =>
@@ -1479,6 +1496,8 @@ const en: Dict = {
       current: 'running now',
       ahead: 'ahead',
       skipped: 'not reached',
+      next: 'in the next attempt',
+      'not-needed': 'not needed',
       unknown: 'outcome unknown',
     } as Labels,
     attempt: (n: number) => `Attempt ${n}`,
@@ -1571,16 +1590,19 @@ const en: Dict = {
     drift: 'Changed after acceptance',
     driftNotChecked: (n: number) => `${n} not checked`,
     warnings: 'Harness warnings',
-    queueStanding: 'Queue standing',
+    queueStanding: 'The queue has stopped',
     queueDone: 'All accepted',
     standingWhy: 'the harness is not running, and the queue will not move by itself',
-    standingWho: 'the lead agent has to start it again (harness run)',
+    standingWho: 'the lead agent has to start the harness again',
     scopeTitle: 'The whole scope',
     scopeCounts: (done: number, total: number, running: number, waiting: number) =>
-      `Done ${done} of ${total} · in work ${running} · waiting ${waiting}`,
+      `Done ${done} of ${total} · in progress ${running} · waiting ${waiting}`,
     scopeOutside: (n: number) => `· not handed to the harness yet: ${n}`,
+    scopeCancelled: (n: number) => `· cancelled ${n}`,
+    etaNoTotals:
+      'How long is left cannot be said yet: this harness version does not report the history window totals (attempt times).',
     legendDone: 'accepted work',
-    legendRunning: 'in work',
+    legendRunning: 'in progress',
     legendWaiting: 'waiting',
     legendOutside: 'not in the harness yet',
     etaNothingLeft: 'No work is left.',
@@ -1589,7 +1611,7 @@ const en: Dict = {
     etaUnknown: (n: number) =>
       `How long is left cannot be said yet: at least ${ep(n, 'attempt', 'attempts')} in the history window are needed to know their usual length.`,
     etaBasis: (avg: string, n: number) =>
-      `Estimated from real times: an attempt takes ${avg} on average (over ${ep(n, 'attempt', 'attempts')} in the history window).`,
+      `Estimated from real times: an attempt takes ${avg} on average (over ${ep(n, 'attempt', 'attempts')} started in the history window).`,
     outsideTitle: (n: number) => `Not handed to the harness yet (${n})`,
     outsideState: {
       'not-handed-over': 'not handed to the harness',
@@ -1599,8 +1621,8 @@ const en: Dict = {
     scopeMissing:
       'Only work orders already handed to the harness are shown: this harness version does not report the other tasks of the run.',
     howAskLead: 'How: ask the lead agent to reset the attempts (the command is under “details”).',
-    problems: (n: number) => (n ? `Problems on the way (${n})` : 'Problems on the way'),
-    noProblems: 'No problems on the way.',
+    problems: (n: number) => (n ? `Problems so far (${n})` : 'Problems so far'),
+    noProblems: 'No problems so far.',
     stageFor: (elapsed: string) => `for ${elapsed}`,
     command: 'command:',
   },
