@@ -147,6 +147,16 @@ export function Activity({
                     {actorLabel(t, e.actor)}
                   </span>{' '}
                   <span className="hui-plain">{e.plain}</span>{' '}
+                  {e.action === 'work.accepted' && e.workId ? (
+                    // §5.9: an acceptance names where it is and links to its checks,
+                    // even when the harness line was clipped before «локально».
+                    <span className="hui-muted" data-status="accepted">
+                      {v.accepted}{' '}
+                      <WorkRef id={e.workId} suffix="#verification" {...links}>
+                        {t.target.seeChecks}
+                      </WorkRef>
+                    </span>
+                  ) : null}{' '}
                   {e.workId ? (
                     <WorkRef id={e.workId} {...links}>
                       <span className="hui-sr">{v.openWork} </span>

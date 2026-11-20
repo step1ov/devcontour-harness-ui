@@ -65,6 +65,7 @@ function parts(ms: number, timeZone?: string): Record<string, string> | undefine
     const out: Record<string, string> = {};
     for (const p of new Intl.DateTimeFormat('en-GB', {
       year: 'numeric',
+      era: 'short',
       month: '2-digit',
       day: '2-digit',
       hour: '2-digit',
@@ -115,11 +116,15 @@ export function formatWhen(
   const at = parts(instantMs(iso), timeZone);
   if (!at) return undefined;
   const time = `${at.hour}:${at.minute}`;
-  const dated = `${at.day}.${at.month}.${at.year!.padStart(4, '0')} ${time}`;
+  // Intl gives the year of the era (year 0 is "1 BC"): back to the ISO year.
+  const isoYear = (p: Record<string, string>) =>
+    /^B/i.test(p.era ?? '') ? 1 - Number(p.year) : Number(p.year);
+  const y0 = isoYear(at);
+  const dated = `${at.day}.${at.month}.${y0 < 0 ? '-' : ''}${String(Math.abs(y0)).padStart(4, '0')} ${time}`;
   if (nowMs === undefined || !Number.isFinite(nowMs)) return dated;
   const today = parts(nowMs, timeZone);
   if (!today) return dated;
-  const day = (p: Record<string, string>) => [Number(p.year), Number(p.month), Number(p.day)];
+  const day = (p: Record<string, string>) => [isoYear(p), Number(p.month), Number(p.day)];
   const [ay, am, ad] = day(at);
   const [ty, tm, td] = day(today);
   if (ay === ty && am === tm && ad === td) return time;

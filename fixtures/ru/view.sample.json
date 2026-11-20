@@ -467,6 +467,13 @@
   },
   "activity": [
     {
+      "at": "2026-11-19T11:51:45.000Z",
+      "actor": "controller",
+      "action": "gate.reused",
+      "workId": "locale-format",
+      "plain": "проверка typecheck взята с кандидата: то же дерево, не запускалась (работа locale-format, попытка 2, интеграция)"
+    },
+    {
       "at": "2026-11-19T11:51:40.000Z",
       "actor": "controller",
       "action": "gate.passed",
@@ -502,6 +509,14 @@
       "workId": "locale-format",
       "subject": "q-12",
       "plain": "ведущий ответил на вопрос q-12 по работе locale-format (технический вопрос)"
+    },
+    {
+      "at": "2026-11-19T11:25:00.000Z",
+      "actor": "writer",
+      "action": "question.asked",
+      "workId": "locale-format",
+      "subject": "q-12",
+      "plain": "исполнитель задал вопрос q-12 по работе locale-format (важность 6)"
     },
     {
       "at": "2026-11-19T11:14:00.000Z",
@@ -552,6 +567,22 @@
       "action": "attempt.started",
       "workId": "add-greeting",
       "plain": "контроллер запустил попытку 1 работы add-greeting; пишет claude"
+    },
+    {
+      "at": "2026-11-19T09:20:00.000Z",
+      "actor": "operator",
+      "action": "question.answered",
+      "workId": "add-greeting",
+      "subject": "q-5",
+      "plain": "оператор ответил на вопрос q-5 по работе add-greeting"
+    },
+    {
+      "at": "2026-11-19T09:05:00.000Z",
+      "actor": "writer",
+      "action": "question.asked",
+      "workId": "add-greeting",
+      "subject": "q-5",
+      "plain": "исполнитель задал вопрос q-5 по работе add-greeting (важность 7)"
     },
     {
       "at": "2026-11-18T18:05:00.000Z",

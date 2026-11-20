@@ -125,7 +125,7 @@ test('who did what: filter by work, then open the work from an event', async ({ 
     .getByRole('link', { name: 'add-greeting' })
     .click();
   await expect(page).toHaveURL(/#\/activity\?work=add-greeting$/);
-  await expect(feed).toContainText('показано 6 из 13');
+  await expect(feed).toContainText('показано 8 из 17');
   await expect(feed).not.toContainText('locale-format; пишет');
   await feed.locator('ol a', { hasText: 'add-greeting' }).first().click();
   await expect(page).toHaveURL(/#\/work\/add-greeting$/);

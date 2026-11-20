@@ -756,6 +756,7 @@ const ru = {
     clipped: (n: number) =>
       `Ещё ${rp(n, 'событие', 'события', 'событий')} окна не показано: лента держит 50 последних.`,
     who: 'Кто есть кто',
+    accepted: 'где: принято локально; удалённая ветка — в деталях работы;',
     openWork: 'открыть работу',
   },
   // Settings.
@@ -1313,6 +1314,7 @@ const en: Dict = {
     clipped: (n: number) =>
       `${ep(n, 'more event', 'more events')} of the window not shown: the feed keeps the latest 50.`,
     who: 'Who is who',
+    accepted: 'where: accepted locally; the remote branch is in the work order detail;',
     openWork: 'open the work order',
   },
   settings: {

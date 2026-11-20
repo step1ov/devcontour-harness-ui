@@ -7,6 +7,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import type { ReactElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { asAlpha55 } from './legacy.ts';
 import {
   Activity,
   Decisions,
@@ -46,14 +47,6 @@ const ruView = (() => {
   return c.view;
 })();
 const ruAccepted = detailOf('../fixtures/ru/work.accepted.sample.json');
-/** The same document as harness alpha.55 sends it: revision 0, no revision 1 fields. */
-function asAlpha55<T extends OperatorView | WorkDetailView>(doc: T): T {
-  const d = structuredClone(doc) as T & { history?: OperatorView['history'] };
-  d.viewRevision = 0;
-  for (const q of d.questions) delete q.answerBasis;
-  if (d.history) delete d.history.totals;
-  return d;
-}
 const workHref = (id: string) => '#/work/' + id;
 const html = (el: ReactElement) => renderToStaticMarkup(el);
 const TZ = 'UTC';
@@ -508,7 +501,8 @@ test('who did what: harness lines as written, actor chips, times with «вчер
     a,
     /<a class="hui-link" href="#\/work\/export-csv"><span class="hui-sr">открыть работу <\/span><code>export-csv<\/code><\/a>/,
   );
-  assert.equal((a.match(/href="#\/work\//g) ?? []).length, 11);
+  assert.equal((a.match(/href="#\/work\/[^"#]*"/g) ?? []).length, 15);
+  assert.equal((a.match(/href="#\/work\/add-greeting#verification"/g) ?? []).length, 1);
   // Filters by work and by actor, and the glossary of the actors present.
   assert.match(a, /href="\{&quot;workId&quot;:&quot;add-greeting&quot;\}"/);
   assert.match(a, /href="\{&quot;actor&quot;:&quot;reviewer&quot;\}"/);
@@ -526,7 +520,7 @@ test('who did what: harness lines as written, actor chips, times with «вчер
       />,
     ),
   );
-  assert.match(byWork, /показано 6 из 13/);
+  assert.match(byWork, /показано 8 из 17/);
   assert.doesNotMatch(byWork, /locale-format; пишет/);
   // A filter that matches nothing is not "nothing happened".
   const none = text(
@@ -539,9 +533,9 @@ test('who did what: harness lines as written, actor chips, times with «вчер
   const byActor = html(
     <Activity view={ruView} lang="ru" filter={{ actor: 'controller' }} filterHref={() => '#'} />,
   );
-  assert.match(text(byActor), /показано 8 из 13/);
+  assert.match(text(byActor), /показано 9 из 17/);
   const chips = [...byActor.matchAll(/data-actor="([^"]+)"/g)].map((m) => m[1]);
-  assert.equal(chips.length, 8);
+  assert.equal(chips.length, 9);
   assert.deepEqual([...new Set(chips)], ['controller']);
   // English: the same screen in the English dictionary.
   const en = text(html(<Activity view={view} lang="en" timeZone={TZ} />));
@@ -587,6 +581,30 @@ test('who did what: [] is a quiet window, a missing feed is an older harness, cl
     html(<Activity view={{ ...view, truncated: { activity: 23 } }} lang="ru" />),
   );
   assert.match(clipped, /Ещё 23 события окна не показано: лента держит 50 последних\./);
+  // An acceptance clipped before «локально» still says where and links to its checks.
+  const accepted = html(
+    <Activity
+      view={{
+        ...view,
+        activity: [
+          {
+            at: '2026-11-19T11:14:00.000Z',
+            actor: 'controller',
+            action: 'work.accepted',
+            workId: 'w',
+            plain:
+              'w was accepted (attempt 1): 3b1f9e0c2a7d on refs/heads/' + 'x'.repeat(140) + '…',
+          },
+        ],
+      }}
+      lang="ru"
+      workHref={workHref}
+    />,
+  );
+  assert.match(
+    accepted,
+    /<span class="hui-muted" data-status="accepted">где: принято локально; удалённая ветка — в деталях работы; <a class="hui-link" href="#\/work\/w#verification">что проверено<\/a><\/span>/,
+  );
   // An unknown actor and an unknown event code are shown as is, not dropped.
   const future = text(
     html(
@@ -719,8 +737,8 @@ test('words with grounds (§5.9): every checked, accepted and blocked element sa
   };
   const by = { ru: /кем: \S|кем — неизвестно/, en: /by: \S|by whom — unknown/ };
   const where = {
-    ru: /в удалённом репозитории — (да|ещё нет|неизвестно)|где — неизвестно|в удалённой ветке|on the remote branch/,
-    en: /on the remote|not on the remote yet|remote state unknown|where is unknown/,
+    ru: /в удалённом репозитории — (да|ещё нет|неизвестно)|где — неизвестно|в удалённой ветке|принято локально; удалённая ветка — в деталях работы/,
+    en: /on the remote|not on the remote yet|remote state unknown|where is unknown|accepted locally; the remote branch is in the work order detail/,
   };
   const who = {
     ru: /действует: \S|никто — просто ждёт очереди|кто действует — неизвестно/,

@@ -44,6 +44,7 @@ import {
   type WorkView,
 } from '../src/model/index.ts';
 import { validate } from './contract/json-schema.ts';
+import { asAlpha55, asAlpha56 } from './legacy.ts';
 import { instantMs } from '../src/model/compat.ts';
 
 type Json = Record<string, any>;
@@ -62,33 +63,6 @@ const overviewSchema55 = read('./contract/harness-0.1.0-alpha.55/operator-view.s
 const detailSchema55 = read('./contract/harness-0.1.0-alpha.55/work-detail-view.schema.json');
 const harnessEmpty55 = read('./contract/harness-0.1.0-alpha.55/empty-state.view.json');
 
-/**
- * The same document as harness alpha.56 would send it: revision 1, no
- * activity feed, and a remote state that is always `unknown` with the reason
- * that version gives (it does not read the tracking ref).
- */
-function asAlpha56(doc: Json): Json {
-  const d = structuredClone(doc);
-  d.viewRevision = 1;
-  delete d.activity;
-  if (d.truncated) delete d.truncated.activity;
-  for (const w of [...(d.works ?? []), ...(d.work ? [d.work] : [])])
-    if (w.target)
-      w.target.remote = {
-        state: 'unknown',
-        reason: 'the remote-tracking ref is not read by this harness version',
-      };
-  return d;
-}
-
-/** The same document as harness alpha.55 would send it: revision 0, without the revision 1 and 2 fields. */
-function asAlpha55(doc: Json): Json {
-  const d = asAlpha56(doc);
-  d.viewRevision = 0;
-  for (const q of d.questions ?? []) delete q.answerBasis;
-  if (d.history) delete d.history.totals;
-  return d;
-}
 const fixtures = (): [string, Json, Json][] => [
   ['view.sample.json', viewFixture, overviewSchema],
   ['ru/view.sample.json', read('../fixtures/ru/view.sample.json'), overviewSchema],
@@ -155,6 +129,55 @@ test('the 57-shaped fixtures really carry the revision 2 fields (the alpha.56 sc
   assert.ok(targets >= 4, 'overview and accepted detail fixtures, both languages');
 });
 
+/**
+ * Whether the feed has the event of one verification row, as the harness
+ * writes it (`activityLine` in its projection): a gate row by the controller
+ * with the same verdict, gate, attempt and phase; a review row by the reviewer
+ * with the same verdict, runtime and, for a read row, "read the diff".
+ */
+function feedHasEvidence(
+  feed: ActivityEntry[],
+  workId: string,
+  r: VerificationRow,
+  lang: 'en' | 'ru',
+): boolean {
+  const ru = lang === 'ru';
+  const phase = r.phase
+    ? ru
+      ? { candidate: 'кандидат', integration: 'интеграция' }[r.phase]
+      : r.phase
+    : undefined;
+  const attempt =
+    r.attempt === undefined ? undefined : ru ? `попытка ${r.attempt}` : `attempt ${r.attempt}`;
+  return feed.some((e) => {
+    if (instantMs(e.at) !== instantMs(r.at!)) return false;
+    // A plan or contract review row names its subject; its event has no work or attempt.
+    const ofSubject = r.kind === 'review' && r.gate !== workId && e.subject === r.gate;
+    if (!ofSubject && e.workId !== workId) return false;
+    if (!ofSubject && attempt && !e.plain.includes(attempt)) return false;
+    if (r.kind === 'review') {
+      const action = r.result === 'passed' ? 'review.approved' : 'review.changes-requested';
+      const read = ru ? 'читал diff, ничего не запускал' : 'read the diff, ran nothing';
+      return (
+        e.actor === 'reviewer' &&
+        e.action === action &&
+        e.plain.startsWith(`reviewer ${r.by} `) &&
+        // The harness says what the reviewer did only for a review inside an attempt.
+        (ofSubject || r.how !== 'read' || e.plain.includes(read))
+      );
+    }
+    const action =
+      r.how === 'reused' ? 'gate.reused' : r.result === 'passed' ? 'gate.passed' : 'gate.failed';
+    const where = `${phase ? `, ${phase}` : ''})`;
+    return (
+      e.actor === 'controller' &&
+      e.action === action &&
+      new RegExp(`(проверк[уа]|check) ${r.gate}[: ]`).test(e.plain) &&
+      e.plain.includes(`${attempt}${where}`)
+    );
+  });
+}
+
 test('fixture activity follows the harness feed: newest first, its actors and event codes', () => {
   // The vocabulary harness alpha.57 emits (docs/release-notes/0.1.0-alpha.57.md);
   // the schema keeps both open strings, the panel shows an unknown one as is.
@@ -191,46 +214,114 @@ test('fixture activity follows the harness feed: newest first, its actors and ev
     }
   }
   // The feed agrees with the evidence the other documents record: every gate
-  // row that ran or was reused and every review verdict of the accepted work
-  // has its event at the same time, and every recorded answer too.
+  // row that ran or was reused and every review verdict has its event at the
+  // same time, with the same verdict, actor, attempt and phase; every
+  // question asked or answered in the window, of the overview and of the
+  // work details (closed works included), has its event.
   for (const [lang, overview, details] of [
-    ['en', viewFixture, [acceptedFixture]],
+    ['en', viewFixture, [workFixture, acceptedFixture]],
     [
       'ru',
       read('../fixtures/ru/view.sample.json'),
-      [read('../fixtures/ru/work.accepted.sample.json')],
+      [read('../fixtures/ru/work.sample.json'), read('../fixtures/ru/work.accepted.sample.json')],
     ],
   ] as const) {
     const feed = overview.activity as ActivityEntry[];
     for (const d of details)
       for (const r of d.verification as VerificationRow[]) {
         if (!r.at || r.how === 'not-checked') continue;
-        const want =
-          r.kind === 'review' ? 'review.approved' : r.how === 'reused' ? 'gate.reused' : 'gate.';
-        const hit = feed.find(
-          (e) =>
-            e.workId === d.work.id &&
-            instantMs(e.at) === instantMs(r.at!) &&
-            e.action.startsWith(want) &&
-            (r.kind === 'review' || e.plain.includes(` ${r.gate}`)),
+        assert.ok(
+          feedHasEvidence(feed, d.work.id, r, lang),
+          `${lang}: no matching event for ${r.kind} ${r.gate} at ${r.at}`,
         );
-        assert.ok(hit, `${lang}: no event for ${r.kind} ${r.gate} at ${r.at}`);
       }
-    for (const q of overview.questions as OperatorQuestion[]) {
-      if (!q.answerBasis) continue;
-      const hit = feed.find((e) => e.action === 'question.answered' && e.subject === q.requestId);
-      assert.ok(hit, `${lang}: no answer event for ${q.requestId}`);
-      assert.equal(instantMs(hit.at), instantMs(q.answerBasis.at), `${lang}: ${q.requestId}`);
-      assert.equal(hit.actor, q.answerBasis.by, `${lang}: who answered ${q.requestId}`);
+    const from = instantMs(overview.history.from);
+    const questions = [
+      ...(overview.questions as OperatorQuestion[]),
+      ...details.flatMap((d) => d.questions as OperatorQuestion[]),
+    ];
+    for (const q of questions) {
+      if (instantMs(q.createdAt) >= from)
+        assert.ok(
+          feed.some(
+            (e) =>
+              e.action === 'question.asked' &&
+              e.actor === 'writer' &&
+              e.subject === q.requestId &&
+              e.workId === q.workId &&
+              instantMs(e.at) === instantMs(q.createdAt),
+          ),
+          `${lang}: asked ${q.requestId}`,
+        );
+      const b = q.answerBasis;
+      if (b && instantMs(b.at) >= from)
+        assert.ok(
+          feed.some(
+            (e) =>
+              e.action === 'question.answered' &&
+              e.actor === b.by &&
+              e.subject === q.requestId &&
+              instantMs(e.at) === instantMs(b.at),
+          ),
+          `${lang}: answered ${q.requestId}`,
+        );
     }
-    const asked = feed.filter((e) => e.action === 'question.asked').map((e) => e.subject);
-    for (const q of overview.questions as OperatorQuestion[])
-      if (
-        instantMs(q.createdAt) >= instantMs(overview.history.from) &&
-        q.state === 'awaiting-answer'
-      )
-        assert.ok(asked.includes(q.requestId), `${lang}: asked ${q.requestId}`);
   }
+  // The matcher refuses a contradicting event: another verdict, actor, attempt or phase.
+  const row: VerificationRow = {
+    gate: 'unit',
+    kind: 'gate',
+    phase: 'candidate',
+    result: 'passed',
+    how: 'executed',
+    by: 'harness',
+    attempt: 1,
+    at: '2026-11-19T11:11:00.000Z',
+  };
+  const good: ActivityEntry = {
+    at: row.at!,
+    actor: 'controller',
+    action: 'gate.passed',
+    workId: 'w',
+    plain: 'the controller ran check unit: passed (w, attempt 1, candidate)',
+  };
+  assert.ok(feedHasEvidence([good], 'w', row, 'en'));
+  for (const bad of [
+    { ...good, action: 'gate.failed' },
+    { ...good, actor: 'operator' },
+    { ...good, plain: 'the controller ran check unit: passed (w, attempt 2, candidate)' },
+    { ...good, plain: 'the controller ran check unit: passed (w, attempt 1, integration)' },
+    { ...good, plain: 'the controller ran check unitx: passed (w, attempt 1, candidate)' },
+    { ...good, workId: 'v' },
+    { ...good, at: '2026-11-19T11:11:01.000Z' },
+  ])
+    assert.equal(feedHasEvidence([bad], 'w', row, 'en'), false, JSON.stringify(bad));
+  const review: VerificationRow = {
+    gate: 'w',
+    kind: 'review',
+    result: 'passed',
+    how: 'read',
+    by: 'codex',
+    attempt: 1,
+    at: row.at!,
+  };
+  const verdict: ActivityEntry = {
+    ...good,
+    actor: 'reviewer',
+    action: 'review.approved',
+    plain:
+      'reviewer codex approved the changes of w (attempt 1, candidate); read the diff, ran nothing',
+  };
+  assert.ok(feedHasEvidence([verdict], 'w', review, 'en'));
+  for (const bad of [
+    { ...verdict, action: 'review.changes-requested' },
+    { ...verdict, plain: verdict.plain.replace('codex', 'claude') },
+    {
+      ...verdict,
+      plain: verdict.plain.replace('; read the diff, ran nothing', '; ran commands: 2'),
+    },
+  ])
+    assert.equal(feedHasEvidence([bad], 'w', review, 'en'), false, JSON.stringify(bad));
   // Both languages describe the same events.
   const en = read('../fixtures/view.sample.json').activity as ActivityEntry[];
   const ru = read('../fixtures/ru/view.sample.json').activity as ActivityEntry[];

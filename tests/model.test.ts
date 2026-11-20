@@ -411,6 +411,16 @@ test('formatWhen: today, yesterday by the calendar (DST, midnight, early years),
     formatWhen('0099-11-10T18:05:00Z', 'ru', Z, at('0099-11-19T12:00:00Z')),
     '10.11.0099 18:05',
   );
+  // Year 0 is year 0 (Intl says "1 BC"), and its last day is yesterday for 0001-01-01.
+  assert.equal(formatWhen('0000-06-01T10:00:00Z', 'ru', Z), '01.06.0000 10:00');
+  assert.equal(
+    formatWhen('0000-12-31T10:00:00Z', 'ru', Z, at('0001-01-01T08:00:00Z')),
+    'вчера 10:00',
+  );
+  assert.equal(
+    formatWhen('0000-01-01T10:00:00Z', 'ru', Z, at('0001-01-01T12:00:00Z')),
+    '01.01.0000 10:00',
+  );
   // Not an instant: undefined, never a shifted date.
   assert.equal(formatWhen('2026-02-30T10:00:00Z', 'ru', Z, at('2026-03-02T12:00:00Z')), undefined);
   assert.equal(formatWhen('2026-11-19T10:00:00', 'ru', Z, at('2026-11-19T12:00:00Z')), undefined);
