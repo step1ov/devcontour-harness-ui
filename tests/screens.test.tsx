@@ -648,13 +648,13 @@ test('overview: plan strip, waiting with who acts, plain question lines (RU)', (
   const ru = html(<Overview view={view} lang="ru" timeZone={TZ} workHref={workHref} />);
   assert.match(
     ru,
-    /export-csv<\/code><\/a> <span class="hui-badge">Ждёт ответа<\/span><span class="hui-muted"> после add-greeting/,
+    /export-csv<\/strong><\/a> <span class="hui-badge">Ждёт ответа<\/span><span class="hui-muted"> после add-greeting/,
   );
   assert.match(ru, /Что изменится: Changes how the exported file opens/);
   assert.match(ru, /Ответить можете только вы\./);
   assert.match(
     ru,
-    /just waits for export-csv to be accepted; nothing is needed<\/span> — <span class="hui-who">никто — просто ждёт очереди, ничего не нужно/,
+    /docs-page<\/strong><\/a> ждёт <span><a [^>]*><strong>export-csv<\/strong><\/a> <span class="hui-who">\(по ней дальше действует: вы\)<\/span><\/span><div class="hui-muted">just waits for export-csv to be accepted; nothing is needed<\/div>/,
   );
   assert.match(ru, /обычно 5–12 мин/);
 });
@@ -743,8 +743,8 @@ test('words with grounds (§5.9): every checked, accepted and blocked element sa
     en: /on the remote|not on the remote yet|remote state unknown|where is unknown|accepted locally; the remote branch is in the work order detail/,
   };
   const who = {
-    ru: /действует: \S|никто — просто ждёт очереди|кто действует — неизвестно/,
-    en: /acts: \S|nobody — it just waits its turn|who acts is unknown/,
+    ru: /действует: \S|никто — просто ждёт очереди|никто — она сама ждёт другой работы|кто действует — неизвестно/,
+    en: /acts: \S|nobody — it just waits its turn|nobody — it waits for another work order itself|who acts is unknown/,
   };
   let counts = { checked: 0, accepted: 0, blocked: 0 };
   for (const { name, v, d } of variants())
@@ -815,16 +815,23 @@ test('no bare "checked / done / blocked" word, no form, no unknown shown as $0.0
 });
 
 test('review fixes: truncation, pause, plan statuses, counters, time budgets, unknown spend', () => {
+  // Nothing listed at all, and both lists are clipped: unknown, never "nothing".
   const clipped: OperatorView = {
     ...view,
+    works: view.works.map(({ blockers: _b, stage: { needs: _n, ...stage }, ...w }) => ({
+      ...w,
+      stage,
+      blockers: [],
+    })),
     questions: [],
     escalations: [],
+    progress: { ...view.progress, waitingOperator: 0 },
     truncated: { questions: 2, escalations: 1 },
   };
   const c = html(<Overview view={clipped} lang="ru" />);
-  assert.doesNotMatch(c, /Вопросов, которые ждут вас, нет/);
-  assert.doesNotMatch(c, /Решений от вас и ведущего сейчас не ждут/);
-  assert.equal(c.match(/неизвестно — список обрезан/g)?.length, 2); // both sections
+  assert.doesNotMatch(c, /Сейчас от вас ничего не нужно/);
+  assert.doesNotMatch(c, /Никто, кроме вас, сейчас ничего не должен сделать/);
+  assert.equal(c.match(/неизвестно — список обрезан/g)?.length, 3); // the header and both sections
   assert.match(c, /ещё 2 не показано/);
   const paused: OperatorView = {
     ...view,
@@ -1164,4 +1171,25 @@ test('usual stage time: an honest range only when the harness sent one', () => {
     text(html(<WorkDetail detail={running} lang="ru" />)),
     /обычное время этапа: что это значит/,
   );
+});
+
+test('work detail: failure groups of the attempts line in plain words', () => {
+  const d: WorkDetailView = {
+    ...running,
+    work: {
+      ...running.work,
+      attempts: {
+        ...running.work.attempts,
+        line: 'попыток 4; отказов 4 (incomplete 2, time-limit 1, mystery 1); осталось попыток 0 из 3',
+      },
+    },
+  };
+  const page = html(<WorkDetail detail={d} lang="ru" />);
+  const line = page.slice(page.indexOf('data-testid="attempts-line"'));
+  assert.match(
+    text(line.slice(0, line.indexOf('</p>'))),
+    /отказов 4 \(работа не доделана 2, время вышло 1, mystery 1\)/,
+  );
+  assert.match(line, /<code>mystery<\/code>/);
+  assert.doesNotMatch(text(line.slice(0, line.indexOf('</p>'))), /incomplete|time-limit/);
 });

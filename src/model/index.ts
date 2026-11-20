@@ -49,4 +49,20 @@ export {
   type HeaderCounts,
   type Lang,
 } from './i18n.ts';
-export { dict, dictionaries, label, type Dict, type GlossaryId } from './dict.ts';
+export { dict, dictionaries, knownLabel, label, type Dict, type GlossaryId } from './dict.ts';
+export {
+  DEPENDENCY_CODES,
+  LEAD_FIRST_CODES,
+  actorsOn,
+  attemptsLineParts,
+  nextSteps,
+  withWorkNames,
+  workName,
+  type AttemptsPart,
+  type DependencyWait,
+  type NextSteps,
+  type QueueWait,
+  type Step,
+  type StepActor,
+  type StepRecord,
+} from './steps.ts';

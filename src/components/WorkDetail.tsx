@@ -17,6 +17,7 @@ import {
 import type { DriftView, VerificationRow, WorkDetailView } from '../model/view.ts';
 import {
   AcceptedLine,
+  AttemptsText,
   AnswerBasisLine,
   BlockerLine,
   Heading,
@@ -220,7 +221,11 @@ export function WorkDetail({
         <Heading t={t} term="attempt">
           {w.attempts}
         </Heading>
-        {a.line ? <p className="hui-muted">{a.line}</p> : null}
+        {a.line ? (
+          <p className="hui-muted" data-testid="attempts-line">
+            <AttemptsText line={a.line} t={t} />
+          </p>
+        ) : null}
         <p data-testid="work-counters">
           {w.rechecks(a.rechecks)} {w.neutral(a.neutral.used, a.neutral.max)}
           {a.interrupted ? ' ' + w.interrupted(a.interrupted) : ''}

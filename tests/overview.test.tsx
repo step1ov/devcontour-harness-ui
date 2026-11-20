@@ -44,7 +44,25 @@ test('overview without questions and with a paused queue', () => {
   };
   const html = renderToStaticMarkup(<Overview lang="en" view={paused} />);
   assert.match(html, /Paused \(operator\)/);
-  assert.match(html, /No questions are waiting for you\./);
+  // export-csv still waits for an answer the view no longer lists: said, not hidden.
+  assert.match(html, /Waiting for your answer, but the question is not in this view: export-csv\./);
+  assert.doesNotMatch(html, /Nothing is needed from you now/);
+  const quiet = {
+    ...paused,
+    works: paused.works.filter((w) => w.id !== 'export-csv' && w.id !== 'docs-page'),
+  };
+  // The harness still counts one work waiting for you that no item names: said, never "nothing".
+  const counted = renderToStaticMarkup(<Overview lang="en" view={quiet} />);
+  assert.match(
+    counted,
+    /1 more work order waits for your action but is not in this view — run harness status\./,
+  );
+  assert.doesNotMatch(counted, /Nothing is needed from you now/);
+  const calm: OperatorView = { ...quiet, progress: { ...quiet.progress, waitingOperator: 0 } };
+  assert.match(
+    renderToStaticMarkup(<Overview lang="en" view={calm} />),
+    /Nothing is needed from you now\./,
+  );
 });
 
 test('the component renders no form or write control', () => {
@@ -58,7 +76,9 @@ test('questions in other states are not asked as needing an answer', () => {
     questions: view.questions.map((q) => ({ ...q, state: 'answered-not-applied' })),
   };
   const html = renderToStaticMarkup(<Overview lang="en" view={applied} />);
-  assert.match(html, /Needs your answer \(0\)/);
+  // No count of zero next to the heading, and the answered question is not «unlisted».
+  assert.match(html, />Needed from you<\/h3>/);
+  assert.doesNotMatch(html, /Needed from you \(0\)|data-testid="unlisted-answers"/);
   assert.match(html, /still has to apply the answer/);
 });
 
@@ -340,4 +360,121 @@ test('health warnings from the harness are listed with their code and message', 
     renderToStaticMarkup(<Overview lang="en" view={view} />),
     /data-testid="warnings"/,
   );
+});
+
+test('stopped run (RU): the header and «Нужно от вас» agree, each wait says whose turn it is', () => {
+  const v = check2('../fixtures/ru/view.stopped.json');
+  const html = renderToStaticMarkup(<Overview view={v} lang="ru" timeZone="UTC" />);
+  const section = (id: string) => {
+    const at = html.indexOf(`data-testid="${id}"`);
+    assert.ok(at > 0, id);
+    return html.slice(at, html.indexOf('<div class="hui-panel', at + 1));
+  };
+  assert.match(html, /Сейчас: остановлено 1\. От вас: принять 1 решение \(после ведущего\)\./);
+  // The count of the header is the number of items in the section.
+  const needs = section('needs-you');
+  assert.match(needs, />Нужно от вас \(1\)<\/h3>/);
+  assert.equal(needs.split('data-kind=').length - 1, 1);
+  assert.match(needs, /data-kind="decision"/);
+  assert.match(needs, /Сбросить попытки<\/strong> — <span><strong>WEB-1<\/strong><\/span>/);
+  assert.match(needs, /Почему: попытки исчерпаны \(3 из 3\) — нужен ваш сброс попыток/);
+  // Failure groups in words, never the bucket keys.
+  const attempts = needs
+    .slice(needs.indexOf('data-testid="decision-attempts"'))
+    .replace(/<[^>]+>/g, '');
+  assert.match(attempts, /отказов 4 \(работа не доделана 2, время вышло 1, нужен ответ 1\)/);
+  assert.doesNotMatch(attempts.slice(0, 200), /incomplete|time-limit|input 1/);
+  // The order: the lead first, then you.
+  assert.match(
+    needs,
+    /Сначала ведущий: политика изменилась после согласования — нужно согласовать план заново\. Потом — вы:/,
+  );
+  assert.match(needs, /harness retry --state &lt;state&gt; --work tw1a2b3c4d5e6f7a8b9c0 --reset/);
+  // Codes are in the «подробности» disclosure, not in the sentence.
+  assert.match(
+    needs,
+    /<details class="hui-term" data-testid="step-details"><summary>подробности<\/summary>[\s\S]*ATTEMPTS_EXHAUSTED/,
+  );
+
+  const others = section('decisions');
+  assert.match(others, />Остальные ожидания \(2\)<\/h3>/);
+  assert.match(others, /Ваши решения и вопросы \(1\) — в разделе «Нужно от вас» выше\./);
+  assert.match(others, /Делает ведущий \(1\)/);
+  assert.match(
+    others,
+    /Политика изменилась после согласования — нужно согласовать план заново<\/strong> — <span><strong>WEB-1<\/strong><\/span><span>, <strong>WEB-2<\/strong><\/span>/,
+  );
+  assert.match(others, /Ждут другой работы \(1\)/);
+  assert.match(
+    others.replace(/<[^>]+>/g, ''),
+    /WEB-2 ждёт WEB-1 \(по ней дальше действует: ведущий, затем вы\)ждёт зависимости WEB-1 — она остановлена, дальше: сбросить попытки/,
+  );
+  // The answered question is not asked again and not counted.
+  const answered = section('other-questions');
+  assert.match(answered, /Ответ применён; ждёт начала следующей попытки\./);
+  // The old contradictory headings are gone.
+  assert.doesNotMatch(html, /Нужен ваш ответ|Ждут решения|\(0\)/);
+});
+
+test('stopped run (EN): the same agreement in English', () => {
+  const v = check2('../fixtures/view.stopped.json');
+  const html = renderToStaticMarkup(<Overview view={v} lang="en" timeZone="UTC" />);
+  const text = html.replace(/<details[\s\S]*?<\/details>/g, '').replace(/<[^>]+>/g, '');
+  assert.match(text, /Now: 1 stopped\. From you: take 1 decision \(after the lead agent\)\./);
+  assert.match(text, /Needed from you \(1\)/);
+  assert.match(text, /Reset the attempts — WEB-1/);
+  assert.match(
+    text,
+    /failures 4 \(the work was not finished 2, out of time 1, an answer is needed 1\)/,
+  );
+  assert.match(text, /First the lead agent: the policy changed after the approval/);
+  assert.match(text, /The lead agent acts \(1\)/);
+  assert.match(text, /WEB-2 waits for WEB-1 \(on that one, acts: lead agent, then you\)/);
+  assert.doesNotMatch(text, /\(0\)/);
+});
+
+test('an unknown failure group stays its key, in a code tag; running works too', () => {
+  const v = check2('../fixtures/ru/view.stopped.json');
+  const w0 = v.works[0]!;
+  const line = 'попыток 3; отказов 2 (defect 1, brand-new 1); осталось попыток 1 из 3';
+  const odd: OperatorView = {
+    ...v,
+    works: [{ ...w0, attempts: { ...w0.attempts, line } }, v.works[1]!],
+  };
+  const html = renderToStaticMarkup(<Overview view={odd} lang="ru" />);
+  const at = html.indexOf('data-testid="decision-attempts"');
+  const row = html.slice(at, html.indexOf('</div>', at));
+  assert.match(row, /<span data-bucket="defect">ошибка в коде/);
+  assert.match(row, /<span data-bucket="brand-new"><code>brand-new<\/code>/);
+  // A running work shows its line the same way.
+  const running: OperatorView = {
+    ...odd,
+    works: [{ ...odd.works[0]!, stage: { name: 'writer', next: [] }, blockers: [] }, odd.works[1]!],
+    escalations: [],
+  };
+  const now = renderToStaticMarkup(<Overview view={running} lang="ru" />);
+  const part = now.slice(now.indexOf('data-testid="now"'), now.indexOf('data-testid="decisions"'));
+  assert.match(part, /<span data-bucket="defect">ошибка в коде/);
+  assert.doesNotMatch(part.replace(/<[^>]+>/g, ''), /defect 1/);
+});
+
+test('an unknown question state is never "nothing is needed" in the section either', () => {
+  const odd: OperatorView = {
+    ...view,
+    questions: [{ ...view.questions[0]!, state: 'awaiting-something-new' }],
+    works: view.works.filter((w) => w.id !== 'export-csv' && w.id !== 'docs-page'),
+    progress: { ...view.progress, waitingOperator: 0 },
+  };
+  for (const [lang, re] of [
+    ['ru', /Неизвестно: у вопроса состояние, которого панель не знает/],
+    ['en', /Unknown: a question is in a state this panel does not know/],
+  ] as const) {
+    const html = renderToStaticMarkup(<Overview view={odd} lang={lang} />);
+    const needs = html.slice(
+      html.indexOf('data-testid="needs-you"'),
+      html.indexOf('data-testid="now"'),
+    );
+    assert.match(needs, re);
+    assert.doesNotMatch(needs, /ничего не нужно|Nothing is needed/);
+  }
 });

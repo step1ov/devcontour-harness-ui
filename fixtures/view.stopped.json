@@ -1,0 +1,389 @@
+{
+  "viewVersion": 1,
+  "viewRevision": 2,
+  "generatedAt": "2026-11-20T09:24:39.569Z",
+  "source": {
+    "producer": "devcontour-harness",
+    "producerVersion": "0.1.0-alpha.58",
+    "stateVersion": 1,
+    "token": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+  },
+  "settings": {
+    "policyDigest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "approvalMode": "agent",
+    "mode": "live",
+    "concurrency": 1,
+    "roles": [
+      {
+        "role": "developer",
+        "writer": {
+          "runtime": "codex"
+        }
+      }
+    ],
+    "reviews": [
+      {
+        "kind": "code",
+        "scope": "global",
+        "reviewer": {
+          "runtime": "codex"
+        },
+        "alternates": [],
+        "vendor": "same-vendor-allowed"
+      },
+      {
+        "kind": "plan",
+        "scope": "global",
+        "reviewer": {
+          "runtime": "codex"
+        },
+        "alternates": [],
+        "vendor": "same-vendor-allowed"
+      },
+      {
+        "kind": "contract",
+        "scope": "global",
+        "reviewer": {
+          "runtime": "codex"
+        },
+        "alternates": [],
+        "vendor": "same-vendor-allowed"
+      }
+    ],
+    "thresholds": {
+      "inputSeverity": 7,
+      "leadAnswersTechnical": true,
+      "criticalPaths": 0,
+      "maxAttempts": 3,
+      "repairBudget": 6,
+      "maxNeutralFailures": 3,
+      "reviewRoundCap": 6,
+      "reviewEscalationRounds": 3
+    },
+    "budgets": [],
+    "timeouts": {
+      "runTimeoutMs": 7500000,
+      "leaseMs": 30000,
+      "gateTimeoutFloorMs": 240000,
+      "stall": {
+        "intervalMs": 30000,
+        "quietMs": 180000,
+        "stalledMs": 600000,
+        "action": "report"
+      }
+    },
+    "lean": {
+      "state": "on"
+    },
+    "defaulted": [
+      "approvalMode",
+      "mode",
+      "thresholds.maxAttempts",
+      "thresholds.repairBudget",
+      "timeouts.leaseMs",
+      "timeouts.stall"
+    ]
+  },
+  "works": [
+    {
+      "id": "tw1a2b3c4d5e6f7a8b9c0",
+      "graphId": "gp1a2b3c4d5e6f7a8b9c0",
+      "title": "WEB-1: Catalogue page",
+      "status": "failed",
+      "stage": {
+        "name": "stopped",
+        "since": "2026-11-20T09:20:24.198Z",
+        "next": ["writer", "gates", "review", "integration"],
+        "needs": {
+          "actor": "operator",
+          "action": "reset-attempts"
+        }
+      },
+      "attempts": {
+        "used": 3,
+        "max": 3,
+        "left": 0,
+        "failed": 4,
+        "interrupted": 0,
+        "rechecks": 0,
+        "neutral": {
+          "used": 0,
+          "max": 3
+        },
+        "line": "attempts 4; failures 4 (incomplete 2, time-limit 1, input 1); time limit 1; interrupted by shutdown 0; accepted 0; attempts left 0 of 3, group repairs left 6 of 6",
+        "lastFailure": {
+          "attempt": 3,
+          "bucket": "time-limit",
+          "plain": "time — the time limit was exceeded",
+          "at": "2026-11-20T09:20:24.198Z"
+        }
+      },
+      "blockers": [
+        {
+          "code": "APPROVAL_STALE",
+          "plain": "the policy changed after the approval — the plan has to be approved again",
+          "actor": "lead"
+        },
+        {
+          "code": "ATTEMPTS_EXHAUSTED",
+          "plain": "attempts used up (3 of 3) — your reset of the attempts is needed",
+          "actor": "operator"
+        }
+      ],
+      "question": {
+        "requestId": "IR-0000000000000000000000a1",
+        "state": "applied-awaiting-claim",
+        "severity": 7
+      },
+      "spend": {
+        "calls": 3,
+        "usd": {
+          "value": 0,
+          "bound": "unknown"
+        },
+        "durationMs": 207258
+      }
+    },
+    {
+      "id": "tw2a2b3c4d5e6f7a8b9c0",
+      "graphId": "gp1a2b3c4d5e6f7a8b9c0",
+      "title": "WEB-2: Order form",
+      "status": "ready",
+      "stage": {
+        "name": "blocked",
+        "next": ["writer", "gates", "review", "integration"],
+        "needs": {
+          "actor": "lead",
+          "action": "diagnose-failure"
+        }
+      },
+      "attempts": {
+        "used": 0,
+        "max": 3,
+        "left": 3,
+        "failed": 0,
+        "interrupted": 0,
+        "rechecks": 0,
+        "neutral": {
+          "used": 0,
+          "max": 3
+        },
+        "line": "attempts 0; failures 0; time limit 0; interrupted by shutdown 0; accepted 0; attempts left 3 of 3, group repairs left 6 of 6"
+      },
+      "blockers": [
+        {
+          "code": "APPROVAL_STALE",
+          "plain": "the policy changed after the approval — the plan has to be approved again",
+          "actor": "lead"
+        },
+        {
+          "code": "NOT_READY",
+          "plain": "waits for the dependency tw1a2b3c4d5e6f7a8b9c0 — it is stopped, next: reset the attempts",
+          "actor": "operator"
+        }
+      ],
+      "dependsOn": ["tw1a2b3c4d5e6f7a8b9c0"],
+      "spend": {
+        "calls": 0,
+        "usd": {
+          "value": 0,
+          "bound": "exact"
+        },
+        "durationMs": 0
+      }
+    }
+  ],
+  "reviews": [
+    {
+      "kind": "plan",
+      "subject": "gp1a2b3c4d5e6f7a8b9c0",
+      "approved": true,
+      "rounds": {
+        "used": 2,
+        "max": 6
+      },
+      "open": {
+        "blocking": 0,
+        "notes": 0
+      },
+      "accepted": 0,
+      "reviewer": {
+        "runtime": "codex"
+      },
+      "sameVendor": true,
+      "spend": {
+        "calls": 2,
+        "usd": {
+          "value": 0,
+          "bound": "unknown"
+        }
+      },
+      "findings": [
+        {
+          "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "severity": "note",
+          "status": "closed",
+          "rounds": 1,
+          "title": "Say where the check report is kept."
+        }
+      ],
+      "line": "plan gp1a2b3c4d5e6f7a8b9c0: approved, open notes 0; rounds 2/6; review $0.00 + calls without a price 2"
+    }
+  ],
+  "questions": [
+    {
+      "requestId": "IR-0000000000000000000000a1",
+      "workId": "tw1a2b3c4d5e6f7a8b9c0",
+      "state": "applied-awaiting-claim",
+      "version": 3,
+      "severity": 7,
+      "answerableBy": "operator-or-lead",
+      "impact": "technical",
+      "plain": "Nothing changes for the site visitors.",
+      "answeredBy": "lead",
+      "answerBasis": {
+        "by": "lead",
+        "rule": "technical",
+        "reason": "A technical question: preparing the environment does not change the result.",
+        "impact": "technical",
+        "at": "2026-11-20T09:01:24.148Z",
+        "line": "answered by the lead (technical question): preparing the environment does not change the result."
+      },
+      "title": "How to restore the missing files for WEB-1?",
+      "createdAt": "2026-11-20T08:54:48.614Z"
+    }
+  ],
+  "escalations": [
+    {
+      "workId": "tw1a2b3c4d5e6f7a8b9c0",
+      "code": "ATTEMPTS_EXHAUSTED",
+      "actor": "operator",
+      "action": "reset-attempts",
+      "since": "2026-11-20T09:20:24.198Z"
+    },
+    {
+      "workId": "tw2a2b3c4d5e6f7a8b9c0",
+      "code": "NOT_READY",
+      "actor": "lead",
+      "action": "diagnose-failure",
+      "since": "2026-11-20T08:33:37.541Z"
+    }
+  ],
+  "drift": [],
+  "progress": {
+    "total": 2,
+    "byStage": {
+      "blocked": 1,
+      "stopped": 1
+    },
+    "running": 0,
+    "done": 0,
+    "waitingOperator": 1,
+    "queue": {
+      "paused": false
+    }
+  },
+  "history": {
+    "from": "2026-11-19T09:24:39.569Z",
+    "to": "2026-11-20T09:24:39.569Z",
+    "bucketMs": 900000,
+    "load": [
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+      1, 1, 1
+    ],
+    "attemptsStarted": [
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+      2, 0, 1
+    ],
+    "attemptsFailed": [
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      2, 1, 1
+    ],
+    "gatesPassed": [
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0
+    ],
+    "gatesFailed": [
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0
+    ],
+    "gatesReused": [
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0
+    ],
+    "spendUsd": [
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0
+    ],
+    "spendBound": "lower",
+    "spendOpeningUsd": {
+      "value": 0,
+      "bound": "exact"
+    },
+    "totals": {
+      "attemptsStarted": 4,
+      "attemptsFailed": 4,
+      "failuresByBucket": {
+        "incomplete": 2,
+        "input": 1,
+        "time-limit": 1
+      },
+      "gatesPassed": 0,
+      "gatesFailed": 0,
+      "gatesReused": 0,
+      "reviewRounds": {
+        "plan": 2,
+        "contract": 0,
+        "code": 0,
+        "attempt": 0
+      },
+      "spendUsd": {
+        "value": 0,
+        "bound": "unknown"
+      },
+      "wallMs": 1518108,
+      "attemptMs": 1518108,
+      "loadPeak": 1
+    }
+  },
+  "health": {
+    "controller": {
+      "present": false
+    },
+    "stalledAttempts": 0,
+    "quietAttempts": 0,
+    "environmentFailures": 0,
+    "budgeting": "off",
+    "budgets": [],
+    "spentTotalUsd": {
+      "value": 0,
+      "bound": "unknown"
+    },
+    "drift": {
+      "checked": 0,
+      "drifted": 0,
+      "unavailable": 0
+    },
+    "warnings": [
+      {
+        "code": "POLICY_DIGEST_MISMATCH",
+        "message": "the --policy differs from the one bound to the state: the view is built from --policy"
+      }
+    ]
+  },
+  "activity": []
+}
