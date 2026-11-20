@@ -90,18 +90,18 @@ test('a work link opens the detail, and "what was checked" lands on the rows', a
   await expect(page.locator('#verification')).toBeInViewport();
 });
 
-// The demo feed: 19.11 14:51 (newest) … 18.11 21:05 (oldest); the remote copy
+// The demo feed: 19.11 14:41 (the second attempt start) … 18.11 21:05 (oldest); the remote copy
 // was updated on 18.11 at 20:30 (Moscow time, playwright.config).
 const days: [string, string, string[], string[]][] = [
   ['the day of the oldest event', '2026-11-18T19:00:00Z', ['21:05'], ['20:30']],
-  ['the day of the data', '2026-11-19T12:05:00Z', ['14:51', 'вчера 21:05'], ['вчера 20:30']],
+  ['the day of the data', '2026-11-19T12:05:00Z', ['14:41', 'вчера 21:05'], ['вчера 20:30']],
   [
     'the day after',
     '2026-11-20T12:05:00Z',
-    ['вчера 14:51', '18.11.2026 21:05'],
+    ['вчера 14:41', '18.11.2026 21:05'],
     ['18.11.2026 20:30'],
   ],
-  ['two days after', '2026-11-21T12:05:00Z', ['19.11.2026 14:51'], ['18.11.2026 20:30']],
+  ['two days after', '2026-11-21T12:05:00Z', ['19.11.2026 14:41'], ['18.11.2026 20:30']],
 ];
 for (const [when, now, feed, remote] of days)
   test(`times by the viewer's clock on ${when}: today bare, «вчера», then the date`, async ({

@@ -8,12 +8,15 @@ import { mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Readable } from 'node:stream';
+import { asAlpha56 } from '../tests/legacy.ts';
 import { fakeHarness, runsIn } from '../tests/fake-harness.ts';
 
 const sample = JSON.parse(readFileSync('fixtures/ru/view.sample.json', 'utf8'));
+/** The same view as harness alpha.56 sends it (revision 1, no feed). */
+const sample56 = asAlpha56(sample);
 
-function writeView(file: string, token: string, title: string) {
-  const v = structuredClone(sample);
+function writeView(file: string, token: string, title: string, base = sample) {
+  const v = structuredClone(base);
   v.source.token = token;
   v.generatedAt = new Date().toISOString();
   v.questions[0].title = title;
@@ -125,8 +128,8 @@ test('live route on harness alpha.56: the page follows the harness content token
   const s = scratch();
   const viewFile = join(s.dir, 'view.json');
   const countFile = join(s.dir, 'runs');
-  expect(sample.viewRevision).toBe(1);
-  writeView(viewFile, 'tok-a', 'Вопрос с токеном');
+  expect(sample56.viewRevision).toBe(1);
+  writeView(viewFile, 'tok-a', 'Вопрос с токеном', sample56);
   const fake = fakeHarness({ view: true, lang: true, viewFile, countFile });
   const cli = await startCli(['--state', join(s.dir, 'state'), '--harness', fake.bin]);
   try {
@@ -135,13 +138,13 @@ test('live route on harness alpha.56: the page follows the harness content token
     // Probe: a rerun with the same token but another title. The token says
     // "same content" (alpha.56 contract), so the page must not reload — with
     // the local digest of alpha.55 the new title would show up.
-    writeView(viewFile, 'tok-a', 'Подмена без нового токена');
+    writeView(viewFile, 'tok-a', 'Подмена без нового токена', sample56);
     const runs = runsIn(countFile).length;
     await expect.poll(() => runsIn(countFile).length, { timeout: 10_000 }).toBeGreaterThan(runs);
     await page.waitForTimeout(500);
     await expect(page.locator('main')).toContainText('Вопрос с токеном');
     // The harness token changes with the content: the page loads it.
-    writeView(viewFile, 'tok-b', 'Новый вопрос с токеном');
+    writeView(viewFile, 'tok-b', 'Новый вопрос с токеном', sample56);
     await expect(page.locator('main')).toContainText('Новый вопрос с токеном', { timeout: 20_000 });
   } finally {
     await cli.stop();
