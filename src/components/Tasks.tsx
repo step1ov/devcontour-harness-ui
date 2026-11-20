@@ -1,0 +1,294 @@
+// Tasks screen (design §5.3, replaces «Ревью»): one card per work — what is
+// happening now, attempts used and left, review rounds, who acts next and
+// the questions of that task with their full text. A card opens the work's
+// process (WorkDetail). Reviews without a work (plan, contract) follow the
+// cards. Pure render of an `OperatorView`; no fetching, no writes.
+
+import { instantMs } from '../model/compat.ts';
+import { dict, knownLabel, label, type Dict, type Lang } from '../model/dict.ts';
+import { formatElapsed, questionStatus, stageLabel } from '../model/format.ts';
+import { attemptAverage, outsideHarness, scopeOf } from '../model/scope.ts';
+import { nextSteps, workName, withWorkNames } from '../model/steps.ts';
+import { leadAnswers, taskCards, type TaskCard as Card_, type TaskPhase } from '../model/tasks.ts';
+import type { OperatorView } from '../model/view.ts';
+import {
+  AcceptedLine,
+  AnswerBasisLine,
+  AttemptsText,
+  Block,
+  Codes,
+  WorkEta,
+  WorkRef,
+  actorLabel,
+  type ScreenProps,
+} from './common.tsx';
+import { ReviewSubjectCard } from './Reviews.tsx';
+import { Badge, type Tone } from './ui/badge.tsx';
+import { Card, CardContent, CardHeader, CardTitle } from './ui/card.tsx';
+import { Progress } from './ui/progress.tsx';
+
+export interface TasksProps extends ScreenProps {
+  view: OperatorView;
+}
+
+const tones: Record<TaskPhase, Tone> = {
+  accepted: 'ok',
+  cancelled: 'neutral',
+  running: 'info',
+  question: 'warn',
+  stopped: 'warn',
+  dependency: 'outline',
+  queued: 'outline',
+  other: 'outline',
+};
+
+export function Tasks({ view, lang = 'ru', now, onOpenWork, workHref, timeZone }: TasksProps) {
+  const t = dict(lang);
+  const k = t.tasks;
+  const links = { onOpenWork, workHref };
+  const clock = now ?? instantMs(view.generatedAt);
+  const steps = nextSteps(view);
+  const cards = taskCards(view, steps);
+  const scope = scopeOf(view);
+  const outside = outsideHarness(scope);
+  const other = view.reviews.filter((r) => r.workId === undefined);
+  return (
+    <section
+      className="hui hui-tasks hui:grid hui:gap-4 hui:bg-transparent"
+      aria-labelledby="hui-tasks-title"
+      lang={lang}
+    >
+      <header className="hui:grid hui:gap-1">
+        <h2 className="hui-title" id="hui-tasks-title">
+          {k.title}
+        </h2>
+        <p className="hui-muted">{k.intro}</p>
+      </header>
+      {cards.length === 0 ? <p className="hui-muted">{k.empty}</p> : null}
+      <ul className="hui:grid hui:list-none hui:gap-4 hui:lg:grid-cols-2" data-testid="task-cards">
+        {cards.map((c) => (
+          <TaskCardView
+            key={c.work.id}
+            c={c}
+            view={view}
+            t={t}
+            lang={lang}
+            clock={clock}
+            links={links}
+            timeZone={timeZone}
+          />
+        ))}
+      </ul>
+      {view.truncated?.works ? <p className="hui-muted">{t.overview.planClipped}</p> : null}
+      {scope ? (
+        outside.length ? (
+          <Block t={t} title={k.outside(outside.length)} testid="tasks-outside">
+            <ul className="hui:grid hui:list-none hui:gap-2">
+              {outside.map((task) => (
+                <li
+                  key={task.id}
+                  className="hui:flex hui:flex-wrap hui:items-center hui:gap-2"
+                  data-testid="outside-task"
+                >
+                  <strong>{task.title ?? task.id}</strong>
+                  <Badge tone="outline">{label(t.overview.outsideState, task.state)}</Badge>
+                  {task.plain ? <span className="hui-muted">{task.plain}</span> : null}
+                </li>
+              ))}
+            </ul>
+          </Block>
+        ) : null
+      ) : (
+        <p className="hui:text-xs hui:text-muted-foreground" data-testid="scope-missing">
+          {t.overview.scopeMissing}
+        </p>
+      )}
+      {other.length ? (
+        <Block t={t} title={k.otherReviews(other.length)} testid="other-reviews" term="review">
+          {other.map((r) => (
+            <ReviewSubjectCard
+              key={r.kind + ':' + r.subject}
+              r={r}
+              lang={lang}
+              links={links}
+              collapsed
+            />
+          ))}
+        </Block>
+      ) : null}
+    </section>
+  );
+}
+
+function TaskCardView({
+  c,
+  view,
+  t,
+  lang,
+  clock,
+  links,
+  timeZone,
+}: {
+  c: Card_;
+  view: OperatorView;
+  t: Dict;
+  lang: Lang;
+  clock: number;
+  links: Pick<ScreenProps, 'onOpenWork' | 'workHref'>;
+  timeZone: string | undefined;
+}) {
+  const k = t.tasks;
+  const w = c.work;
+  const name = workName(view, w.id);
+  const a = w.attempts;
+  const code = c.reviews.filter((r) => r.kind === 'code');
+  const rounds = code.reduce((n, r) => n + r.rounds.used, 0);
+  const cap = code.length === 1 ? code[0]!.rounds.max : null;
+  const firstBlocker = w.blockers.find((b) => b.actor !== null) ?? w.blockers[0];
+  const nowText =
+    c.phase === 'accepted'
+      ? k.nowAccepted
+      : c.phase === 'cancelled'
+        ? k.nowCancelled
+        : c.phase === 'running'
+          ? k.nowRunning(
+              stageLabel(w.stage.name, lang),
+              w.stage.since ? formatElapsed(w.stage.since, clock, lang) : '',
+            )
+          : firstBlocker?.plain?.trim()
+            ? k.nowWaits(withWorkNames(view, firstBlocker.plain))
+            : c.phase === 'queued'
+              ? k.nowQueued
+              : k.nowWaits(stageLabel(w.stage.name, lang).toLowerCase());
+  const next =
+    c.next.kind === 'nobody'
+      ? k.next.nobody
+      : c.next.kind === 'harness'
+        ? k.next.harness(stageLabel(c.next.stage, lang))
+        : c.next.kind === 'actors'
+          ? k.next.actors(c.next.actors.map((x) => actorLabel(t, x)).join(t.overview.then))
+          : c.next.kind === 'dependency'
+            ? k.next.dependency(c.next.on.map((id) => workName(view, id)).join(', '))
+            : c.next.kind === 'queue'
+              ? k.next.queue
+              : k.next.unknown;
+  const titleText = w.title && w.title !== name ? w.title : undefined;
+  return (
+    <Card as="li" data-testid={`task-${w.id}`} className="hui-task">
+      <CardHeader>
+        <CardTitle>
+          <WorkRef id={w.id} {...links}>
+            {titleText ?? name}
+          </WorkRef>
+        </CardTitle>
+        <Badge tone={tones[c.phase]} data-testid="task-phase">
+          {label(k.phase, c.phase)}
+        </Badge>
+      </CardHeader>
+      <CardContent className="hui:gap-2 hui:text-sm">
+        <p data-testid="task-now" data-status={c.phase === 'accepted' ? 'accepted' : undefined}>
+          {nowText}
+        </p>
+        {c.waitsOn.length ? (
+          <p data-testid="task-waits">
+            {k.waitsOn(c.waitsOn.map((id) => workName(view, id)).join(', '))}
+          </p>
+        ) : null}
+        <WorkEta w={w} t={t} lang={lang} clock={clock} average={attemptAverage(view)} />
+        {c.phase === 'accepted' ? (
+          <AcceptedLine w={w} lang={lang} linkProps={links} timeZone={timeZone} now={clock} />
+        ) : null}
+        <div className="hui:grid hui:gap-1" data-testid="task-attempts">
+          <span>{k.attempts(a.used, a.max, a.left)}</span>
+          <Progress
+            value={Math.min(a.used, a.max)}
+            max={a.max}
+            label={k.attempts(a.used, a.max, a.left)}
+            className="hui:h-1.5"
+          />
+          {a.line ? (
+            <span className="hui-muted">
+              <AttemptsText line={a.line} t={t} />
+            </span>
+          ) : null}
+          {a.lastFailure && c.phase !== 'accepted' ? (
+            <span className="hui-muted">
+              {t.problems.lastFailure(
+                a.lastFailure.attempt,
+                withWorkNames(view, a.lastFailure.plain),
+              )}
+            </span>
+          ) : null}
+        </div>
+        <p data-testid="task-reviews">
+          {code.length ? k.reviewRounds(rounds, cap) : k.noReview}
+          {code.some((r) => r.open.blocking) ? (
+            <span className="hui-muted">
+              {' · '}
+              {t.reviews.open(
+                code.reduce((n, r) => n + r.open.blocking, 0),
+                code.reduce((n, r) => n + r.open.notes, 0),
+              )}
+            </span>
+          ) : null}
+        </p>
+        <p className="hui:font-medium" data-testid="task-next" data-status="blocked">
+          <span className="hui-who">{next}</span>
+        </p>
+        {c.questions.length ? (
+          <div data-testid="task-questions">
+            <h4 className="hui:text-sm hui:font-semibold">{k.questions(c.questions.length)}</h4>
+            <ul className="hui:mt-1 hui:grid hui:list-none hui:gap-2">
+              {c.questions.map((q) => {
+                const asking = questionStatus(q).needsAnswer;
+                return (
+                  <li
+                    key={q.requestId}
+                    className="hui:rounded-control hui:bg-muted hui:p-2"
+                    data-kind="question"
+                  >
+                    <div className="hui:flex hui:flex-wrap hui:items-center hui:gap-2">
+                      <Badge tone={asking ? 'warn' : 'outline'}>
+                        {t.question.severity(q.severity)}
+                      </Badge>
+                      {q.title ? <strong>{q.title}</strong> : null}
+                    </div>
+                    {q.plain ? (
+                      <p className="hui:mt-1">
+                        {t.question.whatChanges} {q.plain}
+                      </p>
+                    ) : null}
+                    <p className="hui-muted hui:mt-1">
+                      {asking && leadAnswers(view, q)
+                        ? t.question.leadAnswers
+                        : questionStatus(q, lang).text}
+                    </p>
+                    <AnswerBasisLine q={q} t={t} timeZone={timeZone} now={clock} />
+                    <Codes t={t} codes={[q.requestId, t.question.version(q.version)]} />
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ) : null}
+        <div className="hui:flex hui:flex-wrap hui:items-center hui:gap-3">
+          <WorkRef id={w.id} {...links}>
+            {k.open}
+          </WorkRef>
+          <Codes
+            t={t}
+            codes={[
+              w.id,
+              ...w.blockers.map((b) => b.code),
+              w.stage.needs
+                ? knownLabel(t.action, w.stage.needs.action)
+                  ? undefined
+                  : w.stage.needs.action
+                : undefined,
+            ]}
+          />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}

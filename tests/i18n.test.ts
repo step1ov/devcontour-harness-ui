@@ -6,7 +6,7 @@ import { strict as assert } from 'node:assert';
 import { readFileSync, readdirSync } from 'node:fs';
 import { test } from 'node:test';
 import { dictionaries } from '../src/model/dict.ts';
-import { activityHash, parseRoute, workHash } from '../src/app/route.ts';
+import { activityHash, parseRoute, redirectOf, workHash } from '../src/app/route.ts';
 
 function walk(ru: unknown, en: unknown, path: string, out: string[]) {
   if (typeof ru === 'function' || typeof en === 'function') {
@@ -43,9 +43,17 @@ test('the Russian dictionary is Russian: section titles and glossary are in Cyri
 
 test('components write no visible text of their own: every JSX text node is punctuation', () => {
   const dir = new URL('../src/components/', import.meta.url);
-  let seen = 0;
-  for (const f of readdirSync(dir).filter((x) => x.endsWith('.tsx'))) {
-    const src = readFileSync(new URL(f, dir), 'utf8');
+  const files = [
+    ...readdirSync(dir, { recursive: true })
+      .map(String)
+      .filter((x) => x.endsWith('.tsx'))
+      .map((f) => new URL(f, dir)),
+  ];
+  // The scan itself finds text: a literal word between tags is caught.
+  assert.match('<p>Готово</p>', />([^<>{}]*[A-Za-zА-Яа-яЁё][^<>{}]*)</);
+  for (const url of files) {
+    const f = url.pathname.split('/src/')[1]!;
+    const src = readFileSync(url, 'utf8');
     // Text between a closing `>` and an opening `<` in JSX that contains a letter.
     for (const m of src.matchAll(/>([^<>{}]*[A-Za-zА-Яа-яЁё][^<>{}]*)</g)) {
       const s = m[1]!.trim();
@@ -56,15 +64,14 @@ test('components write no visible text of their own: every JSX text node is punc
         /^(Harness|harness input-show --state|--request|harness run)$/,
         `${f}: «${s}»`,
       );
-      seen++;
     }
   }
-  assert.ok(seen > 0, 'the scan finds JSX text at all');
 });
 
 test('components and the app put no literal words in accessible attributes or JSX string expressions', () => {
   const files = [
-    ...readdirSync(new URL('../src/components/', import.meta.url))
+    ...readdirSync(new URL('../src/components/', import.meta.url), { recursive: true })
+      .map(String)
       .filter((x) => x.endsWith('.tsx'))
       .map((f) => new URL('../src/components/' + f, import.meta.url)),
     new URL('../src/app/main.tsx', import.meta.url),
@@ -83,6 +90,9 @@ test('hash routes', () => {
   assert.deepEqual(parseRoute(''), { screen: 'overview' });
   assert.deepEqual(parseRoute('#/'), { screen: 'overview' });
   assert.deepEqual(parseRoute('#/reviews'), { screen: 'reviews' });
+  assert.equal(redirectOf(parseRoute('#/reviews')), '#/tasks');
+  assert.deepEqual(parseRoute('#/tasks'), { screen: 'tasks' });
+  assert.equal(redirectOf(parseRoute('#/tasks')), undefined);
   assert.deepEqual(parseRoute('#/work/locale-format'), { screen: 'work', workId: 'locale-format' });
   assert.deepEqual(parseRoute('#/work/a%20b#verification'), {
     screen: 'work',

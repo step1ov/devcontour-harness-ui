@@ -10,7 +10,7 @@ import { dict, label, type GlossaryId } from '../model/dict.ts';
 import { formatWindow } from '../model/format.ts';
 import { formatWhen } from '../model/i18n.ts';
 import type { OperatorView } from '../model/view.ts';
-import { Heading, Term, WorkRef, actorLabel, type ScreenProps } from './common.tsx';
+import { Codes, Heading, Term, WorkRef, actorLabel, type ScreenProps } from './common.tsx';
 
 export interface ActivityFilter {
   workId?: string;
@@ -163,7 +163,7 @@ export function Activity({
                       <code>{e.workId}</code>
                     </WorkRef>
                   ) : null}{' '}
-                  <code className="hui-muted hui-code">{e.action}</code>
+                  <Codes t={t} codes={[e.action]} />
                 </li>
               ))}
             </ol>

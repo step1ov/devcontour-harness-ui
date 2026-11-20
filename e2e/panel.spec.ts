@@ -9,14 +9,22 @@ const shots = process.env.E2E_SHOTS;
 const axeOf = (page: Page) => new AxeBuilder({ page: page as never });
 
 const screens: [string, string, RegExp][] = [
-  ['overview', '#/', /Сейчас: в работе 1[\s\S]*Какой разделитель использовать в CSV\?/],
+  [
+    'overview',
+    '#/',
+    /Сейчас harness работает над locale-format[\s\S]*Сделано 1 из 4 · в работе 1 · ждут 2[\s\S]*Какой разделитель использовать в CSV\?[\s\S]*Проблемы по ходу/,
+  ],
+  [
+    'tasks',
+    '#/tasks',
+    /Попытки: израсходовано 2 из 3, осталось 1[\s\S]*Дальше действует: вы[\s\S]*раунды 2 из 6/,
+  ],
   ['work', '#/work/locale-format', /Что проверено/],
   [
     'work-accepted',
     '#/work/add-greeting',
     /Принято локально; в удалённой ветке origin\/harness\/accepted ещё нет\.[\s\S]*git обновил копию: вчера 20:30/,
   ],
-  ['reviews', '#/reviews', /раунды 2 из 6/],
   ['decisions', '#/decisions', /Временные \(1\)/],
   ['activity', '#/activity', /Кто что делал[\s\S]*контроллер[\s\S]*вчера 21:05/],
   ['settings', '#/settings', /Технические вопросы решает ведущий: да/],
@@ -68,13 +76,13 @@ test('keyboard: the nav reaches every screen and focus is visible', async ({ pag
   await open(page, '#/');
   await page.keyboard.press('Tab'); // skip link
   await page.keyboard.press('Tab'); // first nav link
-  await page.keyboard.press('Tab'); // reviews
+  await page.keyboard.press('Tab'); // tasks
   const focused = page.locator(':focus');
-  await expect(focused).toHaveText('Ревью');
+  await expect(focused).toHaveText('Задачи');
   const outline = await focused.evaluate((el) => getComputedStyle(el).outlineStyle);
   expect(outline).not.toBe('none');
   await page.keyboard.press('Enter');
-  await expect(page).toHaveURL(/#\/reviews$/);
+  await expect(page).toHaveURL(/#\/tasks$/);
   await expect(page.locator('main')).toContainText('раунды 2 из 6');
   // A glossary disclosure opens from the keyboard.
   const summary = page.locator('details.hui-term summary').first();
@@ -153,7 +161,7 @@ test('reduced motion and dark theme render without scroll', async ({ browser }) 
   await page.goto('http://127.0.0.1:4808/?lang=ru#/history');
   await expect(page.locator('main .hui')).toBeVisible();
   const bg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
-  expect(bg).toBe('rgb(20, 23, 27)');
+  expect(bg).toBe('rgb(14, 16, 19)');
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
   );
@@ -217,4 +225,82 @@ test('a temporary 503 keeps the last view with a stale warning', async ({ page }
     /Не удалось обновить данные с \d\d:\d\d: harness view: timed out\. На экране данные на/,
   );
   await expect(page.locator('main')).toContainText('Сейчас: в работе 1');
+});
+
+test('the old #/reviews link lands on the tasks, and «Журнал» groups its screens', async ({
+  page,
+}) => {
+  await open(page, '#/reviews');
+  await expect(page).toHaveURL(/#\/tasks$/);
+  await expect(page.getByRole('link', { name: 'Задачи', exact: true })).toHaveAttribute(
+    'aria-current',
+    'page',
+  );
+  await open(page, '#/history');
+  await expect(page.getByRole('link', { name: 'Журнал', exact: true })).toHaveAttribute(
+    'aria-current',
+    'page',
+  );
+  const sub = page.getByRole('navigation', { name: 'Разделы журнала' });
+  await expect(sub.getByRole('link', { name: 'История' })).toHaveAttribute('aria-current', 'page');
+  await sub.getByRole('link', { name: 'Здоровье' }).click();
+  await expect(page).toHaveURL(/#\/health$/);
+});
+
+test('a task card opens the process timeline of its work', async ({ page }) => {
+  await open(page, '#/tasks');
+  await page.getByTestId('task-locale-format').getByRole('link', { name: 'Весь процесс' }).click();
+  await expect(page).toHaveURL(/#\/work\/locale-format$/);
+  const tl = page.getByTestId('timeline');
+  await expect(tl.locator('li')).toHaveCount(6);
+  await expect(tl.locator('li[data-state="current"]')).toContainText('Проверки');
+  await expect(page.getByRole('link', { name: '← К задачам' })).toBeVisible();
+});
+
+test('the theme choice in Settings applies at once and is kept in this browser', async ({
+  page,
+}) => {
+  await open(page, '#/settings');
+  const group = page.getByRole('radiogroup', { name: 'Тема' });
+  await group.getByRole('radio', { name: 'Тёмная' }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  const dark = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  expect(dark).toBe('rgb(14, 16, 19)');
+  await page.reload();
+  await expect(page.locator('main .hui')).toBeVisible();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await expect(
+    page.getByRole('radiogroup', { name: 'Тема' }).getByRole('radio', { name: 'Тёмная' }),
+  ).toHaveAttribute('aria-checked', 'true');
+  const axe = await axeOf(page).analyze();
+  expect(
+    axe.violations
+      .filter((v) => v.impact === 'serious' || v.impact === 'critical')
+      .map((v) => v.id),
+  ).toEqual([]);
+  await page
+    .getByRole('radiogroup', { name: 'Тема' })
+    .getByRole('radio', { name: 'Как в системе' })
+    .click();
+  await expect(page.locator('html')).not.toHaveAttribute('data-theme', /./);
+});
+
+test('an open tab offers a reload when the panel server serves a new build (F-AF)', async ({
+  page,
+}) => {
+  await open(page, '#/');
+  await expect(page.getByTestId('new-build')).toHaveCount(0);
+  await page.route('**/api/health', async (route) => {
+    const res = await route.fetch();
+    const body = await res.json();
+    await route.fulfill({
+      response: res,
+      json: { ...body, build: 'f'.repeat(16), version: '9.9.9' },
+    });
+  });
+  // The tab checks when it becomes visible again (and every minute).
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  const prompt = page.getByTestId('new-build');
+  await expect(prompt).toContainText('Панель обновилась (версия 9.9.9)');
+  await expect(prompt.getByRole('button', { name: 'Обновить страницу' })).toBeVisible();
 });

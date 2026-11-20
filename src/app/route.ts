@@ -1,10 +1,12 @@
-// Hash routes of the standalone app (design §5): `#/`, `#/work/<id>`,
-// `#/reviews`, `#/decisions`, `#/activity[?work=&actor=]`, `#/settings`,
-// `#/history`, `#/health`. A second `#` names an anchor inside the screen
+// Hash routes of the standalone app (design §5): `#/`, `#/tasks`,
+// `#/work/<id>`, `#/decisions`, `#/activity[?work=&actor=]`, `#/history`,
+// `#/health` (the last three form «Журнал»), `#/settings`. The old
+// `#/reviews` is kept as a redirect to `#/tasks` (`redirectOf`). A second `#` names an anchor inside the screen
 // (`#/work/<id>#verification`). Pure, so it is unit-tested.
 
 export type Screen =
   | 'overview'
+  | 'tasks'
   | 'work'
   | 'reviews'
   | 'decisions'
@@ -24,6 +26,7 @@ export interface Route {
 const simple: Record<string, Screen> = {
   '': 'overview',
   '/': 'overview',
+  '/tasks': 'tasks',
   '/reviews': 'reviews',
   '/decisions': 'decisions',
   '/activity': 'activity',
@@ -71,4 +74,9 @@ export function activityHash(filter: { workId?: string; actor?: string }): strin
   if (filter.actor) q.set('actor', filter.actor);
   const s = q.toString();
   return '#/activity' + (s ? '?' + s : '');
+}
+
+/** A retired route and where it lives now: `#/reviews` → `#/tasks` (alpha.4). */
+export function redirectOf(route: Route): string | undefined {
+  return route.screen === 'reviews' ? '#/tasks' : undefined;
 }

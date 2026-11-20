@@ -161,7 +161,10 @@ function entriesOf(
   const out: Entry[] = [];
   const find = (actor: Entry['actor'], code: string | undefined) =>
     out.find((e) => e.actor === actor && e.code === code);
-  for (const b of w?.blockers ?? []) {
+  // A running work holds a slot: its "not ready to start" blockers describe
+  // the attempt already under way, not a wait (F-J).
+  const running = w !== undefined && SLOT_STAGES.has(w.stage.name);
+  for (const b of running ? [] : (w?.blockers ?? [])) {
     const actor = actorOf(b.actor);
     const record: StepRecord = { source: 'blocker', code: b.code, actor: b.actor };
     const same = find(actor, b.code);
@@ -193,7 +196,8 @@ function entriesOf(
     } else out.push({ actor, code: e.code, action: e.action, since: e.since, records: [record] });
   }
   const needs = w?.stage.needs;
-  if (needs) {
+  // «Wait» on a running work is the attempt itself, not a step of anyone.
+  if (needs && !(running && (needs.action === 'wait' || needs.action === 'none'))) {
     const actor = actorOf(needs.actor);
     const record: StepRecord = { source: 'needs', actor: needs.actor, action: needs.action };
     // The stage names the next action of one of the stops above. It joins
@@ -337,7 +341,12 @@ export function nextSteps(view: OperatorView): NextSteps {
       } else if (s.actor === 'lead') lead.push(s);
       else other.push(s);
     }
-    if (w && !isTerminal(w) && (nobody.length || (!entries.length && !waits && isHeld(w))))
+    if (
+      w &&
+      !isTerminal(w) &&
+      !SLOT_STAGES.has(w.stage.name) &&
+      (nobody.length || (!entries.length && !waits && isHeld(w)))
+    )
       queue.push({ workId: id, blockers: nobody, unexplained: !nobody.length });
   }
   for (const e of view.escalations) {

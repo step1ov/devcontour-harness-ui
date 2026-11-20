@@ -3,12 +3,14 @@
 // fetching, no writes. Counts come from the view's aggregate sections (never
 // from the possibly truncated lists). Hosts theme it through `--hui-*`.
 
-import type { OperatorView, ViewHealth } from '../model/view.ts';
+import type { OperatorQuestion, OperatorView, ViewHealth, WorkView } from '../model/view.ts';
 import {
   KNOWN_QUESTION_STATES,
   SLOT_STAGES,
   formatElapsed,
   formatTypical,
+  formatRange,
+  formatRough,
   formatUsd,
   questionStatus,
   stageLabel,
@@ -27,7 +29,24 @@ import {
   type Step,
 } from '../model/steps.ts';
 import {
+  MIN_ATTEMPT_SAMPLES,
+  attemptAverage,
+  outsideHarness,
+  overallProgress,
+  scopeLeft,
+  scopeOf,
+  stageLeft,
+} from '../model/scope.ts';
+import { splitQuestions } from '../model/tasks.ts';
+import { Badge, type Tone } from './ui/badge.tsx';
+import { Card, CardContent } from './ui/card.tsx';
+import { Progress } from './ui/progress.tsx';
+import {
   AcceptedLine,
+  Block,
+  Codes,
+  StageLeftLine,
+  WorkEta,
   AnswerBasisLine,
   AttemptsText,
   BlockerLine,
@@ -75,7 +94,8 @@ export function Overview({
   const { progress, health } = view;
   const running = view.works.filter((w) => SLOT_STAGES.has(w.stage.name));
   const steps = nextSteps(view);
-  const asking = steps.questions;
+  // Technical questions the lead answers by the policy do not wait for you (F-W).
+  const { yours: asking, lead: leadAsking } = splitQuestions(view, steps);
   const otherQuestions = view.questions.filter((q) => !questionStatus(q).needsAnswer);
   const budget = worstBudget(health);
   // Works listed with a location; the count itself is `progress.done`.
@@ -84,11 +104,13 @@ export function Overview({
   // Works the harness counts as waiting for you that no item here names.
   const named = new Set([
     ...asking.map((q) => q.workId),
+    ...leadAsking.map((q) => q.workId),
     ...steps.operator.flatMap((s) => s.workIds),
     ...steps.unlistedAnswers,
   ]);
   const hiddenWaiting = Math.max(0, progress.waitingOperator - named.size);
-  const others = steps.lead.length + steps.other.length + steps.dependencies.length;
+  const others =
+    steps.lead.length + leadAsking.length + steps.other.length + steps.dependencies.length;
   const otherActors = [...new Set(steps.other.map((s) => s.actor))];
   const count = (stage: string) =>
     Object.hasOwn(progress.byStage, stage) ? Number(progress.byStage[stage]) || 0 : 0;
@@ -106,196 +128,348 @@ export function Overview({
         asking.length === 0 &&
         steps.operator.length > 0 &&
         steps.operator.every((s) => s.after.length > 0),
-      waitingOperator: progress.waitingOperator,
+      waitingOperator: Math.max(0, progress.waitingOperator - leadAsking.length),
       // A clipped list or a question state this build does not know makes the
       // count a floor: the sentence then never says "nothing is needed".
       incomplete: clipped || oddState,
     },
     lang,
   );
-  const inspect = (requestId: string) => (
-    <code>harness input-show --state &lt;state&gt; --request {requestId}</code>
-  );
+  const overall = overallProgress(view);
+  const scope = scopeOf(view);
+  const outside = outsideHarness(scope);
+  const left = scopeLeft(view);
+  const average = attemptAverage(view);
+  const unfinished = overall.total - overall.done - overall.cancelled;
+  // F-X: the queue does not move by itself when no controller runs and nothing works.
+  const standing =
+    !progress.queue.paused &&
+    !health.controller.present &&
+    progress.running === 0 &&
+    unfinished > 0;
+  const allDone = progress.total > 0 && unfinished === 0;
+  const story = storySentence({ view, running, t, lang, standing, allDone, yours });
+  const problems = problemsOf(view, t, lang, standing);
 
   return (
-    <section className="hui hui-overview" aria-label={o.label} lang={lang}>
-      <header className="hui-row hui-header">
-        <h2 className="hui-title">Harness</h2>
-        <span
-          className={'hui-badge ' + (progress.queue.paused ? 'hui-warn' : 'hui-ok')}
-          data-testid="queue-state"
-        >
-          {progress.queue.paused ? o.queuePaused(progress.queue.reason ?? '') : o.queueRunning}
-        </span>
-        {progress.queue.paused ? (
-          <span data-status="blocked" data-testid="queue-who">
-            {progress.queue.detail ? <span>{progress.queue.detail} — </span> : null}
-            <span className="hui-who">
-              {o.queueWho(actorLabel(t, progress.queue.actor), progress.queue.action ?? '')}
+    <section
+      className="hui hui-overview hui:grid hui:gap-4 hui:bg-transparent"
+      aria-label={o.label}
+      lang={lang}
+    >
+      <Card data-testid="hero" className="hui-hero">
+        <CardContent className="hui:gap-2 hui:pt-4">
+          <h2 className="hui:text-xl hui:leading-snug hui:font-semibold" data-testid="story">
+            {story}
+          </h2>
+          <p className="hui-lead hui:text-muted-foreground" data-testid="sentence">
+            {sentence}
+          </p>
+          <div className="hui:flex hui:flex-wrap hui:items-center hui:gap-2 hui-header">
+            <Badge
+              tone={progress.queue.paused || standing ? 'warn' : allDone ? 'ok' : 'ok'}
+              data-testid="queue-state"
+            >
+              {progress.queue.paused
+                ? o.queuePaused(progress.queue.reason ?? '')
+                : standing
+                  ? o.queueStanding
+                  : allDone
+                    ? o.queueDone
+                    : o.queueRunning}
+            </Badge>
+            {progress.queue.paused ? (
+              <span data-status="blocked" data-testid="queue-who" className="hui:text-sm">
+                {progress.queue.detail ? <span>{progress.queue.detail} — </span> : null}
+                <span className="hui-who">
+                  {o.queueWho(
+                    actorLabel(t, progress.queue.actor),
+                    progress.queue.action ? label(t.action, progress.queue.action) : '',
+                  )}
+                </span>
+              </span>
+            ) : standing ? (
+              <span data-status="blocked" data-testid="queue-who" className="hui:text-sm">
+                {o.standingWhy} — <span className="hui-who">{o.standingWho}</span>
+              </span>
+            ) : null}
+            <span className="hui:text-sm hui:text-muted-foreground">
+              {o.acceptedOf(progress.done, progress.total)}
             </span>
-          </span>
-        ) : null}
-        <span className="hui-muted">{o.acceptedOf(progress.done, progress.total)}</span>
-      </header>
-      <p className="hui-lead" data-testid="sentence">
-        {sentence}
-      </p>
+          </div>
+        </CardContent>
+      </Card>
 
-      {view.works.length ? (
-        <div className="hui-panel" data-testid="plan">
-          <Heading t={t} term="stage">
-            {o.plan}
-          </Heading>
-          <ol className="hui-plan">
+      <Block t={t} title={o.scopeTitle} testid="scope" term="stage">
+        <p className="hui:text-sm" data-testid="scope-counts">
+          {o.scopeCounts(overall.done, overall.total, overall.running, overall.waiting)}
+          {overall.outside ? ' ' + o.scopeOutside(overall.outside + overall.outsideUnlisted) : ''}
+        </p>
+        <Progress
+          value={overall.done}
+          max={overall.total}
+          label={o.acceptedOf(overall.done, overall.total)}
+          segments={[
+            { value: overall.running, className: 'hui:bg-primary' },
+            { value: overall.waiting, className: 'hui:bg-wait' },
+          ]}
+        />
+        <ul
+          className="hui:flex hui:list-none hui:flex-wrap hui:gap-x-4 hui:gap-y-1 hui:text-xs hui:text-muted-foreground"
+          aria-hidden="true"
+        >
+          <li className="hui:flex hui:items-center hui:gap-1.5">
+            <span className="hui:inline-block hui:size-2.5 hui:rounded-full hui:bg-ok" />
+            {o.legendDone}
+          </li>
+          <li className="hui:flex hui:items-center hui:gap-1.5">
+            <span className="hui:inline-block hui:size-2.5 hui:rounded-full hui:bg-primary" />
+            {o.legendRunning}
+          </li>
+          <li className="hui:flex hui:items-center hui:gap-1.5">
+            <span className="hui:inline-block hui:size-2.5 hui:rounded-full hui:bg-wait" />
+            {o.legendWaiting}
+          </li>
+          {overall.outside || overall.outsideUnlisted ? (
+            <li className="hui:flex hui:items-center hui:gap-1.5">
+              <span className="hui:inline-block hui:size-2.5 hui:rounded-full hui:bg-track" />
+              {o.legendOutside}
+            </li>
+          ) : null}
+        </ul>
+        <p className="hui:text-sm" data-testid="eta">
+          {unfinished <= 0
+            ? o.etaNothingLeft
+            : left.range
+              ? o.etaLeft(formatRange(left.range, lang), left.works)
+              : o.etaUnknown(MIN_ATTEMPT_SAMPLES)}
+        </p>
+        {left.range && left.average ? (
+          <p className="hui:text-xs hui:text-muted-foreground" data-testid="eta-basis">
+            {o.etaBasis(formatRough(left.average.ms, lang), left.average.samples)}
+          </p>
+        ) : null}
+        {view.works.length ? (
+          <ol className="hui-plan hui:grid hui:gap-2" data-testid="plan">
             {view.works.map((w) => (
               <li
                 key={w.id}
-                className={'hui-plan-step' + (SLOT_STAGES.has(w.stage.name) ? ' hui-current' : '')}
+                className={
+                  'hui-plan-step hui:flex hui:flex-wrap hui:items-center hui:gap-x-2 hui:gap-y-1' +
+                  (SLOT_STAGES.has(w.stage.name) ? ' hui-current' : '')
+                }
               >
                 <WorkRef id={w.id} {...links}>
                   <strong>{workName(view, w.id)}</strong>
-                </WorkRef>{' '}
+                </WorkRef>
+                {w.title && workName(view, w.id) !== w.title ? (
+                  <span className="hui:text-sm hui:text-muted-foreground">
+                    {titleRest(w.title)}
+                  </span>
+                ) : null}
                 <StageStatus w={w} lang={lang} linkProps={links} />
+                <WorkEta w={w} t={t} lang={lang} clock={clock} average={average} />
                 {w.dependsOn?.length ? (
-                  <span className="hui-muted">
-                    {' '}
+                  <span className="hui:text-sm hui:text-muted-foreground">
                     {o.after(w.dependsOn.map((id) => workName(view, id)).join(', '))}
                   </span>
                 ) : null}
               </li>
             ))}
           </ol>
-          {view.truncated?.works ? <p className="hui-muted">{o.planClipped}</p> : null}
-        </div>
-      ) : null}
-
-      <div className="hui-panel" data-testid="needs-you">
-        <Heading t={t} term="decision">
-          {o.needsYou(yours)}
-        </Heading>
-        {yours === 0 && steps.unlistedAnswers.length === 0 && hiddenWaiting === 0 ? (
-          <p className="hui-muted">
-            {clipped ? t.header.unknownClipped : oddState ? o.unknownQuestionState : o.noQuestions}
-          </p>
+        ) : null}
+        {view.truncated?.works ? <p className="hui-muted">{o.planClipped}</p> : null}
+        {scope ? (
+          outside.length || overall.outsideUnlisted ? (
+            <div data-testid="outside">
+              <h4 className="hui:text-sm hui:font-semibold">
+                {o.outsideTitle(outside.length + overall.outsideUnlisted)}
+              </h4>
+              <ul className="hui:mt-1 hui:grid hui:list-none hui:gap-1">
+                {outside.map((task) => (
+                  <li
+                    key={task.id}
+                    className="hui:flex hui:flex-wrap hui:items-center hui:gap-2 hui:text-sm"
+                  >
+                    <strong>{task.title ?? task.id}</strong>
+                    <Badge tone="outline">{label(o.outsideState, task.state)}</Badge>
+                    {task.plain ? (
+                      <span className="hui:text-muted-foreground">{task.plain}</span>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+              {overall.outsideUnlisted ? (
+                <p className="hui-muted">{t.listClipped(overall.outsideUnlisted)}</p>
+              ) : null}
+            </div>
+          ) : null
         ) : (
-          <ul className="hui-list">
-            {asking.map((q) => (
-              <li key={q.requestId} className="hui-item" data-kind="question">
-                <span className="hui-badge">{o.kindQuestion}</span>{' '}
-                <span className="hui-badge hui-warn">{t.question.severity(q.severity)}</span>{' '}
-                <WorkRef id={q.workId} {...links}>
-                  <strong>{workName(view, q.workId)}</strong>
-                </WorkRef>{' '}
-                {q.title ? <span>{q.title}</span> : null}
-                {q.plain ? (
-                  <div>
-                    {t.question.whatChanges} {q.plain}
-                  </div>
-                ) : null}
-                <div className="hui-muted">
-                  {questionStatus(q, lang).text} {t.question.full} {inspect(q.requestId)} (
-                  {t.question.version(q.version)}).
-                </div>
-              </li>
-            ))}
-            {steps.operator.map((s, i) => (
-              <li key={'d' + i} className="hui-item" data-kind="decision" data-status="blocked">
-                <span className="hui-badge hui-warn">{o.kindDecision}</span>{' '}
-                <StepHead s={s} t={t} view={view} links={links} />
-                <span className="hui-sr">
-                  {' '}
-                  <span className="hui-who">{t.blocker.whoActs(actorLabel(t, s.actor))}</span>
-                </span>
-                {s.plain && s.action ? (
-                  <div>
-                    {o.why} {s.plain}
-                  </div>
-                ) : null}
-                {s.action === 'reset-attempts'
-                  ? s.workIds.map((id) => {
-                      const w = view.works.find((x) => x.id === id);
-                      return w?.attempts.line ? (
-                        <div key={id} className="hui-muted" data-testid="decision-attempts">
-                          {o.attempts} <AttemptsText line={w.attempts.line} t={t} />
-                        </div>
-                      ) : null;
-                    })
-                  : null}
-                {s.after.length ? (
-                  <div data-testid="lead-first">
-                    <strong>{o.leadFirst(s.after.map((f) => stepWhat(f, t)).join('; '))}</strong>
-                  </div>
-                ) : null}
-                {s.action === 'reset-attempts' && s.workIds.length ? (
-                  <div className="hui-muted">
-                    {o.howAsk} <code>{o.resetCommand(s.workIds[0]!)}</code>
-                  </div>
-                ) : null}
-                <StepDetails
-                  s={s}
-                  t={t}
-                  timeZone={timeZone}
-                  now={now}
-                  records={s.records}
-                  workIds={s.workIds}
-                />
-              </li>
-            ))}
-          </ul>
-        )}
-        {hiddenWaiting ? (
-          <p data-testid="unlisted-waiting">{o.unlistedWaiting(hiddenWaiting)}</p>
-        ) : null}
-        {steps.unlistedAnswers.length ? (
-          <p data-testid="unlisted-answers">
-            {o.unlistedAnswers(steps.unlistedAnswers.map((id) => workName(view, id)).join(', '))}
+          <p className="hui:text-xs hui:text-muted-foreground" data-testid="scope-missing">
+            {o.scopeMissing}
           </p>
-        ) : null}
-        <Clipped n={view.truncated?.questions} t={t} />
-        {steps.operator.some((s) => s.action === 'reset-attempts') ? (
-          <div className="hui-terms">
-            <Term id="attempt" t={t} named />
-            <Term id="failureBucket" t={t} named />
-          </div>
-        ) : null}
+        )}
+      </Block>
+
+      <div className="hui:grid hui:gap-4 hui:lg:grid-cols-2">
+        <Block t={t} title={o.needsYou(yours)} testid="needs-you" term="decision">
+          {yours === 0 && steps.unlistedAnswers.length === 0 && hiddenWaiting === 0 ? (
+            <p className="hui-muted">
+              {clipped
+                ? t.header.unknownClipped
+                : oddState
+                  ? o.unknownQuestionState
+                  : o.noQuestions}
+            </p>
+          ) : (
+            <ul className="hui-list">
+              {asking.map((q) => (
+                <QuestionItem key={q.requestId} q={q} view={view} t={t} lang={lang} links={links} />
+              ))}
+              {steps.operator.map((s, i) => (
+                <li key={'d' + i} className="hui-item" data-kind="decision" data-status="blocked">
+                  <Badge tone="warn">{o.kindDecision}</Badge>{' '}
+                  <StepHead s={s} t={t} view={view} links={links} />
+                  <span className="hui-sr">
+                    {' '}
+                    <span className="hui-who">{t.blocker.whoActs(actorLabel(t, s.actor))}</span>
+                  </span>
+                  {s.plain && s.action ? (
+                    <div>
+                      {o.why} {s.plain}
+                    </div>
+                  ) : null}
+                  {s.action === 'reset-attempts'
+                    ? s.workIds.map((id) => {
+                        const w = view.works.find((x) => x.id === id);
+                        return w?.attempts.line ? (
+                          <div key={id} className="hui-muted" data-testid="decision-attempts">
+                            {o.attempts} <AttemptsText line={w.attempts.line} t={t} />
+                          </div>
+                        ) : null;
+                      })
+                    : null}
+                  {s.after.length ? (
+                    <div data-testid="lead-first">
+                      <strong>{o.leadFirst(s.after.map((f) => stepWhat(f, t)).join('; '))}</strong>
+                    </div>
+                  ) : null}
+                  {s.action === 'reset-attempts' && s.workIds.length ? (
+                    <div className="hui-muted">{o.howAskLead}</div>
+                  ) : null}
+                  <StepDetails
+                    s={s}
+                    t={t}
+                    timeZone={timeZone}
+                    now={now}
+                    records={s.records}
+                    workIds={s.workIds}
+                    command={
+                      s.action === 'reset-attempts' && s.workIds.length
+                        ? o.resetCommand(s.workIds[0]!)
+                        : undefined
+                    }
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
+          {hiddenWaiting ? (
+            <p data-testid="unlisted-waiting">{o.unlistedWaiting(hiddenWaiting)}</p>
+          ) : null}
+          {steps.unlistedAnswers.length ? (
+            <p data-testid="unlisted-answers">
+              {o.unlistedAnswers(steps.unlistedAnswers.map((id) => workName(view, id)).join(', '))}
+            </p>
+          ) : null}
+          <Clipped n={view.truncated?.questions} t={t} />
+          {steps.operator.some((s) => s.action === 'reset-attempts') ? (
+            <div className="hui-terms">
+              <Term id="attempt" t={t} named />
+              <Term id="failureBucket" t={t} named />
+            </div>
+          ) : null}
+        </Block>
+
+        <Block t={t} title={o.problems(problems.length)} testid="problems" term="failureBucket">
+          {problems.length === 0 ? (
+            <p className="hui-muted">{o.noProblems}</p>
+          ) : (
+            <ul className="hui-list">
+              {problems.map((p, i) => (
+                <li key={i} className="hui-item" data-status={p.blocked ? 'blocked' : undefined}>
+                  <Badge tone={p.tone}>{p.kind}</Badge>{' '}
+                  {p.workId ? (
+                    <>
+                      <WorkRef id={p.workId} {...links}>
+                        <strong>{workName(view, p.workId)}</strong>
+                      </WorkRef>
+                      {': '}
+                    </>
+                  ) : null}
+                  <span>{p.text}</span>
+                  {p.who ? (
+                    <>
+                      {' — '}
+                      <span className="hui-who">{p.who}</span>
+                    </>
+                  ) : null}
+                  <Codes t={t} codes={p.codes} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </Block>
       </div>
 
-      <div className="hui-panel" data-testid="now">
-        <Heading t={t} term="attempt">
-          {o.now(progress.running, view.settings.concurrency)}
-        </Heading>
+      <Block
+        t={t}
+        title={o.now(progress.running, view.settings.concurrency)}
+        testid="now"
+        term="attempt"
+      >
         {running.length === 0 && progress.running === 0 ? (
           <p className="hui-muted">{o.nothingRunning}</p>
         ) : (
           <ul className="hui-list">
-            {running.map((w) => (
-              <li key={w.id} className="hui-item">
-                <div className="hui-row">
-                  <WorkRef id={w.id} {...links} />
-                  <span className="hui-badge">{stageLabel(w.stage.name, lang)}</span>
-                  {w.stage.step ? <code className="hui-muted">{w.stage.step}</code> : null}
-                  {w.liveness && w.liveness !== 'active' ? (
-                    <span className="hui-badge hui-warn">{label(t.liveness, w.liveness)}</span>
-                  ) : null}
-                  {w.stage.since ? (
-                    <span className="hui-muted">{formatElapsed(w.stage.since, clock, lang)}</span>
-                  ) : null}
-                  {formatTypical(w.stage.typical, lang) ? (
-                    <span className="hui-muted" data-testid="typical">
-                      {formatTypical(w.stage.typical, lang)}
-                    </span>
-                  ) : null}
-                </div>
-                <div className="hui-muted">
-                  {w.attempts.line ? (
-                    <AttemptsText line={w.attempts.line} t={t} />
-                  ) : (
-                    o.attemptsShort(w.attempts.used, w.attempts.max, w.attempts.left)
-                  )}
-                  {w.attempts.lastFailure ? `; ${o.lastStopped(w.attempts.lastFailure.plain)}` : ''}
-                </div>
-              </li>
-            ))}
+            {running.map((w) => {
+              const typical = formatTypical(w.stage.typical, lang);
+              return (
+                <li key={w.id} className="hui-item">
+                  <div className="hui-row">
+                    <WorkRef id={w.id} {...links}>
+                      <strong>{workName(view, w.id)}</strong>
+                    </WorkRef>
+                    <Badge tone="info">{stageLabel(w.stage.name, lang)}</Badge>
+                    {w.stage.step ? <code className="hui-muted">{w.stage.step}</code> : null}
+                    {w.liveness && w.liveness !== 'active' ? (
+                      <Badge tone="warn">{label(t.liveness, w.liveness)}</Badge>
+                    ) : null}
+                    {w.stage.since ? (
+                      <span className="hui-muted">
+                        {o.stageFor(formatElapsed(w.stage.since, clock, lang))}
+                      </span>
+                    ) : null}
+                    {typical ? (
+                      <span className="hui-muted" data-testid="typical">
+                        {typical}
+                      </span>
+                    ) : null}
+                  </div>
+                  <StageLeftLine w={w} t={t} lang={lang} clock={clock} />
+                  <div className="hui-muted">
+                    {w.attempts.line ? (
+                      <AttemptsText line={w.attempts.line} t={t} />
+                    ) : (
+                      o.attemptsShort(w.attempts.used, w.attempts.max, w.attempts.left)
+                    )}
+                    {w.attempts.lastFailure
+                      ? `; ${o.lastStopped(w.attempts.lastFailure.plain)}`
+                      : ''}
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         )}
         {running.some((w) => formatTypical(w.stage.typical, lang)) ? (
@@ -308,12 +482,9 @@ export function Overview({
             {o.runningUnlisted(progress.running - running.length)}
           </p>
         ) : null}
-      </div>
+      </Block>
 
-      <div className="hui-panel" data-testid="decisions">
-        <Heading t={t} term="lead">
-          {o.others(others)}
-        </Heading>
+      <Block t={t} title={o.others(others)} testid="decisions" term="lead">
         {yours ? (
           <p className="hui-muted" data-testid="yours-above">
             {o.yoursAbove(yours)}
@@ -324,10 +495,25 @@ export function Overview({
             {view.truncated?.escalations ? t.header.unknownClipped : o.noOthers}
           </p>
         ) : null}
-        {steps.lead.length ? (
+        {steps.lead.length || leadAsking.length ? (
           <div data-testid="by-lead">
-            <h4 className="hui-subtitle">{o.byLead(steps.lead.length)}</h4>
+            <h4 className="hui-subtitle">{o.byLead(steps.lead.length + leadAsking.length)}</h4>
             <p className="hui-muted">{o.leadNote}</p>
+            {leadAsking.length ? (
+              <ul className="hui-list" data-testid="lead-questions">
+                {leadAsking.map((q) => (
+                  <QuestionItem
+                    key={q.requestId}
+                    q={q}
+                    view={view}
+                    t={t}
+                    lang={lang}
+                    links={links}
+                    byLead
+                  />
+                ))}
+              </ul>
+            ) : null}
             <StepList steps={steps.lead} t={t} view={view} links={links} {...{ timeZone, now }} />
           </div>
         ) : null}
@@ -362,12 +548,9 @@ export function Overview({
           </div>
         ) : null}
         <Clipped n={view.truncated?.escalations} t={t} />
-      </div>
+      </Block>
 
-      <div className="hui-panel" data-testid="waiting">
-        <Heading t={t} term="waitsQueue">
-          {o.waiting}
-        </Heading>
+      <Block t={t} title={o.waiting} testid="waiting" term="waitsQueue">
         {steps.queue.length === 0 ? (
           <p className="hui-muted">{o.noWaiting}</p>
         ) : (
@@ -379,7 +562,7 @@ export function Overview({
                   <WorkRef id={q.workId} {...links}>
                     <strong>{workName(view, q.workId)}</strong>
                   </WorkRef>{' '}
-                  <span className="hui-badge">{stageLabel(w.stage.name, lang)}</span>
+                  <Badge tone="outline">{stageLabel(w.stage.name, lang)}</Badge>
                   <ul className="hui-list hui-nested">
                     {q.unexplained ? (
                       <li className="hui-item" data-status="blocked">
@@ -395,19 +578,20 @@ export function Overview({
             })}
           </ul>
         )}
-      </div>
+      </Block>
 
       {otherQuestions.length ? (
-        <div className="hui-panel hui-secondary" data-testid="other-questions">
-          <h3 className="hui-subtitle">{o.otherQuestions}</h3>
+        <Block t={t} title={o.otherQuestions} testid="other-questions" className="hui-secondary">
           <ul className="hui-list">
             {otherQuestions.map((q) => (
               <li key={q.requestId} className="hui-item hui-muted">
                 <WorkRef id={q.workId} {...links}>
                   <strong>{workName(view, q.workId)}</strong>
-                </WorkRef>{' '}
-                <code>{q.requestId}</code>: {questionStatus(q, lang).text}
+                </WorkRef>
+                {q.title ? <span className="hui:text-foreground">: {q.title}</span> : null}
+                <div>{questionStatus(q, lang).text}</div>
                 <AnswerBasisLine q={q} t={t} timeZone={timeZone} now={clock} />
+                <Codes t={t} codes={[q.requestId]} />
               </li>
             ))}
           </ul>
@@ -416,18 +600,17 @@ export function Overview({
               <Term id="answerBasis" t={t} named />
             </div>
           ) : null}
-        </div>
+        </Block>
       ) : null}
 
       {accepted.length || progress.done ? (
-        <div className="hui-panel" data-testid="accepted">
-          <Heading t={t} term="accepted">
-            {o.accepted(progress.done)}
-          </Heading>
+        <Block t={t} title={o.accepted(progress.done)} testid="accepted" term="accepted">
           <ul className="hui-list">
             {accepted.map((w) => (
               <li key={w.id} className="hui-item">
-                <WorkRef id={w.id} {...links} /> <code className="hui-muted">{w.target!.ref}</code>
+                <WorkRef id={w.id} {...links}>
+                  <strong>{workName(view, w.id)}</strong>
+                </WorkRef>{' '}
                 <AcceptedLine
                   w={w}
                   lang={lang}
@@ -436,6 +619,7 @@ export function Overview({
                   now={clock}
                   explain={false}
                 />
+                <Codes t={t} codes={[w.target!.ref]} />
               </li>
             ))}
           </ul>
@@ -445,10 +629,10 @@ export function Overview({
               {o.acceptedUnlisted(progress.done - accepted.length, Boolean(view.truncated?.works))}
             </p>
           ) : null}
-        </div>
+        </Block>
       ) : null}
 
-      <dl className="hui-grid" data-testid="health">
+      <dl className="hui-grid hui-stats" data-testid="health">
         <div>
           <dt>{o.budget}</dt>
           {budget ? (
@@ -491,8 +675,8 @@ export function Overview({
       {health.warnings.length ? (
         <ul className="hui-list hui-secondary" data-testid="warnings" aria-label={o.warnings}>
           {health.warnings.map((w, i) => (
-            <li key={i} className="hui-item">
-              <code className="hui-muted">{w.code}</code> {w.message}
+            <li key={i} className="hui-item hui-muted">
+              {w.message} <Codes t={t} codes={[w.code]} />
             </li>
           ))}
         </ul>
@@ -501,6 +685,162 @@ export function Overview({
         {footerSentence(view.generatedAt, lang, timeZone, now)}
       </footer>
     </section>
+  );
+}
+
+/** The rest of a title after its key («WEB-1: Каталог» → «Каталог»). */
+const titleRest = (title: string) => title.replace(/^[\p{L}\p{N}][\p{L}\p{N}._-]{0,23}:\s+/u, '');
+
+/** The first line of the Overview: one plain sentence of what is happening. */
+function storySentence({
+  view,
+  running,
+  t,
+  lang,
+  standing,
+  allDone,
+  yours,
+}: {
+  view: OperatorView;
+  running: WorkView[];
+  t: Dict;
+  lang: Lang;
+  standing: boolean;
+  allDone: boolean;
+  yours: number;
+}): string {
+  const s = t.story;
+  if (view.progress.total === 0) return s.empty;
+  if (allDone) return s.allDone(view.progress.done, view.progress.total);
+  if (running.length)
+    return s.running(
+      running.map((w) => s.workAt(workName(view, w.id), stageLabel(w.stage.name, lang))),
+      Math.max(0, view.progress.running - running.length),
+    );
+  if (view.progress.running > 0) return s.runningUnlisted(view.progress.running);
+  if (view.progress.queue.paused) return s.paused;
+  if (yours) return s.waitsYou;
+  if (standing) return s.standing;
+  return s.waitsOthers;
+}
+
+interface Problem {
+  kind: string;
+  tone: Tone;
+  workId?: string;
+  text: string;
+  who?: string;
+  codes: (string | undefined)[];
+  blocked?: boolean;
+}
+
+/**
+ * «Проблемы по ходу»: what went wrong on the way, in plain words: the last
+ * failed attempt of each unfinished work, stops with their reason and who
+ * acts, a queue that stands, stalled attempts, environment failures, budget
+ * and drift. Every line is a view record; codes only under «подробности».
+ */
+function problemsOf(view: OperatorView, t: Dict, lang: Lang, standing: boolean): Problem[] {
+  const p = t.problems;
+  const out: Problem[] = [];
+  if (standing)
+    out.push({
+      kind: p.kindQueue,
+      tone: 'warn',
+      text: p.standing,
+      who: t.blocker.whoActs(actorLabel(t, 'lead')),
+      codes: [],
+      blocked: true,
+    });
+  for (const w of view.works) {
+    if (w.stage.name === 'done' || w.target !== undefined || w.stage.name === 'cancelled') continue;
+    const f = w.attempts.lastFailure;
+    if (f)
+      out.push({
+        kind: label(t.bucket, f.bucket),
+        tone: 'bad',
+        workId: w.id,
+        text: p.lastFailure(f.attempt, withWorkNames(view, f.plain)),
+        codes: [f.bucket],
+      });
+    if (w.stage.name === 'stopped') {
+      const b = w.blockers.find((x) => x.actor !== null) ?? w.blockers[0];
+      out.push({
+        kind: p.kindStopped,
+        tone: 'warn',
+        workId: w.id,
+        text: b?.plain?.trim() ? withWorkNames(view, b.plain) : p.stoppedNoReason,
+        who: !b
+          ? t.blocker.whoActs(t.unknown)
+          : b.actor === null
+            ? t.blocker.nobody
+            : t.blocker.whoActs(actorLabel(t, b.actor)),
+        codes: w.blockers.map((x) => x.code),
+        blocked: true,
+      });
+    }
+  }
+  const h = view.health;
+  if (h.stalledAttempts)
+    out.push({ kind: p.kindHealth, tone: 'bad', text: p.stalled(h.stalledAttempts), codes: [] });
+  if (h.environmentFailures)
+    out.push({
+      kind: label(t.bucket, 'environment'),
+      tone: 'warn',
+      text: p.environment(h.environmentFailures),
+      codes: [],
+    });
+  for (const b of h.budgets)
+    if (b.state === 'exceeded')
+      out.push({
+        kind: p.kindBudget,
+        tone: 'bad',
+        text: p.budgetExceeded(formatUsd(b.spentUsd, lang), label(t.budgetScope, b.scope)),
+        codes: [],
+      });
+  if (h.drift.drifted)
+    out.push({ kind: p.kindDrift, tone: 'warn', text: p.drifted(h.drift.drifted), codes: [] });
+  return out;
+}
+
+/**
+ * A question with its full text in the panel (F-Y): the question, what
+ * changes, who may answer, its importance — never a command to run.
+ */
+export function QuestionItem({
+  q,
+  view,
+  t,
+  lang,
+  links,
+  byLead,
+}: {
+  q: OperatorQuestion;
+  view: Pick<OperatorView, 'works'>;
+  t: Dict;
+  lang: Lang;
+  links: Links;
+  /** The lead answers it by the policy (F-W). */
+  byLead?: boolean;
+}) {
+  return (
+    <li className="hui-item hui-question" data-kind="question">
+      <div className="hui:flex hui:flex-wrap hui:items-center hui:gap-2">
+        <Badge tone="info">{t.overview.kindQuestion}</Badge>
+        <Badge tone="warn">{t.question.severity(q.severity)}</Badge>
+        <WorkRef id={q.workId} {...links}>
+          <strong>{workName(view, q.workId)}</strong>
+        </WorkRef>
+      </div>
+      {q.title ? <p className="hui:mt-1 hui:font-medium">{q.title}</p> : null}
+      {q.plain ? (
+        <p>
+          {t.question.whatChanges} {q.plain}
+        </p>
+      ) : null}
+      <p className="hui-muted">{byLead ? t.question.leadAnswers : questionStatus(q, lang).text}</p>
+      <Codes t={t} codes={[q.requestId, t.question.version(q.version)]} />
+    </li>
   );
 }
 
@@ -550,6 +890,7 @@ function StepDetails({
   now,
   records,
   workIds,
+  command,
 }: {
   s?: Step;
   t: Dict;
@@ -557,6 +898,8 @@ function StepDetails({
   now?: number | undefined;
   records: Step['records'];
   workIds: string[];
+  /** The harness command behind the step, for whoever runs it (the lead). */
+  command?: string | undefined;
 }) {
   const o = t.overview;
   return (
@@ -587,6 +930,11 @@ function StepDetails({
           </li>
         ))}
         {s?.since ? <li className="hui-muted">{clockOf(s.since, t, timeZone, now)}</li> : null}
+        {command ? (
+          <li className="hui-muted">
+            {o.command} <code>{command}</code>
+          </li>
+        ) : null}
       </ul>
     </details>
   );

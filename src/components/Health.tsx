@@ -6,7 +6,7 @@ import { dict, label } from '../model/dict.ts';
 import { formatDuration, formatUsd, formatWindow, usd } from '../model/format.ts';
 import { instantMs } from '../model/compat.ts';
 import type { OperatorView } from '../model/view.ts';
-import { Clipped, Heading, WorkRef, clockOf, type ScreenProps } from './common.tsx';
+import { Clipped, Codes, Heading, WorkRef, clockOf, type ScreenProps } from './common.tsx';
 import { DriftLine } from './WorkDetail.tsx';
 
 export interface HealthProps extends ScreenProps {
@@ -126,7 +126,7 @@ export function Health({
           <ul className="hui-list">
             {h.warnings.map((w, i) => (
               <li key={i}>
-                {w.message} <code className="hui-muted">{w.code}</code>
+                {w.message} <Codes t={t} codes={[w.code]} />
               </li>
             ))}
           </ul>

@@ -96,9 +96,16 @@ test('work detail (RU): now, stages, why a retry, what was checked and how', () 
   const ru = html(<WorkDetail detail={running} lang="ru" timeZone={TZ} workHref={workHref} />);
   assert.match(text(ru), /Проверки \(candidate-test:unit\) с 11:52, 7 мин 50 с; обычно 5–12 мин\./);
   assert.match(ru, /Дальше: ревью, интеграция\./);
-  assert.match(ru, /Подготовка<\/span> <span class="hui-muted">— пройден, 20 с/);
-  assert.match(ru, /Проверки<\/span> <span class="hui-muted">— идёт сейчас/);
-  assert.match(ru, /Ревью<\/span> <span class="hui-muted">— впереди/);
+  // The process timeline of the latest attempt: each stage with its state and time.
+  const tl = text(ru.slice(ru.indexOf('data-testid="timeline"')));
+  assert.match(
+    tl,
+    /^[^]*?Подготовкапройдено, 20 сНаписание кодапройдено, 10 минПроверкиидёт сейчасРевьювпередиИнтеграциявпередиПриёмкавпереди/,
+  );
+  assert.match(ru, /Попытка 2 \(последняя\) · всего 10 мин 20 с/);
+  // The earlier attempt stopped at the checks: what came after was not reached.
+  const old = text(ru.slice(ru.indexOf('data-testid="earlier-attempts"')));
+  assert.match(old, /Попытка 1 · ошибка в коде[^]*Проверкине прошло, 45 сРевьюне дошло/);
   assert.match(ru, /Попытка 2 из 3 \(осталось 1\)\./);
   assert.match(ru, /Попытка 1 остановлена: a check failed: lint found an unused import\./);
   assert.match(ru, /Группа сбоя: ошибка в коде\./);
@@ -435,7 +442,11 @@ test('health: plain words with codes; not-checked drift is never zero drift', ()
   assert.match(s, /Контроллер не запущен — работа не продвигается\./);
   assert.match(s, /Зависли 2 попытки\./);
   assert.match(s, /не проверено: 2/);
-  assert.match(s, /target ref not read <code class="hui-muted">DRIFT_UNAVAILABLE<\/code>/);
+  // The code only under «подробности» (F-AA).
+  assert.match(
+    s,
+    /target ref not read <details[^>]*><summary>подробности<\/summary><p><span><code>DRIFT_UNAVAILABLE<\/code>/,
+  );
   assert.match(s, /href="#\/work\/locale-format"/);
   assert.match(html(<Health view={view} lang="en" />), /panel: no data/);
 });
@@ -627,7 +638,7 @@ test('who did what: [] is a quiet window, a missing feed is an older harness, cl
       />,
     ),
   );
-  assert.match(future, /11:59 robot a robot waved\s+robot\.waved/);
+  assert.match(future, /11:59 robot a robot waved\s+подробностиrobot\.waved/);
   // Without a viewer clock or view day, an old event shows its date.
   const older = text(
     html(
@@ -648,7 +659,7 @@ test('overview: plan strip, waiting with who acts, plain question lines (RU)', (
   const ru = html(<Overview view={view} lang="ru" timeZone={TZ} workHref={workHref} />);
   assert.match(
     ru,
-    /export-csv<\/strong><\/a> <span class="hui-badge">Ждёт ответа<\/span><span class="hui-muted"> после add-greeting/,
+    /export-csv<\/strong><\/a><span[^>]*>Export report as CSV<\/span><span class="hui-badge">Ждёт ответа<\/span><span[^>]*>одна попытка в среднем около 50 мин<\/span><span[^>]*>после add-greeting/,
   );
   assert.match(ru, /Что изменится: Changes how the exported file opens/);
   assert.match(ru, /Ответить можете только вы\./);
@@ -964,7 +975,7 @@ test('answer basis: who answered and why, RU first; alpha.55 names only who answ
   const ru = text(html(<Overview view={ruView} lang="ru" timeZone={TZ} workHref={workHref} />));
   assert.match(
     ru,
-    /q-12: Ответ передан исполнителю; ничего делать не нужно\.11:27 — ответил ведущий \(технический вопрос\): хватает встроенного Intl\.DateTimeFormat, без новой зависимости/,
+    /: Какую библиотеку дат использовать для форматирования\?Ответ передан исполнителю; ничего делать не нужно\.11:27 — ответил ведущий \(технический вопрос\): хватает встроенного Intl\.DateTimeFormat, без новой зависимости/,
   );
   assert.match(ru, /кто и почему ответил: что это значит/);
   // A question of a closed work: the detail names the operator's answer.
@@ -985,7 +996,7 @@ test('answer basis: who answered and why, RU first; alpha.55 names only who answ
   assert.doesNotMatch(oldOverview, /кто и почему ответил/);
   assert.match(
     text(oldOverview),
-    /q-12: Ответ передан исполнителю; ничего делать не нужно\.ответил: ведущий/,
+    /\?Ответ передан исполнителю; ничего делать не нужно\.ответил: ведущий/,
   );
   // Neither basis nor answeredBy: nothing is said about who answered.
   const bare = asAlpha55(running);

@@ -1,0 +1,244 @@
+// The whole scope, rough times, task cards and the process timeline
+// (alpha.4): pure model code over the demo fixtures and made-up variants.
+import { strict as assert } from 'node:assert';
+import { readFileSync } from 'node:fs';
+import { test } from 'node:test';
+import {
+  attemptAverage,
+  checkView,
+  checkWorkDetail,
+  formatRange,
+  formatRough,
+  nextSteps,
+  overallProgress,
+  scopeLeft,
+  scopeOf,
+  splitQuestions,
+  stageLeft,
+  taskCards,
+  timelineOf,
+  timelines,
+  type OperatorView,
+  type WorkDetailView,
+} from '../src/model/index.ts';
+
+const read = <T>(rel: string): T =>
+  JSON.parse(readFileSync(new URL(rel, import.meta.url), 'utf8')) as T;
+const viewOf = (rel: string): OperatorView => {
+  const c = checkView(read(rel));
+  if (!c.ok) throw new Error(c.message);
+  return c.view;
+};
+const view = viewOf('../fixtures/view.sample.json');
+const stopped = viewOf('../fixtures/view.stopped.json');
+const running = (() => {
+  const c = checkWorkDetail(read('../fixtures/work.sample.json'));
+  if (!c.ok) throw new Error(c.message);
+  return c.detail;
+})();
+const at = (iso: string) => Date.parse(iso);
+
+test('overall progress: harness counts, never the clipped list; scope tasks outside are added', () => {
+  assert.deepEqual(overallProgress(view), {
+    total: 4,
+    done: 1,
+    running: 1,
+    waiting: 2,
+    cancelled: 0,
+    outside: undefined,
+    outsideUnlisted: 0,
+  });
+  // A clipped works list does not change the counts: they come from `progress`.
+  assert.equal(overallProgress({ ...view, works: view.works.slice(0, 1) }).total, 4);
+  const withScope = {
+    ...view,
+    scope: {
+      total: 8,
+      tasks: [
+        { id: 'T-1', workId: 'add-greeting', state: 'in-harness' },
+        { id: 'T-7', title: 'Search page', state: 'not-handed-over' },
+        { id: 'T-8', state: 'not-ready', plain: 'criteria are not written yet' },
+        { id: 42, state: 'not-ready' }, // malformed: dropped
+      ],
+    },
+  } as OperatorView;
+  const s = scopeOf(withScope)!;
+  assert.equal(s.tasks.length, 3);
+  // Two tasks outside the harness are listed; of 8 in the snapshot, 4 are works: 2 more are clipped.
+  assert.deepEqual(overallProgress(withScope), {
+    total: 8,
+    done: 1,
+    running: 1,
+    waiting: 2,
+    cancelled: 0,
+    outside: 2,
+    outsideUnlisted: 2,
+  });
+  // A scope section without a valid task reads as absent, not as "nothing outside".
+  assert.equal(scopeOf({ ...view, scope: { tasks: [{ id: 1 }] } } as OperatorView), undefined);
+  assert.equal(scopeOf({ ...view, scope: 'all' } as unknown as OperatorView), undefined);
+});
+
+test('rough times: ranges from observed times, unknown never zero', () => {
+  // 11 attempts, 33 000 000 ms in the window: 50 min on average.
+  assert.deepEqual(attemptAverage(view), { ms: 3_000_000, samples: 11 });
+  // 3 works left, 2 slots: at best 2 rounds of 50 min, at worst 3 in a row.
+  assert.deepEqual(scopeLeft(view).range, { loMs: 6_000_000, hiMs: 9_000_000 });
+  // The low end rounds down, the high end up: never narrower than the numbers.
+  assert.equal(formatRange(scopeLeft(view).range!, 'ru'), '1,5–2,5 ч');
+  // Below the sample minimum or without totals (alpha.55): no range at all.
+  const few = {
+    ...view,
+    history: { ...view.history, totals: { ...view.history.totals!, attemptsStarted: 2 } },
+  };
+  assert.equal(attemptAverage(few), undefined);
+  assert.equal(scopeLeft(few).range, undefined);
+  const { totals: _t, ...noTotals } = view.history;
+  assert.equal(scopeLeft({ ...view, history: noTotals }).range, undefined);
+  // Nothing left: no range, zero works.
+  assert.deepEqual(
+    scopeLeft({ ...view, progress: { ...view.progress, done: 4, running: 0 } }).works,
+    0,
+  );
+  assert.equal(formatRough(20_000, 'ru'), 'меньше минуты');
+  assert.equal(formatRough(7 * 60_000 + 1, 'ru'), '8 мин');
+  assert.equal(formatRough(41 * 60_000, 'en'), '45 min');
+  assert.equal(formatRough(70 * 60_000, 'ru'), '1,5 ч');
+  assert.equal(formatRange({ loMs: 10_000, hiMs: 4 * 60_000 }, 'ru'), 'до 4 мин');
+  assert.equal(formatRange({ loMs: 5 * 60_000, hiMs: 12 * 60_000 }, 'ru'), '5–12 мин');
+  assert.equal(formatRange({ loMs: 5 * 60_000, hiMs: 5 * 60_000 }, 'en'), 'about 5 min');
+  assert.equal(formatRange({ loMs: 10_000, hiMs: 20_000 }, 'en'), 'under a minute');
+});
+
+test('the rest of a stage: typical minus elapsed; longer than usual is said, not a negative', () => {
+  const w = view.works.find((x) => x.id === 'locale-format')!;
+  // Gates since 11:52:10, usually 5–12 min.
+  assert.deepEqual(stageLeft(w, at('2026-11-19T11:54:10Z')), {
+    kind: 'range',
+    range: { loMs: 180_000, hiMs: 600_000 },
+  });
+  assert.deepEqual(stageLeft(w, at('2026-11-19T12:10:00Z')), { kind: 'over', usualMaxMs: 720_000 });
+  const { typical: _t, ...stage } = w.stage;
+  assert.equal(stageLeft({ ...w, stage }, at('2026-11-19T11:54:10Z')), undefined);
+  // Not a slot stage: nothing to count down.
+  assert.equal(
+    stageLeft({ ...w, stage: { ...w.stage, name: 'queued' } }, at('2026-11-19T11:54:10Z')),
+    undefined,
+  );
+});
+
+test('task cards: running never waits (F-J), accepted never stopped (F-AY)', () => {
+  // A running work with a stale "not ready" blocker and a controller wait.
+  const busy: OperatorView = {
+    ...view,
+    works: view.works.map((w) =>
+      w.id === 'locale-format'
+        ? {
+            ...w,
+            blockers: [{ code: 'NOT_READY', plain: 'already in work', actor: 'controller' }],
+            stage: { ...w.stage, needs: { actor: 'controller', action: 'wait' } },
+          }
+        : w.id === 'add-greeting'
+          ? {
+              ...w,
+              blockers: [
+                { code: 'NOT_READY', plain: 'already accepted', actor: null },
+                { code: 'ATTEMPTS_EXHAUSTED', plain: 'already accepted', actor: null },
+              ],
+            }
+          : w,
+    ),
+  };
+  const steps = nextSteps(busy);
+  assert.ok(!steps.queue.some((q) => q.workId === 'locale-format'));
+  assert.ok(!steps.other.some((s) => s.workIds.includes('locale-format')));
+  assert.ok(!steps.queue.some((q) => q.workId === 'add-greeting'));
+  const cards = taskCards(busy, steps);
+  const byId = (id: string) => cards.find((c) => c.work.id === id)!;
+  assert.equal(byId('locale-format').phase, 'running');
+  assert.deepEqual(byId('locale-format').next, { kind: 'harness', stage: 'gates' });
+  assert.equal(byId('add-greeting').phase, 'accepted');
+  assert.deepEqual(byId('add-greeting').next, { kind: 'nobody' });
+  assert.equal(byId('export-csv').phase, 'question');
+  assert.deepEqual(byId('export-csv').next, { kind: 'actors', actors: ['operator'] });
+  assert.deepEqual(byId('docs-page').next, { kind: 'dependency', on: ['export-csv'] });
+  // Running first, accepted last.
+  assert.equal(cards[0]!.work.id, 'locale-format');
+  assert.equal(cards.at(-1)!.work.id, 'add-greeting');
+  // The stopped run: a decision of the operator after the lead; the dependent waits.
+  const st = taskCards(stopped, nextSteps(stopped));
+  assert.equal(st[0]!.phase, 'stopped');
+  assert.deepEqual(st[0]!.next, { kind: 'actors', actors: ['lead', 'operator'] });
+});
+
+test('a technical question the lead answers by the policy is not yours (F-W)', () => {
+  const asking: OperatorView = {
+    ...view,
+    questions: view.questions.map((q) =>
+      q.workId === 'locale-format' ? { ...q, state: 'awaiting-answer' } : q,
+    ),
+  };
+  const steps = nextSteps(asking);
+  const split = splitQuestions(asking, steps);
+  assert.deepEqual(
+    split.yours.map((q) => q.workId),
+    ['export-csv'],
+  );
+  assert.deepEqual(
+    split.lead.map((q) => q.workId),
+    ['locale-format'],
+  );
+  // Without `leadAnswers.technical` the same question is yours.
+  const strict: OperatorView = {
+    ...asking,
+    settings: {
+      ...asking.settings,
+      thresholds: { ...asking.settings.thresholds, leadAnswersTechnical: false },
+    },
+  };
+  assert.equal(splitQuestions(strict, nextSteps(strict)).yours.length, 2);
+});
+
+test('process timeline: stages with time and outcome; review is a stage; acceptance last', () => {
+  const [latest, earlier] = timelines(running);
+  assert.deepEqual(
+    latest!.steps.map((s) => [s.stage, s.state, s.durationMs]),
+    [
+      ['prepare', 'passed', 20_000],
+      ['writer', 'passed', 600_000],
+      ['gates', 'current', undefined],
+      ['review', 'ahead', undefined],
+      ['integration', 'ahead', undefined],
+      ['acceptance', 'ahead', undefined],
+    ],
+  );
+  // The failed earlier attempt stopped at the checks: the rest was not reached.
+  assert.deepEqual(
+    earlier!.steps.map((s) => [s.stage, s.state]),
+    [
+      ['prepare', 'passed'],
+      ['writer', 'passed'],
+      ['gates', 'failed'],
+      ['review', 'skipped'],
+      ['integration', 'skipped'],
+      ['acceptance', 'skipped'],
+    ],
+  );
+  // An accepted work: acceptance passed. A newer stage name keeps its place.
+  const accepted = read<WorkDetailView>('../fixtures/work.accepted.sample.json');
+  const done = timelineOf(accepted.attempts[0], accepted.work, true);
+  assert.equal(done.at(-1)!.state, 'passed');
+  const odd = timelineOf(
+    { ...running.attempts[0]!, stages: [{ stage: 'sandbox-probe', durationMs: 5_000 }] },
+    running.work,
+    true,
+  );
+  assert.ok(odd.some((s) => s.stage === 'sandbox-probe'));
+  // No attempt yet: everything ahead.
+  const fresh = timelineOf(
+    undefined,
+    { ...running.work, stage: { name: 'queued', next: [] } },
+    true,
+  );
+  assert.ok(fresh.every((s) => s.state === 'ahead'));
+});

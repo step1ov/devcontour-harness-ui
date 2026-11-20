@@ -39,6 +39,12 @@ test('stopped run: one decision for you after the lead, the waits say whose turn
 }) => {
   await page.goto(url.replace(/\/?$/, '/') + '?lang=ru#/');
   const main = page.locator('main');
+  // No controller and nothing running: the queue stands, it does not «go» (F-X).
+  await expect(main.getByTestId('queue-state')).toHaveText('Очередь стоит');
+  await expect(main.getByTestId('story')).toHaveText(
+    'Сейчас ничего не выполняется: работа ждёт вашего решения.',
+  );
+  await expect(main.getByTestId('problems')).toContainText('очередь стоит: harness не запущен');
   await expect(main.getByTestId('sentence')).toHaveText(
     'Сейчас: остановлено 1. От вас: принять 1 решение (после ведущего).',
   );

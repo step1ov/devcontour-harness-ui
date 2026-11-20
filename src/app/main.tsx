@@ -9,8 +9,11 @@ import { Decisions } from '../components/Decisions.tsx';
 import { Health } from '../components/Health.tsx';
 import { History } from '../components/History.tsx';
 import { Overview } from '../components/Overview.tsx';
-import { Reviews } from '../components/Reviews.tsx';
-import { Settings } from '../components/Settings.tsx';
+import { Settings, type ThemeChoice } from '../components/Settings.tsx';
+import { Tasks } from '../components/Tasks.tsx';
+import { Alert } from '../components/ui/alert.tsx';
+import { Button } from '../components/ui/button.tsx';
+import { cn } from '../components/ui/cn.ts';
 import { WorkDetail } from '../components/WorkDetail.tsx';
 import {
   dict,
@@ -21,12 +24,13 @@ import {
   type Digested,
   formatClock,
   pickLang,
-  questionStatus,
+  nextSteps,
   type OperatorView,
   type ViewCheck,
   type WorkDetailCheck,
 } from '../model/index.ts';
-import { activityHash, parseRoute, workHash, type Route } from './route.ts';
+import { activityHash, parseRoute, redirectOf, workHash, type Route } from './route.ts';
+import { splitQuestions } from '../model/tasks.ts';
 import '../components/styles.css';
 import './app.css';
 
@@ -36,9 +40,75 @@ let lang: Lang = 'ru';
 let t: Dict = dict(lang);
 let source: ViewSource;
 let uiVersion: string | undefined;
+/** The app build the page booted with (`/api/health` `build`, F-AF). */
+let bootBuild: string | undefined;
 /** What the server watches (`/api/health`): a live `harness view` or a file. */
 let liveRoute: 'state' | 'file' | undefined;
-const mobile = () => window.matchMedia('(max-width: 639px)').matches;
+
+const THEME_KEY = 'devcontour-harness-ui:theme';
+/** The viewer's theme choice, kept in this browser only; storage may be unavailable. */
+function readTheme(): ThemeChoice {
+  try {
+    const v = window.localStorage.getItem(THEME_KEY);
+    return v === 'light' || v === 'dark' ? v : 'system';
+  } catch {
+    return 'system';
+  }
+}
+function applyTheme(c: ThemeChoice) {
+  if (c === 'system') delete document.documentElement.dataset.theme;
+  else document.documentElement.dataset.theme = c;
+}
+function useTheme(): [ThemeChoice, (c: ThemeChoice) => void] {
+  const [theme, setTheme] = useState<ThemeChoice>(readTheme);
+  return [
+    theme,
+    (c) => {
+      setTheme(c);
+      applyTheme(c);
+      try {
+        if (c === 'system') window.localStorage.removeItem(THEME_KEY);
+        else window.localStorage.setItem(THEME_KEY, c);
+      } catch {
+        // Not kept: the choice lasts for this page only.
+      }
+    },
+  ];
+}
+
+/** How often an open tab asks whether a new panel build is served. */
+const BUILD_CHECK_MS = 60_000;
+/**
+ * F-AF: an open tab notices a new panel build (the server restarted with a
+ * new version) and offers a reload instead of showing the old bundle.
+ */
+function useNewBuild(): { version: string } | undefined {
+  const [fresh, setFresh] = useState<{ version: string } | undefined>();
+  useEffect(() => {
+    if (!bootBuild) return;
+    let stopped = false;
+    const check = async () => {
+      if (document.hidden) return;
+      try {
+        const r = await fetch(new URL('./api/health', window.location.href), { cache: 'no-store' });
+        const h = (await r.json()) as { build?: unknown; version?: unknown };
+        if (!stopped && typeof h.build === 'string' && h.build !== bootBuild)
+          setFresh({ version: typeof h.version === 'string' ? h.version : '' });
+      } catch {
+        // The panel server is away: the connection banner says so.
+      }
+    };
+    const timer = window.setInterval(() => void check(), BUILD_CHECK_MS);
+    const onVisible = () => void check();
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, []);
+  return fresh;
+}
 
 function useRoute(): Route {
   const [route, setRoute] = useState(() => parseRoute(window.location.hash));
@@ -335,39 +405,90 @@ function Freshness({ generatedAt, live }: { generatedAt: string; live: Live }) {
   );
 }
 
-type NavKey = 'overview' | 'reviews' | 'decisions' | 'activity' | 'settings' | 'history' | 'health';
+type NavKey = 'overview' | 'tasks' | 'decisions' | 'journal' | 'settings';
 const screens: [string, NavKey][] = [
   ['#/', 'overview'],
-  ['#/reviews', 'reviews'],
+  ['#/tasks', 'tasks'],
   ['#/decisions', 'decisions'],
-  ['#/activity', 'activity'],
+  ['#/activity', 'journal'],
   ['#/settings', 'settings'],
+];
+/** Screens of «Журнал»: who did what, the run over time, the machinery. */
+const journal: [string, 'activity' | 'history' | 'health'][] = [
+  ['#/activity', 'activity'],
   ['#/history', 'history'],
   ['#/health', 'health'],
 ];
-const isNavKey = (s: string): s is NavKey => screens.some(([, k]) => k === s);
+const navOf = (s: Route['screen']): NavKey | undefined =>
+  s === 'overview' || s === 'tasks' || s === 'decisions' || s === 'settings'
+    ? s
+    : s === 'work'
+      ? 'tasks'
+      : s === 'activity' || s === 'history' || s === 'health'
+        ? 'journal'
+        : undefined;
+const titleOf = (r: Route): string =>
+  r.screen === 'work'
+    ? (r.workId ?? '')
+    : r.screen === 'activity' || r.screen === 'history' || r.screen === 'health'
+      ? t.nav[r.screen]
+      : r.screen === 'overview' ||
+          r.screen === 'tasks' ||
+          r.screen === 'decisions' ||
+          r.screen === 'settings'
+        ? t.nav[r.screen]
+        : t.app.notFound;
 
 function Nav({ route }: { route: Route }) {
   const other = lang === 'ru' ? 'en' : 'ru';
+  const current = navOf(route.screen);
   return (
-    <nav className="app-nav" aria-label={t.nav.label}>
+    <header className="app-top hui:border-b hui:border-border hui:bg-card">
+      <nav className="app-nav" aria-label={t.nav.label}>
+        <span className="app-brand">{t.app.title}</span>
+        <ul>
+          {screens.map(([href, key]) => (
+            <li key={key}>
+              <a
+                href={href}
+                aria-current={current === key ? 'page' : undefined}
+                className={cn('app-tab', current === key && 'app-tab-on')}
+              >
+                {t.nav[key]}
+              </a>
+            </li>
+          ))}
+        </ul>
+        <a
+          className="app-lang"
+          href={`?lang=${other}${window.location.hash}`}
+          lang={other}
+          hrefLang={other}
+        >
+          {dict(other).langName}
+        </a>
+      </nav>
+    </header>
+  );
+}
+
+/** Second row of «Журнал»: events, the run over time, the machinery. */
+function JournalNav({ route }: { route: Route }) {
+  return (
+    <nav className="app-subnav" aria-label={t.nav.journalLabel}>
       <ul>
-        {screens.map(([href, key]) => (
+        {journal.map(([href, key]) => (
           <li key={key}>
-            <a href={href} aria-current={route.screen === key ? 'page' : undefined}>
+            <a
+              href={href}
+              aria-current={route.screen === key ? 'page' : undefined}
+              className={cn('app-chip', route.screen === key && 'app-chip-on')}
+            >
               {t.nav[key]}
             </a>
           </li>
         ))}
       </ul>
-      <a
-        className="app-lang"
-        href={`?lang=${other}${window.location.hash}`}
-        lang={other}
-        hrefLang={other}
-      >
-        {dict(other).langName}
-      </a>
     </nav>
   );
 }
@@ -409,8 +530,8 @@ function WorkScreen({ id, anchor }: { id: string; anchor: string | undefined }) 
   return (
     <>
       <p>
-        <a className="hui-link" href="#/">
-          {t.nav.back}
+        <a className="hui-link" href="#/tasks">
+          {t.nav.backTasks}
         </a>
       </p>
       {!value ? (
@@ -430,6 +551,13 @@ function WorkScreen({ id, anchor }: { id: string; anchor: string | undefined }) 
 
 function App() {
   const route = useRoute();
+  const [theme, setTheme] = useTheme();
+  const fresh = useNewBuild();
+  const redirect = redirectOf(route);
+  useEffect(() => {
+    // An old link (`#/reviews`) lands where its content lives now.
+    if (redirect) window.location.replace(redirect);
+  }, [redirect]);
   const { value: check, live } = useLive<ViewCheck & Digested>(
     (signal) => source.load(signal),
     'view',
@@ -442,12 +570,7 @@ function App() {
   const main = useRef<HTMLElement>(null);
   const first = useRef(true);
   useEffect(() => {
-    const name =
-      route.screen === 'work'
-        ? route.workId
-        : isNavKey(route.screen)
-          ? t.nav[route.screen]
-          : t.app.notFound;
+    const name = titleOf(route);
     document.title = `${t.app.title} — ${name}`;
     // Move focus to the new screen for keyboard and screen-reader users (not on first load).
     if (first.current) first.current = false;
@@ -465,14 +588,14 @@ function App() {
     const screen =
       route.screen === 'overview' ? (
         <Overview {...common} />
-      ) : route.screen === 'reviews' ? (
-        <Reviews {...common} collapseFindings={mobile()} />
+      ) : route.screen === 'tasks' || route.screen === 'reviews' ? (
+        <Tasks {...common} />
       ) : route.screen === 'decisions' ? (
         <Decisions {...common} />
       ) : route.screen === 'activity' ? (
         <Activity {...common} filter={route.filter ?? {}} filterHref={activityHash} />
       ) : route.screen === 'settings' ? (
-        <Settings view={view} lang={lang} />
+        <Settings view={view} lang={lang} theme={theme} onThemeChange={setTheme} />
       ) : route.screen === 'history' ? (
         <History view={view} lang={lang} now={Date.now()} />
       ) : route.screen === 'health' ? (
@@ -480,7 +603,8 @@ function App() {
       ) : (
         <Note bad>{t.app.notFound}</Note>
       );
-    const waiting = view.questions.filter((q) => questionStatus(q).needsAnswer).length;
+    // Questions the lead answers by the policy are not announced as yours (F-W).
+    const waiting = splitQuestions(view, nextSteps(view)).yours.length;
     const clipped = Boolean(view.truncated?.questions);
     body = (
       <>
@@ -494,6 +618,7 @@ function App() {
         <p className="hui-sr" aria-live="polite">
           {t.app.liveQuestions(waiting, clipped)}
         </p>
+        {navOf(route.screen) === 'journal' ? <JournalNav route={route} /> : null}
         {screen}
       </>
     );
@@ -511,7 +636,15 @@ function App() {
         {t.app.skip}
       </a>
       <Nav route={route} />
-      <main id="hui-main" ref={main} tabIndex={-1}>
+      <main id="hui-main" ref={main} tabIndex={-1} className="app-main">
+        {fresh ? (
+          <Alert tone="warn" className="app-alert" data-testid="new-build" role="status">
+            <span>{t.app.newBuild(fresh.version)}</span>
+            <Button type="button" onClick={() => window.location.reload()}>
+              {t.app.reload}
+            </Button>
+          </Alert>
+        ) : null}
         {body}
       </main>
     </>
@@ -528,10 +661,12 @@ async function boot() {
   try {
     const h = (await (await fetch(new URL('./api/health', window.location.href))).json()) as {
       version?: unknown;
+      build?: unknown;
       lang?: unknown;
       live?: unknown;
     };
     if (typeof h.version === 'string') uiVersion = h.version;
+    if (typeof h.build === 'string') bootBuild = h.build;
     if (h.live === 'state' || h.live === 'file') liveRoute = h.live;
     if (typeof h.lang === 'string') served = h.lang;
   } catch {
@@ -541,6 +676,7 @@ async function boot() {
   lang = pickLang(asked, [...(navigator.languages ?? []), navigator.language]);
   t = dict(lang);
   document.documentElement.lang = lang;
+  applyTheme(readTheme());
   // The UI language goes to the view source too: the harness writes the plain
   // strings (`plain`, `line`, warnings) in it (`harness view --lang`).
   source = httpViewSource(new URL('./', window.location.href).toString(), fetch, { lang });

@@ -6,7 +6,15 @@ import type { Dict, Lang } from '../model/dict.ts';
 import { dict, label } from '../model/dict.ts';
 import { formatUsd } from '../model/format.ts';
 import type { Escalation, OperatorView, ReviewSubjectView } from '../model/view.ts';
-import { Clipped, Heading, WorkRef, actorLabel, clockOf, type ScreenProps } from './common.tsx';
+import {
+  Clipped,
+  Codes,
+  Heading,
+  WorkRef,
+  actorLabel,
+  clockOf,
+  type ScreenProps,
+} from './common.tsx';
 
 export interface ReviewsProps extends ScreenProps {
   view: OperatorView;
@@ -111,9 +119,12 @@ export function EscalationList({
       {items.map((e, i) => (
         <li key={i} className="hui-item" data-status="blocked">
           {e.workId ? <WorkRef id={e.workId} {...links} /> : null}
-          {e.subject ? <code> {e.subject}</code> : null} <code className="hui-muted">{e.code}</code>{' '}
-          <span className="hui-who">{t.overview.whoActs(actorLabel(t, e.actor), e.action)}</span>{' '}
-          <span className="hui-muted">({clockOf(e.since, t, timeZone, now)})</span>
+          {e.subject ? <code> {e.subject}</code> : null}{' '}
+          <span className="hui-who">
+            {t.overview.whoActs(actorLabel(t, e.actor), label(t.action, e.action))}
+          </span>{' '}
+          <span className="hui-muted">({clockOf(e.since, t, timeZone, now)})</span>{' '}
+          <Codes t={t} codes={[e.code, e.action]} />
         </li>
       ))}
     </ul>
