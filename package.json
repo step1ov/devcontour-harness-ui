@@ -1,6 +1,6 @@
 {
   "name": "devcontour-harness-ui",
-  "version": "0.1.0-alpha.4",
+  "version": "0.1.0-alpha.5",
   "description": "Read-only operator panel for devcontour-harness: React components and a local standalone app over the harness operator view.",
   "type": "module",
   "license": "MIT",
