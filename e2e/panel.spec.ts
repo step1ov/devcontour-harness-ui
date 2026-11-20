@@ -12,7 +12,7 @@ const screens: [string, string, RegExp][] = [
   [
     'overview',
     '#/',
-    /Сейчас harness работает над locale-format[\s\S]*Сделано 1 из 6 · в работе 1 · ждут 2[\s\S]*Какой разделитель использовать в CSV\?[\s\S]*Проблемы по ходу/,
+    /Сейчас harness работает над locale-format[\s\S]*В harness: принято 1 из 4 · в работе 1 · ждут 2[\s\S]*Какой разделитель использовать в CSV\?[\s\S]*Проблемы по ходу/,
   ],
   [
     'tasks',
@@ -62,7 +62,8 @@ for (const [name, hash, key] of screens) {
 test('overview rings: two progressbars with values and text, light and dark, no scroll', async ({
   page,
 }, info) => {
-  await page.clock.setFixedTime(new Date('2026-11-19T12:05:00Z'));
+  // At the demo's own time: «прошло» goes on with the clock from the harness start point.
+  await page.clock.setFixedTime(new Date('2026-11-19T12:00:00Z'));
   const width = info.project.name === 'mobile' ? 390 : 1280;
   for (const scheme of ['light', 'dark'] as const) {
     await page.emulateMedia({ colorScheme: scheme });

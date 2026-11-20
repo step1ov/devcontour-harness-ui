@@ -138,6 +138,18 @@ export function timeState(f: ForecastView, lang: Lang, now?: number) {
       sub: t.nothingLeft,
       text: `${elapsed} · ${t.nothingLeft}`,
     };
+  if (remaining && elapsedMs === undefined) {
+    // A range without an elapsed time: the range stands; only the ring has no share to draw.
+    const words = remainingWords(remaining, lang);
+    return {
+      kind: 'noElapsed' as const,
+      share: undefined,
+      band: undefined,
+      center: words,
+      sub: t.leftWord,
+      text: `${t.elapsedUnknown} · ${t.left(words)}`,
+    };
+  }
   if (!remaining || elapsedMs === undefined)
     return {
       kind: 'unknown' as const,
@@ -275,7 +287,12 @@ export function ForecastRings({
               <p className="hui:text-xs hui:text-muted-foreground" data-testid="time-unknown">
                 {f.leftUnknownWhy}
               </p>
-            ) : r && time.kind === 'known' ? (
+            ) : time.kind === 'noElapsed' ? (
+              <p className="hui:text-xs hui:text-muted-foreground" data-testid="time-unknown">
+                {f.elapsedUnknownWhy}
+              </p>
+            ) : null}
+            {r && (time.kind === 'known' || time.kind === 'noElapsed') ? (
               <p className="hui:text-xs hui:text-muted-foreground">
                 {f.basis(
                   r.samples,

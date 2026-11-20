@@ -118,10 +118,11 @@ test('an unknown remaining time is a ring in the «неизвестно» state 
   delete f.forecast.time.elapsedMs;
   delete f.forecast.time.startedAt;
   assert.match(shown(overview(f)), /ещё не начиналось · сколько осталось — неизвестно/);
-  // A remaining range without an elapsed time is unknown too (no share to draw).
+  // A remaining range without any elapsed time keeps the range (no share to draw).
   const g = structuredClone(ru);
   delete g.forecast.time.elapsedMs;
-  assert.equal(timeState(viewOf(g).forecast!, 'ru').kind, 'unknown');
+  delete g.forecast.time.startedAt;
+  assert.equal(timeState(viewOf(g).forecast!, 'ru').kind, 'noElapsed');
 });
 
 test('nothing left: a full time ring, no range', () => {
@@ -154,7 +155,7 @@ test('without a forecast (harness alpha.59) the alpha.4 bar stays and the panel 
   const none = structuredClone(ru);
   delete none.forecast;
   const n = shown(overview(none));
-  assert.match(n, /Прогноза нет: harness не даёт его для этого объёма/);
+  assert.match(n, /В этом представлении harness нет прогноза; ниже — прежняя оценка панели\./);
   assert.doesNotMatch(n, /эта версия harness не сообщает прогноз/);
 });
 
@@ -354,7 +355,7 @@ test('a question after a lead step: the harness order, in the item and in who ac
   const v = viewOf(d);
   const s = nextSteps(v);
   assert.deepEqual(
-    s.questionAfter['export-csv']!.map((x) => [x.actor, x.code]),
+    s.questionAfter.get('export-csv')!.map((x) => [x.actor, x.code]),
     [['lead', 'APPROVAL_STALE']],
   );
   assert.deepEqual(actorsOn(s, 'export-csv', v), ['lead', 'operator']);
@@ -362,7 +363,7 @@ test('a question after a lead step: the harness order, in the item and in who ac
   assert.match(m, /Сначала ведущий: нужно согласовать план заново\. Затем — вы\./);
   assert.match(shown(html(<Tasks view={v} lang="ru" />)), /Дальше действует: ведущий, затем вы/);
   // Without steps there is no order for a question.
-  assert.deepEqual(nextSteps(viewOf(asAlpha59(d))).questionAfter, {});
+  assert.equal(nextSteps(viewOf(asAlpha59(d))).questionAfter.size, 0);
 });
 
 test('a work question line shows on the card when the question list does not carry it', () => {
@@ -374,10 +375,30 @@ test('a work question line shows on the card when the question list does not car
   d.truncated = { questions: 1 };
   const t = shown(html(<Tasks view={viewOf(d)} lang="ru" />));
   assert.match(t, /его получит следующая попытка/);
-  // With the question listed, its own line is shown once.
-  const both = structuredClone(ru);
-  both.works.find((x: Json) => x.id === 'export-csv').question.line = 'строка работы';
-  assert.doesNotMatch(shown(html(<Tasks view={viewOf(both)} lang="ru" />)), /строка работы/);
+  // The question is listed but carries no line: the work's line is shown.
+  const noLine = structuredClone(ru);
+  noLine.works.find((x: Json) => x.id === 'export-csv').question.line = 'строка работы';
+  assert.match(shown(html(<Tasks view={viewOf(noLine)} lang="ru" />)), /строка работы/);
+  // The listed question has its own line: it is shown once, the work's not again.
+  const both = structuredClone(noLine);
+  both.questions.find((q: Json) => q.workId === 'export-csv').line = 'строка вопроса';
+  const b = shown(html(<Tasks view={viewOf(both)} lang="ru" />));
+  assert.match(b, /строка вопроса/);
+  assert.doesNotMatch(b, /строка работы/);
+  // The work detail does the same.
+  const detail = read('../fixtures/ru/work.sample.json');
+  detail.work.question = {
+    requestId: 'q-99',
+    state: 'applied-awaiting-claim',
+    severity: 5,
+    line: 'ответ у идущей попытки 3 — ждать нечего',
+  };
+  const c = checkWorkDetail(detail);
+  assert.ok(c.ok);
+  assert.match(
+    shown(html(<WorkDetail detail={c.detail} lang="ru" />)),
+    /ответ у идущей попытки 3 — ждать нечего/,
+  );
 });
 
 test('a dropped tracker question list is never «nothing is needed»; a dropped scope is named', () => {
@@ -504,7 +525,7 @@ test('tracker compatibility in Health; updates banner and read-only mode in Sett
   delete noLine.health.sources[0].line;
   assert.match(
     shown(html(<Health view={viewOf(noLine)} lang="ru" timeZone="UTC" />)),
-    /версия трекера ниже рекомендуемой; контекст задачи не передаётся исполнителю/,
+    /версия трекера ниже рекомендуемой; трекер не объявляет контекст задачи/,
   );
   const banner = html(<UpdatesBanner updates={v.updates} lang="ru" />);
   assert.match(text(banner), /Доступна harness 0\.1\.0-alpha\.61 \+ панель 0\.1\.0-alpha\.6/);
@@ -523,4 +544,101 @@ test('tracker compatibility in Health; updates banner and read-only mode in Sett
     html(<Settings view={viewOf(asAlpha59(ru))} lang="ru" />),
     /settings-updates/,
   );
+});
+
+test('round 2: odd work ids, closed tracker tasks, a clipped plan review, unknown order', () => {
+  // A work id that is an Object.prototype key renders.
+  for (const id of ['constructor', 'toString', '__proto__']) {
+    const d = structuredClone(ru);
+    d.works[2].id = id;
+    d.questions[0].workId = id;
+    d.works[3].dependsOn = [id];
+    const v = viewOf(d);
+    assert.doesNotThrow(() => html(<Tasks view={v} lang="ru" />), id);
+    assert.doesNotThrow(() => html(<Overview view={v} lang="ru" />), id);
+  }
+  // Everything is done by the forecast: a listed task without a work is closed, not «to hand over».
+  const done = structuredClone(ru);
+  done.works = [done.works[0]];
+  done.progress = {
+    ...done.progress,
+    total: 1,
+    byStage: { done: 1 },
+    running: 0,
+    waitingOperator: 0,
+  };
+  done.questions = [];
+  done.sourceQuestions = [];
+  done.scope.tasks = [
+    done.scope.tasks[0],
+    {
+      id: 'rt-demo-9',
+      connector: 'relay-main',
+      key: 'DEMO-9',
+      state: 'not-ready',
+      plain: 'задача закрыта в трекере',
+    },
+  ];
+  Object.assign(done.forecast.progress, {
+    percent: 100,
+    total: 2,
+    done: 2,
+    inWork: 0,
+    left: 0,
+    weighted: 2,
+  });
+  const dm = shown(overview(done));
+  assert.doesNotMatch(dm, /передач/);
+  assert.match(dm, /Все работы приняты/);
+  // The works list is clipped and the harness says the queue runs: its line, not «ждут».
+  const clipped = structuredClone(ruStopped);
+  clipped.works = [];
+  clipped.escalations = [];
+  clipped.questions = [];
+  clipped.truncated = { works: 2 };
+  clipped.progress.queue = {
+    paused: false,
+    runner: 'running',
+    line: 'Очередь идёт: harness запущен.',
+  };
+  assert.match(
+    text(/data-testid="story"[^>]*>[^<]*</.exec(overview(clipped))![0]),
+    /Очередь идёт: harness запущен\./,
+  );
+  // A revision 4 document without steps leaves the order unknown: no panel «сначала».
+  const noSteps = structuredClone(ruStopped);
+  for (const w of noSteps.works) for (const b of w.blockers) delete b.step;
+  const reset = nextSteps(viewOf(noSteps)).operator.find((x) => x.action === 'reset-attempts')!;
+  assert.deepEqual(reset.after, []);
+  assert.doesNotMatch(shown(overview(noSteps)), /Сначала ведущий/);
+  // The same document as alpha.59: the alpha.4 code list still orders it.
+  const old = nextSteps(viewOf(asAlpha59(noSteps))).operator.find(
+    (x) => x.action === 'reset-attempts',
+  )!;
+  assert.deepEqual(
+    old.after.map((x) => x.code),
+    ['APPROVAL_STALE'],
+  );
+  // Every listed scope task is in harness and more are clipped: no «(0)» heading.
+  const allIn = structuredClone(ru);
+  allIn.scope.tasks = allIn.scope.tasks.filter((x: Json) => x.state === 'in-harness');
+  allIn.truncated = { scope: 3 };
+  for (const m of [shown(overview(allIn)), shown(html(<Tasks view={viewOf(allIn)} lang="ru" />))]) {
+    assert.doesNotMatch(m, /Ещё не переданы в harness \(0\)/);
+    assert.match(m, /Ещё 3 задачи среза прогона не показано/);
+  }
+});
+
+test('a remaining range without an elapsed time keeps the range; the ring has no share', () => {
+  const d = structuredClone(ru);
+  delete d.forecast.time.elapsedMs;
+  delete d.forecast.time.startedAt;
+  const m = overview(d);
+  const time = ring(m, 'ring-time');
+  assert.match(time, /data-state="unknown"/);
+  assert.match(time, /aria-valuetext="Время: сколько прошло — неизвестно · осталось ~1,5–3 ч"/);
+  const t = shown(m);
+  assert.match(t, /Сколько прошло, harness не сообщил/);
+  assert.doesNotMatch(t, /закончившихся попыток пока слишком мало/);
+  assert.match(t, /По 6 закончившимся попыткам/);
 });

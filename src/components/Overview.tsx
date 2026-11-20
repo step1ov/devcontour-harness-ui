@@ -170,7 +170,9 @@ export function Overview({
   const unfinished = overall.total - overall.done - overall.cancelled;
   // Harness works only: tasks outside the harness are the lead's to hand over, not the queue's.
   const harnessLeft = progress.total - progress.done - overall.cancelled;
-  const outsideLeft = overall.outside ?? 0;
+  // With a forecast that has nothing left, a listed task without a work is
+  // closed in the tracker, not waiting to be handed over.
+  const outsideLeft = view.forecast?.progress.left === 0 ? 0 : (overall.outside ?? 0);
   // Who moves the queue. Revision 4 says it (`queue.runner`); before it the
   // panel read it from the controller and the running count (F-X).
   const runner = progress.queue.runner;
@@ -437,7 +439,7 @@ export function Overview({
                   t={t}
                   lang={lang}
                   links={links}
-                  after={steps.questionAfter[q.workId]}
+                  after={steps.questionAfter.get(q.workId)}
                 />
               ))}
               {sourceQuestions.map((q) => (
@@ -949,6 +951,9 @@ function storySentence({
   // Revision 4: a plan review in a live run is the harness's move, not a wait.
   const reviewing = view.works.filter((w) => HARNESS_STAGES.has(w.stage.name));
   if (reviewing.length) return t.r4.planReview(reviewing.map((w) => workName(view, w.id)));
+  // The list is clipped and the harness says someone runs the queue: its words, not «ждут».
+  const q = view.progress.queue;
+  if (view.truncated?.works && q.runner === 'running' && q.line?.trim()) return q.line.trim();
   if (yours) return s.waitsYou;
   if (standing) return s.standing;
   return s.waitsOthers;

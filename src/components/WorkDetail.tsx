@@ -358,6 +358,14 @@ export function WorkDetail({
         <Heading t={t} term="technical">
           {w.questions}
         </Heading>
+        {detail.work.question?.line?.trim() &&
+        !detail.questions.some(
+          (q) => q.requestId === detail.work.question!.requestId && q.line?.trim(),
+        ) ? (
+          <p className="hui-muted" data-testid="work-question-line">
+            {detail.work.question.line}
+          </p>
+        ) : null}
         {detail.questions.length === 0 ? (
           <p className="hui-muted">{w.noQuestions}</p>
         ) : (

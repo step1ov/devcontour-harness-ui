@@ -891,6 +891,9 @@ const ru = {
     left: (r: string) => `осталось ${r}`,
     nothingLeft: 'осталось: ничего',
     leftUnknown: 'сколько осталось — неизвестно',
+    elapsedUnknown: 'сколько прошло — неизвестно',
+    elapsedUnknownWhy:
+      'Сколько прошло, harness не сообщил, поэтому круг не закрашен; остаток — по его наблюдениям.',
     leftUnknownWhy:
       'Почему неизвестно: закончившихся попыток пока слишком мало, чтобы оценить их обычную длину. Нулём это не показывается.',
     basis: (samples: number, perTask: string) =>
@@ -904,7 +907,7 @@ const ru = {
       'Круг «Время»: закрашена прошедшая часть от «прошло + осталось» по верхней границе; светлая дуга — насколько больше она по нижней границе.',
     releaseText: (line: string) => `До релиза: ${line}`,
     timeText: (line: string) => `Время: ${line}`,
-    none: 'Прогноза нет: harness не даёт его для этого объёма (работ нет или все отменены).',
+    none: 'В этом представлении harness нет прогноза; ниже — прежняя оценка панели.',
     fallback:
       'Круговые индикаторы «До релиза» и «Время» показываются с devcontour-harness 0.1.0-alpha.60: эта версия harness не сообщает прогноз (поле forecast). Ниже — прежняя полоса и грубая оценка панели.',
   },
@@ -945,7 +948,7 @@ const ru = {
       'below-recommended': 'версия трекера ниже рекомендуемой',
     } as Labels,
     sourceContext: (yes: boolean): string =>
-      yes ? 'контекст задачи передаётся исполнителю' : 'контекст задачи не передаётся исполнителю',
+      yes ? 'трекер объявляет контекст задачи' : 'трекер не объявляет контекст задачи',
     sourceContract: (n: number) => `договор REST ${n}`,
     sourceChecked: (when: string) => `проверено ${when}`,
     updatesTitle: 'Обновления',
@@ -1829,6 +1832,9 @@ const en: Dict = {
     left: (r: string) => `left ${r}`,
     nothingLeft: 'nothing left',
     leftUnknown: 'time left unknown',
+    elapsedUnknown: 'time elapsed unknown',
+    elapsedUnknownWhy:
+      'The harness did not say how much time has passed, so the ring is not filled; the time left is from its observations.',
     leftUnknownWhy:
       'Why unknown: too few finished attempts yet to know their usual length. It is never shown as zero.',
     basis: (samples: number, perTask: string) =>
@@ -1842,7 +1848,7 @@ const en: Dict = {
       'The «Time» ring: the filled part is elapsed out of «elapsed + left» at the upper end; the light arc is how much more it is at the lower end.',
     releaseText: (line: string) => `To release: ${line}`,
     timeText: (line: string) => `Time: ${line}`,
-    none: 'No forecast: the harness gives none for this scope (no works, or all cancelled).',
+    none: "This harness view has no forecast; below is the panel's earlier estimate.",
     fallback:
       "The «To release» and «Time» rings come with devcontour-harness 0.1.0-alpha.60: this harness version sends no forecast. Below are the earlier bar and the panel's rough estimate.",
   },
@@ -1883,7 +1889,7 @@ const en: Dict = {
       'below-recommended': 'tracker version is below the recommended one',
     },
     sourceContext: (yes: boolean) =>
-      yes ? 'the task context reaches the writer' : 'the task context does not reach the writer',
+      yes ? 'the tracker declares the task context' : 'the tracker declares no task context',
     sourceContract: (n: number) => `REST contract ${n}`,
     sourceChecked: (when: string) => `checked ${when}`,
     updatesTitle: 'Updates',

@@ -96,7 +96,7 @@ export function Tasks({ view, lang = 'ru', now, onOpenWork, workHref, timeZone }
       </ul>
       {view.truncated?.works ? <p className="hui-muted">{t.overview.planClipped}</p> : null}
       {scope ? (
-        outside.length || unlisted ? (
+        outside.length ? (
           <Block t={t} title={k.outside(outside.length)} testid="tasks-outside">
             {outside.length ? (
               <ul className="hui:grid hui:list-none hui:gap-2">
@@ -115,6 +115,11 @@ export function Tasks({ view, lang = 'ru', now, onOpenWork, workHref, timeZone }
             ) : null}
             {unlisted ? <p className="hui-muted">{t.r4.scopeClipped(unlisted)}</p> : null}
           </Block>
+        ) : unlisted ? (
+          // Every listed task has a work; the clipped ones have an unknown state: no «(0)».
+          <p className="hui-muted" data-testid="scope-clipped">
+            {t.r4.scopeClipped(unlisted)}
+          </p>
         ) : null
       ) : (
         <p className="hui:text-xs hui:text-muted-foreground" data-testid="scope-missing">
@@ -281,7 +286,7 @@ function TaskCardView({
           <span className="hui-who">{next}</span>
         </p>
         {w.question?.line?.trim() &&
-        !c.questions.some((q) => q.requestId === w.question!.requestId) ? (
+        !c.questions.some((q) => q.requestId === w.question!.requestId && q.line?.trim()) ? (
           <p className="hui-muted" data-testid="task-question-line">
             {w.question.line}
           </p>

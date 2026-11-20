@@ -3,7 +3,7 @@
 // minimal package in a fresh temp directory.
 import { strict as assert } from 'node:assert';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -94,7 +94,7 @@ test('this repository matches its package-lock.json', () => {
 
 /** A package whose lock and install are given by path (`node_modules/a/node_modules/b`). */
 const withTree = (
-  lock: Record<string, { version: string; optional?: boolean }>,
+  lock: Record<string, Record<string, unknown> & { version: string }>,
   installed: Record<string, string>,
   check: (root: string) => void,
   declared: Record<string, string> = { left: '1.0.0' },
@@ -162,5 +162,71 @@ test('a required direct dependency missing from the lock fails; an absent option
     },
     { 'node_modules/left': '1.0.0' },
     (root) => assert.equal(run(root).status, 0, run(root).stderr),
+  );
+});
+
+test('a required edge of the lock graph must resolve; peer and devOptional packages are required', () => {
+  // `left` needs `compiler`, which is neither locked nor installed.
+  withTree(
+    { 'node_modules/left': { version: '1.0.0', dependencies: { compiler: '^2.0.0' } } },
+    { 'node_modules/left': '1.0.0' },
+    (root) =>
+      assertMismatch(run(root), /node_modules\/left: needs compiler, not resolved in the lock/),
+  );
+  // Resolved from a parent directory, as Node does: fine.
+  withTree(
+    {
+      'node_modules/left': { version: '1.0.0' },
+      'node_modules/left/node_modules/inner': { version: '1.0.0', dependencies: { compiler: '2' } },
+      'node_modules/compiler': { version: '2.0.0' },
+    },
+    {
+      'node_modules/left': '1.0.0',
+      'node_modules/left/node_modules/inner': '1.0.0',
+      'node_modules/compiler': '2.0.0',
+    },
+    (root) => assert.equal(run(root).status, 0, run(root).stderr),
+  );
+  // An optional peer of a package may be unresolved.
+  withTree(
+    {
+      'node_modules/left': {
+        version: '1.0.0',
+        peerDependencies: { host: '*' },
+        peerDependenciesMeta: { host: { optional: true } },
+      },
+    },
+    { 'node_modules/left': '1.0.0' },
+    (root) => assert.equal(run(root).status, 0, run(root).stderr),
+  );
+  for (const flag of ['peer', 'devOptional'])
+    withTree(
+      {
+        'node_modules/left': { version: '1.0.0' },
+        'node_modules/shared': { version: '1.0.0', [flag]: true },
+      },
+      { 'node_modules/left': '1.0.0' },
+      (root) => assertMismatch(run(root), /shared: not installed, lock 1\.0\.0/),
+    );
+});
+
+test('an absent optional direct dependency passes', () => {
+  withTree(
+    {
+      'node_modules/left': { version: '1.0.0' },
+      'node_modules/fsevents': { version: '2.3.3', optional: true },
+    },
+    { 'node_modules/left': '1.0.0' },
+    (root) => {
+      const pkg = join(root, 'package.json');
+      const lockFile = join(root, 'package-lock.json');
+      const p = JSON.parse(readFileSync(pkg, 'utf8'));
+      p.optionalDependencies = { fsevents: '2.3.3' };
+      writeFileSync(pkg, JSON.stringify(p));
+      const l = JSON.parse(readFileSync(lockFile, 'utf8'));
+      l.packages[''].optionalDependencies = { fsevents: '2.3.3' };
+      writeFileSync(lockFile, JSON.stringify(l));
+      assert.equal(run(root).status, 0, run(root).stderr);
+    },
   );
 });
