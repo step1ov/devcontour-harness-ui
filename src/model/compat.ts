@@ -20,7 +20,7 @@ export type ViewCheck =
     };
 
 /** Highest `viewRevision` this build knows how to render in full. */
-export const KNOWN_VIEW_REVISION = 1;
+export const KNOWN_VIEW_REVISION = 2;
 
 type Obj = Record<string, unknown>;
 const isObject = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -191,7 +191,13 @@ const work = obj({
       repositoryId: S,
       ref: S,
       acceptedSha: opt(S),
-      remote: obj({ state: S, trackingRef: opt(S), reason: opt(S) }),
+      remote: obj({
+        state: S,
+        trackingRef: opt(S),
+        reason: opt(S),
+        checkedAt: opt(I),
+        line: opt(S),
+      }),
     }),
   ),
   question: opt(obj({ requestId: S, state: S, severity: N })),

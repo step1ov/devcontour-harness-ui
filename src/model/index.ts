@@ -39,9 +39,11 @@ export {
 export {
   footerSentence,
   formatClock,
+  formatWhen,
   headerSentence,
   langOf,
   pickLang,
+  remoteFreshness,
   ruPlural,
   targetSentence,
   type HeaderCounts,

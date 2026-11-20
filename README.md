@@ -22,7 +22,9 @@
 > представления владеет harness; см. [предложения для harness](docs/harness-proposals.md).
 > С harness `0.1.0-alpha.56` (ревизия представления 1) панель показывает,
 > кто и почему ответил на вопрос, итоги окна истории и замечает изменения по
-> токену harness; с alpha.55 всё прочее работает, как раньше.
+> токену harness. С `0.1.0-alpha.57` (ревизия 2) — ещё ленту «кто что
+> делал» и есть ли принятая работа в удалённой ветке (по копии ветки на этой
+> машине, без сети). С alpha.55 и alpha.56 всё прочее работает, как раньше.
 > [Дизайн](docs/design.md) описывает схему, экраны, безопасность и этапы;
 > изменения — в заметках к выпускам [0.1.0-alpha.2](docs/release-notes/0.1.0-alpha.2.md)
 > и [0.1.0-alpha.1](docs/release-notes/0.1.0-alpha.1.md).
@@ -42,7 +44,7 @@
 версия, как и у harness):
 
 ```sh
-npm install --save-dev --save-exact devcontour-harness@0.1.0-alpha.56 devcontour-harness-ui@0.1.0-alpha.2
+npm install --save-dev --save-exact devcontour-harness@0.1.0-alpha.57 devcontour-harness-ui@0.1.0-alpha.2
 npx devcontour-harness-ui --demo --lang ru      # демонстрационные данные
 # → {"ok":true,"url":"http://127.0.0.1:4790/","port":4790,"readOnly":true,...}
 ```

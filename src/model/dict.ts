@@ -51,7 +51,10 @@ export type GlossaryId =
   | 'attemptTime'
   | 'loadPeak'
   | 'windowSpend'
-  | 'typical';
+  | 'typical'
+  | 'operator'
+  | 'host'
+  | 'remote';
 
 const ruGlossary: Record<GlossaryId, { term: string; meaning: string }> = {
   lead: {
@@ -181,6 +184,21 @@ const ruGlossary: Record<GlossaryId, { term: string; meaning: string }> = {
     term: 'обычное время этапа',
     meaning:
       'Сколько этот этап занимал раньше в этом состоянии, по уже закончившимся этапам (не меньше пяти замеров): половина укладывалась в первое число, девять из десяти — во второе. Это наблюдение, а не обещание.',
+  },
+  operator: {
+    term: 'вы, оператор',
+    meaning:
+      'Человек, для которого идёт работа. Отвечает на вопросы, которые меняют результат для пользователя, и решает эскалации.',
+  },
+  host: {
+    term: 'хост',
+    meaning:
+      'Программа, внутри которой запущен harness (например, DevContour). Может ответить на вопрос исполнителя от своего имени по своим правилам.',
+  },
+  remote: {
+    term: 'в удалённой ветке',
+    meaning:
+      'harness сверяет принятый коммит с копией удалённой ветки на этой машине (remote-tracking ref, например origin/main) — без сети и без git fetch. Поэтому сведения могут отставать от удалённого репозитория до следующего git fetch или git push здесь. Время рядом — когда git на этой машине последний раз обновил эту копию. «Неизвестно» — не «нет» и не «отправлено». Сам harness ничего не отправляет: это делает человек или ведущий по вашей просьбе.',
   },
 };
 
@@ -312,6 +330,21 @@ const enGlossary: Record<GlossaryId, { term: string; meaning: string }> = {
     term: 'usual stage time',
     meaning:
       'How long this stage took before in this state, over stages that already finished (at least five samples): half fit within the first number, nine in ten within the second. An observation, not a promise.',
+  },
+  operator: {
+    term: 'you, the operator',
+    meaning:
+      'The person the work is for. Answers the questions that change the result for the user and decides escalations.',
+  },
+  host: {
+    term: 'host',
+    meaning:
+      "The program the harness runs inside (for example, DevContour). It may answer a writer's question on its own behalf under its own rules.",
+  },
+  remote: {
+    term: 'on the remote branch',
+    meaning:
+      'The harness compares the accepted commit with this machine\'s copy of the remote branch (the remote-tracking ref, e.g. origin/main) — no network, no git fetch. So it may lag behind the remote repository until the next git fetch or git push here. The time beside it is when git on this machine last updated that copy. "Unknown" is neither "no" nor "pushed". The harness pushes nothing itself: a person does, or the lead at your request.',
   },
 };
 
@@ -452,12 +485,17 @@ const ru = {
   },
   footer: (at: string | undefined) =>
     `Данные harness на ${at ?? 'неизвестное время'}; панель ничего не меняет.`,
+  yesterday: (time: string) => `вчера ${time}`,
   target: {
-    pushed:
-      'Принято локально; в удалённом репозитории — да (по последнему обновлению git на этой машине).',
-    notPushed:
-      'Принято локально; в удалённом репозитории — ещё нет (по последнему обновлению git на этой машине).',
     unknown: (why: string) => `Принято локально; в удалённом репозитории — неизвестно${why}.`,
+    pushedOn: (ref: string | undefined) =>
+      `Принято локально; уже в удалённой ветке${ref ? ` ${ref}` : ''}.`,
+    notPushedOn: (ref: string | undefined) =>
+      `Принято локально; в удалённой ветке${ref ? ` ${ref}` : ''} ещё нет.`,
+    checkedAt: (when: string) =>
+      `Сверено с копией удалённой ветки на этой машине, без сети; git обновил копию: ${when}.`,
+    checkedAtUnknown:
+      'Сверено с копией удалённой ветки на этой машине, без сети; когда git обновлял копию — неизвестно.',
     noTarget: (sha: string) =>
       `Принято локально (результат ${sha}); в удалённом репозитории — неизвестно: harness не сообщил цель.`,
     noLocation: 'Принято; где — неизвестно: harness не сообщил цель.',
@@ -705,12 +743,21 @@ const ru = {
   // Activity.
   activity: {
     label: 'Кто что делал',
-    missing: 'Производитель пока не ведёт ленту.',
-    none: 'Событий в окне нет.',
+    missing: 'harness этой версии не ведёт ленту.',
+    none: (window: string) => `За окно (${window}) ничего не происходило.`,
+    noneFiltered: 'По выбранному фильтру событий нет.',
+    window: (window: string) =>
+      `События harness за последние ${window}, новые сверху. Фразы — как их записал harness.`,
+    windowUnknown: 'События harness за окно истории, новые сверху. Фразы — как их записал harness.',
     filterWork: 'Работа',
-    filterActor: 'Исполнитель',
+    filterActor: 'Кто',
     all: 'все',
     shown: (n: number, total: number) => `показано ${n} из ${total}`,
+    clipped: (n: number) =>
+      `Ещё ${rp(n, 'событие', 'события', 'событий')} окна не показано: лента держит 50 последних.`,
+    who: 'Кто есть кто',
+    accepted: 'где: принято локально; удалённая ветка — в деталях работы;',
+    openWork: 'открыть работу',
   },
   // Settings.
   settings: {
@@ -1011,11 +1058,17 @@ const en: Dict = {
   },
   footer: (at: string | undefined) =>
     `Harness data as of ${at ?? 'an unknown time'}; the panel changes nothing.`,
+  yesterday: (time: string) => `yesterday ${time}`,
   target: {
-    pushed: 'Accepted locally; on the remote (as of the last git update on this machine).',
-    notPushed:
-      'Accepted locally; not on the remote yet (as of the last git update on this machine).',
     unknown: (why: string) => `Accepted locally; remote state unknown${why}.`,
+    pushedOn: (ref: string | undefined) =>
+      `Accepted locally; already on the remote branch${ref ? ` ${ref}` : ''}.`,
+    notPushedOn: (ref: string | undefined) =>
+      `Accepted locally; not yet on the remote branch${ref ? ` ${ref}` : ''}.`,
+    checkedAt: (when: string) =>
+      `Compared with this machine's copy of the remote branch, no network; git updated the copy: ${when}.`,
+    checkedAtUnknown:
+      "Compared with this machine's copy of the remote branch, no network; when git updated the copy is unknown.",
     noTarget: (sha: string) =>
       `Accepted locally (result ${sha}); remote state unknown: the harness gave no target.`,
     noLocation: 'Accepted; where is unknown: the harness gave no target.',
@@ -1247,12 +1300,22 @@ const en: Dict = {
   },
   activity: {
     label: 'Who did what',
-    missing: 'The producer does not keep a feed yet.',
-    none: 'No events in the window.',
+    missing: 'This harness version keeps no feed.',
+    none: (window: string) => `Nothing happened in the window (${window}).`,
+    noneFiltered: 'No events match the chosen filter.',
+    window: (window: string) =>
+      `Harness events of the last ${window}, newest first. The lines are as the harness wrote them.`,
+    windowUnknown:
+      'Harness events of the history window, newest first. The lines are as the harness wrote them.',
     filterWork: 'Work order',
-    filterActor: 'Actor',
+    filterActor: 'Who',
     all: 'all',
     shown: (n: number, total: number) => `${n} of ${total} shown`,
+    clipped: (n: number) =>
+      `${ep(n, 'more event', 'more events')} of the window not shown: the feed keeps the latest 50.`,
+    who: 'Who is who',
+    accepted: 'where: accepted locally; the remote branch is in the work order detail;',
+    openWork: 'open the work order',
   },
   settings: {
     label: 'Settings (read-only)',

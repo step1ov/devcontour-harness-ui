@@ -11,10 +11,14 @@ const axeOf = (page: Page) => new AxeBuilder({ page: page as never });
 const screens: [string, string, RegExp][] = [
   ['overview', '#/', /Сейчас: в работе 1[\s\S]*Какой разделитель использовать в CSV\?/],
   ['work', '#/work/locale-format', /Что проверено/],
-  ['work-accepted', '#/work/add-greeting', /в удалённом репозитории — неизвестно/],
+  [
+    'work-accepted',
+    '#/work/add-greeting',
+    /Принято локально; в удалённой ветке origin\/harness\/accepted ещё нет\.[\s\S]*git обновил копию: вчера 20:30/,
+  ],
   ['reviews', '#/reviews', /раунды 2 из 6/],
   ['decisions', '#/decisions', /Временные \(1\)/],
-  ['activity', '#/activity', /Кто что делал/],
+  ['activity', '#/activity', /Кто что делал[\s\S]*контроллер[\s\S]*вчера 21:05/],
   ['settings', '#/settings', /Технические вопросы решает ведущий: да/],
   ['history', '#/history', /Наибольшая нагрузка за окно/],
   ['health', '#/health', /Контроллер работает/],
@@ -27,6 +31,8 @@ async function open(page: Page, hash: string, lang = 'ru') {
 
 for (const [name, hash, key] of screens) {
   test(`${name}: key text, no horizontal scroll, axe clean`, async ({ page }, info) => {
+    // The viewer's clock is fixed shortly after the demo data (19.11.2026 15:00 Moscow time).
+    await page.clock.setFixedTime(new Date('2026-11-19T12:05:00Z'));
     await open(page, hash);
     await expect(page.locator('main')).toContainText(key);
     const overflow = await page.evaluate(
@@ -82,6 +88,48 @@ test('a work link opens the detail, and "what was checked" lands on the rows', a
   await page.locator('[data-testid="accepted"] a', { hasText: 'что проверено' }).first().click();
   await expect(page).toHaveURL(/#\/work\/add-greeting#verification$/);
   await expect(page.locator('#verification')).toBeInViewport();
+});
+
+// The demo feed: 19.11 14:41 (the second attempt start) … 18.11 21:05 (oldest); the remote copy
+// was updated on 18.11 at 20:30 (Moscow time, playwright.config).
+const days: [string, string, string[], string[]][] = [
+  ['the day of the oldest event', '2026-11-18T19:00:00Z', ['21:05'], ['20:30']],
+  ['the day of the data', '2026-11-19T12:05:00Z', ['14:41', 'вчера 21:05'], ['вчера 20:30']],
+  [
+    'the day after',
+    '2026-11-20T12:05:00Z',
+    ['вчера 14:41', '18.11.2026 21:05'],
+    ['18.11.2026 20:30'],
+  ],
+  ['two days after', '2026-11-21T12:05:00Z', ['19.11.2026 14:41'], ['18.11.2026 20:30']],
+];
+for (const [when, now, feed, remote] of days)
+  test(`times by the viewer's clock on ${when}: today bare, «вчера», then the date`, async ({
+    page,
+  }) => {
+    await page.clock.setFixedTime(new Date(now));
+    await open(page, '#/activity');
+    const list = page.getByTestId('activity-feed').locator('ol time');
+    for (const t of feed)
+      await expect(list.filter({ hasText: new RegExp(`^${t}$`) })).toHaveCount(1);
+    await open(page, '#/work/add-greeting');
+    for (const t of remote)
+      await expect(page.getByTestId('remote-checked')).toContainText(`git обновил копию: ${t}.`);
+  });
+
+test('who did what: filter by work, then open the work from an event', async ({ page }) => {
+  await open(page, '#/activity');
+  const feed = page.getByTestId('activity-feed');
+  await feed
+    .getByRole('group', { name: 'Работа' })
+    .getByRole('link', { name: 'add-greeting' })
+    .click();
+  await expect(page).toHaveURL(/#\/activity\?work=add-greeting$/);
+  await expect(feed).toContainText('показано 8 из 17');
+  await expect(feed).not.toContainText('locale-format; пишет');
+  await feed.locator('ol a', { hasText: 'add-greeting' }).first().click();
+  await expect(page).toHaveURL(/#\/work\/add-greeting$/);
+  await expect(page.locator('main')).toContainText('в удалённой ветке: что это значит');
 });
 
 test('--hui-* set on a wrapper changes the computed colours', async ({ page }) => {

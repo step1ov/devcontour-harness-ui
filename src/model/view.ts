@@ -1,9 +1,10 @@
 // Operator view: the read-only document the panel renders. The schema is
 // owned by devcontour-harness (`operatorViewSchema` in its
 // src/contracts/operator-view.ts, JSON Schema schemas/operator-view.schema.json
-// and schemas/work-detail-view.schema.json, harness 0.1.0-alpha.56, view
-// version 1, revision 1; every revision 1 field is optional, so an alpha.55
-// document, revision 0, has the same type). These types mirror it field by field; tests/contract.test.ts
+// and schemas/work-detail-view.schema.json, harness 0.1.0-alpha.57, view
+// version 1, revision 2; every revision 1 and 2 field is optional, so an
+// alpha.55 document (revision 0) and an alpha.56 one (revision 1) have the
+// same type). These types mirror it field by field; tests/contract.test.ts
 // validates the fixtures against copies of the harness JSON Schemas. A host
 // adapter that builds a view from its own store follows the same schema.
 // Pure types: no node:*, no React.
@@ -247,10 +248,21 @@ export interface TargetView {
     trackingRef?: string;
     /**
      * Why the state is unknown, in the requested language. Masked and clipped
-     * (200). Harness 0.1.0-alpha.55 does not read the tracking ref yet and
-     * always sends `unknown` with a reason.
+     * (200). Harness 0.1.0-alpha.55 and .56 do not read the tracking ref and
+     * always send `unknown` with a reason.
      */
     reason?: string;
+    /**
+     * When git on this machine last updated the tracking ref (its reflog),
+     * revision 2 (harness alpha.57). Absent without a reflog, and before.
+     */
+    checkedAt?: string;
+    /**
+     * Ready line in the view language (revision 2, harness alpha.57): «уже в
+     * удалённой ветке origin/main», «принято локально; в удалённой ветке
+     * origin/main ещё нет», «неизвестно (нет удалённой ветки)». Clipped (200).
+     */
+    line?: string;
   };
 }
 
@@ -405,12 +417,44 @@ export type ViewWarningCode =
   | 'VIEW_TRUNCATED'
   | (string & {});
 
-/** One entry of "who did what" (P2): lead, harness, writer, reviewer, operator. */
+/**
+ * Who acted in an activity entry (harness alpha.57): the controller started an
+ * attempt or a check, accepted a work or escalated; the writer asked; the
+ * reviewer gave a verdict; the lead, the operator or the host answered. The
+ * schema keeps it an open string: an unknown actor is shown as is.
+ */
+export type ActivityActor =
+  'controller' | 'writer' | 'reviewer' | 'lead' | 'operator' | 'host' | (string & {});
+
+/** Event codes of `activity[].action` that harness alpha.57 emits; others are shown as is. */
+export type ActivityAction =
+  | 'attempt.started'
+  | 'attempt.failed'
+  | 'attempt.cancelled'
+  | 'attempt.expired'
+  | 'attempt.interrupted'
+  | 'work.accepted'
+  | 'gate.passed'
+  | 'gate.failed'
+  | 'gate.recheck'
+  | 'gate.reused'
+  | 'gate.not-launched'
+  | 'review.approved'
+  | 'review.changes-requested'
+  | 'review.escalated'
+  | 'question.asked'
+  | 'question.answered'
+  | (string & {});
+
+/**
+ * One entry of "who did what" (revision 2, harness alpha.57): an event of the
+ * history window, newest first, from records the harness already keeps.
+ */
 export interface ActivityEntry {
   at: string;
-  actor: Actor | 'harness' | 'writer' | 'reviewer';
-  /** Event code, e.g. `work.attempt`, `review.round`, `input.answer`. */
-  action: string;
+  actor: ActivityActor;
+  /** Event code, e.g. `attempt.started`, `gate.failed`, `question.answered`. */
+  action: ActivityAction;
   workId?: string;
   subject?: string;
   /** Plain sentence. Masked and clipped (200). */
@@ -466,7 +510,11 @@ export interface OperatorView {
   progress: ViewProgress;
   history: ViewHistory;
   health: ViewHealth;
-  /** Newest first, at most 50 (P2). Absent = the producer has no activity feed. */
+  /**
+   * Events of the history window, newest first, at most 50 (revision 2,
+   * harness alpha.57); omitted ones are counted in `truncated.activity`.
+   * Absent = the producer keeps no feed; `[]` = nothing happened in the window.
+   */
   activity?: ActivityEntry[];
   /** At most 50 (P2). Absent = the producer reports no decisions. */
   decisions?: DecisionView[];

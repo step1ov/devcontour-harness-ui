@@ -1,6 +1,6 @@
 {
   "viewVersion": 1,
-  "viewRevision": 1,
+  "viewRevision": 2,
   "generatedAt": "2026-11-19T12:00:00.000Z",
   "source": {
     "producer": "fixture",
@@ -131,8 +131,10 @@
         "ref": "refs/heads/harness/accepted",
         "acceptedSha": "3b1f9e0c2a7d",
         "remote": {
-          "state": "unknown",
-          "reason": "the remote-tracking ref is not read by this harness version"
+          "state": "not-pushed",
+          "trackingRef": "origin/harness/accepted",
+          "checkedAt": "2026-11-18T17:30:00.000Z",
+          "line": "accepted locally; not yet on the remote branch origin/harness/accepted"
         }
       }
     },
@@ -465,25 +467,129 @@
   },
   "activity": [
     {
-      "at": "2026-11-19T11:52:10.000Z",
-      "actor": "harness",
-      "action": "attempt.gate",
+      "at": "2026-11-19T11:51:45.000Z",
+      "actor": "controller",
+      "action": "gate.reused",
       "workId": "locale-format",
-      "plain": "harness started check candidate-test:unit for locale-format"
+      "plain": "check typecheck was reused from the candidate: same tree, not run (locale-format, attempt 2, integration)"
+    },
+    {
+      "at": "2026-11-19T11:51:40.000Z",
+      "actor": "controller",
+      "action": "gate.passed",
+      "workId": "locale-format",
+      "plain": "the controller ran check lint: passed (locale-format, attempt 2, candidate)"
+    },
+    {
+      "at": "2026-11-19T11:41:00.000Z",
+      "actor": "controller",
+      "action": "attempt.started",
+      "workId": "locale-format",
+      "plain": "the controller started attempt 2 of locale-format; claude writes"
+    },
+    {
+      "at": "2026-11-19T11:40:30.000Z",
+      "actor": "controller",
+      "action": "attempt.failed",
+      "workId": "locale-format",
+      "plain": "attempt 1 of locale-format failed: a check failed: lint found an unused import"
     },
     {
       "at": "2026-11-19T11:40:00.000Z",
       "actor": "writer",
-      "action": "input.request",
+      "action": "question.asked",
       "workId": "export-csv",
-      "plain": "the writer asked a question (q-17) and paused export-csv"
+      "subject": "q-17",
+      "plain": "the writer asked question q-17 on export-csv (severity 8)"
     },
     {
-      "at": "2026-11-19T11:20:00.000Z",
+      "at": "2026-11-19T11:27:00.000Z",
       "actor": "lead",
-      "action": "run.start",
-      "plain": "the lead started the run of graph g1",
-      "subject": "g1"
+      "action": "question.answered",
+      "workId": "locale-format",
+      "subject": "q-12",
+      "plain": "the lead answered question q-12 on locale-format (technical question)"
+    },
+    {
+      "at": "2026-11-19T11:25:00.000Z",
+      "actor": "writer",
+      "action": "question.asked",
+      "workId": "locale-format",
+      "subject": "q-12",
+      "plain": "the writer asked question q-12 on locale-format (severity 6)"
+    },
+    {
+      "at": "2026-11-19T11:14:00.000Z",
+      "actor": "controller",
+      "action": "work.accepted",
+      "workId": "add-greeting",
+      "plain": "add-greeting was accepted (attempt 1): 3b1f9e0c2a7d on refs/heads/harness/accepted, locally"
+    },
+    {
+      "at": "2026-11-19T11:13:40.000Z",
+      "actor": "controller",
+      "action": "gate.reused",
+      "workId": "add-greeting",
+      "plain": "check unit was reused from the candidate: same tree, not run (add-greeting, attempt 1, integration)"
+    },
+    {
+      "at": "2026-11-19T11:13:00.000Z",
+      "actor": "reviewer",
+      "action": "review.approved",
+      "workId": "add-greeting",
+      "subject": "add-greeting",
+      "plain": "reviewer codex approved the changes of add-greeting (attempt 1, candidate); read the diff, ran nothing"
+    },
+    {
+      "at": "2026-11-19T11:11:00.000Z",
+      "actor": "controller",
+      "action": "gate.passed",
+      "workId": "add-greeting",
+      "plain": "the controller ran check unit: passed (add-greeting, attempt 1, candidate)"
+    },
+    {
+      "at": "2026-11-19T11:10:30.000Z",
+      "actor": "controller",
+      "action": "gate.passed",
+      "workId": "add-greeting",
+      "plain": "the controller ran check lint: passed (add-greeting, attempt 1, candidate)"
+    },
+    {
+      "at": "2026-11-19T11:10:00.000Z",
+      "actor": "reviewer",
+      "action": "review.approved",
+      "subject": "g1",
+      "plain": "reviewer codex approved the plan g1, round 2"
+    },
+    {
+      "at": "2026-11-19T11:00:00.000Z",
+      "actor": "controller",
+      "action": "attempt.started",
+      "workId": "add-greeting",
+      "plain": "the controller started attempt 1 of add-greeting; claude writes"
+    },
+    {
+      "at": "2026-11-19T09:20:00.000Z",
+      "actor": "operator",
+      "action": "question.answered",
+      "workId": "add-greeting",
+      "subject": "q-5",
+      "plain": "the operator answered question q-5 on add-greeting"
+    },
+    {
+      "at": "2026-11-19T09:05:00.000Z",
+      "actor": "writer",
+      "action": "question.asked",
+      "workId": "add-greeting",
+      "subject": "q-5",
+      "plain": "the writer asked question q-5 on add-greeting (severity 7)"
+    },
+    {
+      "at": "2026-11-18T18:05:00.000Z",
+      "actor": "reviewer",
+      "action": "review.changes-requested",
+      "subject": "g1",
+      "plain": "reviewer codex returned the plan g1: 1 blocking finding, round 1"
     }
   ],
   "decisions": [

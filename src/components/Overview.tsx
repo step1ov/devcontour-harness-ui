@@ -304,10 +304,18 @@ export function Overview({
             {accepted.map((w) => (
               <li key={w.id} className="hui-item">
                 <WorkRef id={w.id} {...links} /> <code className="hui-muted">{w.target!.ref}</code>
-                <AcceptedLine w={w} lang={lang} linkProps={links} />
+                <AcceptedLine
+                  w={w}
+                  lang={lang}
+                  linkProps={links}
+                  timeZone={timeZone}
+                  now={clock}
+                  explain={false}
+                />
               </li>
             ))}
           </ul>
+          {accepted.length ? <Term id="remote" t={t} named /> : null}
           {progress.done > accepted.length ? (
             <p className="hui-muted" data-testid="accepted-unlisted">
               {o.acceptedUnlisted(progress.done - accepted.length, Boolean(view.truncated?.works))}

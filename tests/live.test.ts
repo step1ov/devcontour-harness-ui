@@ -29,6 +29,7 @@ import {
 } from '../src/server/serve.ts';
 import { MAX_BUFFERED, MAX_STREAMS, writeEvent } from '../src/server/live.ts';
 import { MAX_RUNS, RECENT_MAX, RecentCache } from '../src/server/serve.ts';
+import { asAlpha55, asAlpha56 } from './legacy.ts';
 import { fakeHarness, runsIn } from './fake-harness.ts';
 
 const sample = fileURLToPath(new URL('../fixtures/view.sample.json', import.meta.url));
@@ -61,19 +62,12 @@ function writeView(
   revision: 0 | 1 = 0,
   token = 'harness-token-' + content,
 ) {
-  const v = JSON.parse(readFileSync(sample, 'utf8'));
+  const read = JSON.parse(readFileSync(sample, 'utf8'));
+  const v = revision === 0 ? asAlpha55(read) : asAlpha56(read);
   v.questions[0].title = 'Q ' + content;
   v.generatedAt = clock;
   v.history.to = clock;
-  if (revision === 0) {
-    v.viewRevision = 0;
-    for (const q of v.questions) delete q.answerBasis;
-    delete v.history.totals;
-    v.source.token = 'harness-token-' + content + clock;
-  } else {
-    v.viewRevision = 1;
-    v.source.token = token;
-  }
+  v.source.token = revision === 0 ? 'harness-token-' + content + clock : token;
   writeFileSync(file, JSON.stringify(v));
 }
 /** The identity the server gives a revision 1 document with this harness token. */
@@ -555,8 +549,7 @@ test('live route across harness versions: 55 uses the local digest, 56 the token
 });
 
 test('digestOf of an alpha.55 document ignores the clock within a minute, not across one', () => {
-  const v = JSON.parse(readFileSync(sample, 'utf8'));
-  v.viewRevision = 0;
+  const v = asAlpha55(JSON.parse(readFileSync(sample, 'utf8')));
   v.history.from = '2026-11-18T10:00:01.000Z';
   v.history.to = '2026-11-19T10:00:01.000Z';
   const d = digestOf(v);
@@ -589,8 +582,7 @@ test('digestOf of an alpha.55 document ignores the clock within a minute, not ac
 });
 
 test('digestOf of an alpha.56 document is the harness content token, nothing else', () => {
-  const v = JSON.parse(readFileSync(sample, 'utf8'));
-  assert.equal(v.viewRevision, 1);
+  const v = asAlpha56(JSON.parse(readFileSync(sample, 'utf8')));
   v.source.token = 'aa11';
   const id = harnessId('aa11');
   assert.equal(digestOf(v), id);

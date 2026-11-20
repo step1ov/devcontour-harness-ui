@@ -11,6 +11,11 @@ const raw = JSON.parse(
 const check = checkView(raw);
 if (!check.ok) throw new Error(check.message);
 const view: OperatorView = check.view;
+const check2 = (rel: string): OperatorView => {
+  const c = checkView(JSON.parse(readFileSync(new URL(rel, import.meta.url), 'utf8')));
+  if (!c.ok) throw new Error(c.message);
+  return c.view;
+};
 
 test('overview shows the waiting question, the running work and health', () => {
   const html = renderToStaticMarkup(<Overview lang="en" view={view} />);
@@ -237,17 +242,53 @@ test('footer defaults to the viewer time zone (TZ), not UTC', () => {
   }
 });
 
-test('accepted work: an unknown remote state is shown as unknown with the harness reason', () => {
-  const html = renderToStaticMarkup(<Overview lang="en" view={view} />);
+test('accepted work: the harness remote line, the local check time and what it means', () => {
+  const html = renderToStaticMarkup(<Overview lang="en" view={view} timeZone="UTC" />);
   const accepted = html.slice(html.indexOf('data-testid="accepted"'));
   assert.match(accepted, /add-greeting/);
+  // The harness line, said once after «accepted locally», never "pushed".
   assert.match(
     accepted,
-    /Accepted locally; remote state unknown: the remote-tracking ref is not read by this harness version\./,
+    /Accepted locally; not yet on the remote branch origin\/harness\/accepted\./,
   );
-  assert.doesNotMatch(accepted, /not on the remote|on the remote \(/);
-  const ru = renderToStaticMarkup(<Overview view={view} lang="ru" />);
-  assert.match(ru, /Принято локально; в удалённом репозитории — неизвестно: /);
+  assert.doesNotMatch(accepted, /accepted locally; accepted locally/i);
+  assert.doesNotMatch(accepted, /already on the remote/);
+  // checkedAt (18.11 17:30 UTC) is the day before generatedAt (19.11 12:00 UTC).
+  assert.match(accepted, /git updated the copy: yesterday 17:30\./);
+  // One «what it means» for the list, not one per row.
+  assert.equal(accepted.split('on the remote branch: what this means').length - 1, 1);
+  const ru = renderToStaticMarkup(
+    <Overview view={check2('../fixtures/ru/view.sample.json')} lang="ru" timeZone="UTC" />,
+  );
+  assert.match(ru, /Принято локально; в удалённой ветке origin\/harness\/accepted ещё нет\./);
+  assert.match(ru, /без сети; git обновил копию: вчера 17:30\./);
+  assert.match(ru, /в удалённой ветке: что это значит/);
+  // An alpha.56 view (unknown, with its reason) keeps the panel's unknown sentence.
+  const old = renderToStaticMarkup(
+    <Overview
+      lang="en"
+      view={{
+        ...view,
+        viewRevision: 1,
+        works: view.works.map((w) =>
+          w.target
+            ? {
+                ...w,
+                target: {
+                  ...w.target,
+                  remote: { state: 'unknown', reason: 'the remote-tracking ref is not read' },
+                },
+              }
+            : w,
+        ),
+      }}
+    />,
+  );
+  assert.match(
+    old,
+    /Accepted locally; remote state unknown: the remote-tracking ref is not read\./,
+  );
+  assert.doesNotMatch(old, /git updated the copy/);
   // The count is the harness total, not the listed targets.
   assert.match(accepted, /Accepted \(1\)/);
   const many = renderToStaticMarkup(

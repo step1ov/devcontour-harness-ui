@@ -1,13 +1,15 @@
 // Contract with devcontour-harness: the view schema is owned by the harness.
 // tests/contract/harness/*.schema.json are verbatim copies of the harness
 // schemas (schemas/operator-view.schema.json, schemas/work-detail-view.schema.json
-// of 0.1.0-alpha.56, view revision 1); empty-state.view.json is a real
+// of 0.1.0-alpha.57, view revision 2); empty-state.view.json is a real
 // `harness view --lang en` envelope of that version for a state that does not
-// exist yet. tests/contract/harness-0.1.0-alpha.55/ keeps the same files of
-// 0.1.0-alpha.55 (revision 0): the panel still supports that harness
-// (peer >=0.1.0-alpha.55), so 55-shaped documents must pass both schemas and
-// the gate. With DEVCONTOUR_HARNESS_DIR pointing at a harness checkout the
-// copies are compared byte for byte and a live smoke runs that checkout's
+// exist yet (examples/two-vendors policy). tests/contract/harness-0.1.0-alpha.56/
+// and tests/contract/harness-0.1.0-alpha.55/ keep the same files of
+// 0.1.0-alpha.56 (revision 1) and 0.1.0-alpha.55 (revision 0): the panel
+// still supports those harnesses (peer >=0.1.0-alpha.55), so 55- and
+// 56-shaped documents must pass their own and every newer schema and the
+// gate. With DEVCONTOUR_HARNESS_DIR pointing at a harness checkout the copies
+// are compared byte for byte and a live smoke runs that checkout's
 // `capabilities` and `view`.
 
 import { strict as assert } from 'node:assert';
@@ -42,6 +44,7 @@ import {
   type WorkView,
 } from '../src/model/index.ts';
 import { validate } from './contract/json-schema.ts';
+import { asAlpha55, asAlpha56 } from './legacy.ts';
 import { instantMs } from '../src/model/compat.ts';
 
 type Json = Record<string, any>;
@@ -53,18 +56,13 @@ const viewFixture = read('../fixtures/view.sample.json');
 const workFixture = read('../fixtures/work.sample.json');
 const acceptedFixture = read('../fixtures/work.accepted.sample.json');
 const harnessEmpty = read('./contract/harness/empty-state.view.json');
+const overviewSchema56 = read('./contract/harness-0.1.0-alpha.56/operator-view.schema.json');
+const detailSchema56 = read('./contract/harness-0.1.0-alpha.56/work-detail-view.schema.json');
+const harnessEmpty56 = read('./contract/harness-0.1.0-alpha.56/empty-state.view.json');
 const overviewSchema55 = read('./contract/harness-0.1.0-alpha.55/operator-view.schema.json');
 const detailSchema55 = read('./contract/harness-0.1.0-alpha.55/work-detail-view.schema.json');
 const harnessEmpty55 = read('./contract/harness-0.1.0-alpha.55/empty-state.view.json');
 
-/** The same document as harness alpha.55 would send it: revision 0, without the revision 1 fields. */
-function asAlpha55(doc: Json): Json {
-  const d = structuredClone(doc);
-  d.viewRevision = 0;
-  for (const q of d.questions ?? []) delete q.answerBasis;
-  if (d.history) delete d.history.totals;
-  return d;
-}
 const fixtures = (): [string, Json, Json][] => [
   ['view.sample.json', viewFixture, overviewSchema],
   ['ru/view.sample.json', read('../fixtures/ru/view.sample.json'), overviewSchema],
@@ -83,14 +81,286 @@ test('both fixtures and a real harness document are valid under the harness sche
   for (const f of ['work.sample.json', 'work.accepted.sample.json'])
     assert.deepEqual(validate(detailSchema, read('../fixtures/ru/' + f)), [], f);
   assert.equal(harnessEmpty.ok, true);
-  assert.equal(harnessEmpty.data.viewRevision, 1);
+  assert.equal(harnessEmpty.data.viewRevision, 2);
+  assert.equal(harnessEmpty.data.source.producerVersion, '0.1.0-alpha.57');
   assert.deepEqual(validate(overviewSchema, harnessEmpty.data), []);
+  // A state that does not exist yet has a feed with nothing in it: `[]`, not a missing field.
+  assert.deepEqual(harnessEmpty.data.activity, []);
 });
 
-test('alpha.55 documents (revision 0) stay valid under the alpha.56 schemas and pass the gate', () => {
-  // The real alpha.55 envelope, under both schema versions.
+test('the old-harness transforms drop every revision 2 field (the old schemas allow activity)', () => {
+  const seeded = (doc: Json): Json => ({ ...structuredClone(doc), truncated: { activity: 3 } });
+  for (const [name, doc] of fixtures())
+    for (const old of [asAlpha56(seeded(doc)), asAlpha55(seeded(doc))]) {
+      assert.equal(Object.hasOwn(old, 'activity'), false, name);
+      assert.equal(Object.hasOwn(old.truncated ?? {}, 'activity'), false, name);
+      for (const w of [...(old.works ?? []), ...(old.work ? [old.work] : [])])
+        if (w.target) {
+          assert.equal(w.target.remote.state, 'unknown', name);
+          for (const k of ['line', 'checkedAt', 'trackingRef'])
+            assert.equal(Object.hasOwn(w.target.remote, k), false, `${name}: ${k}`);
+        }
+    }
+  // And the panel reads such a document as a harness that keeps no feed.
+  const c = checkView(asAlpha56(seeded(viewFixture)));
+  assert.equal(c.ok, true);
+  assert.equal(c.ok && c.view.activity, undefined);
+  assert.equal(c.ok && c.view.truncated?.activity, undefined);
+});
+
+test('alpha.56 documents (revision 1) stay valid under the alpha.57 schemas and pass the gate', () => {
+  assert.equal(harnessEmpty56.data.viewRevision, 1);
+  assert.equal(Object.hasOwn(harnessEmpty56.data, 'activity'), false, 'alpha.56 keeps no feed');
+  assert.deepEqual(validate(overviewSchema56, harnessEmpty56.data), []);
+  assert.deepEqual(validate(overviewSchema, harnessEmpty56.data), []);
+  const real = checkView(harnessEmpty56.data);
+  assert.equal(real.ok, true, real.ok ? '' : real.message);
+  assert.equal(real.ok && real.view.activity, undefined);
+  assert.equal(real.ok && real.newerRevision, false);
+  for (const [name, doc, schema] of fixtures()) {
+    const old = asAlpha56(doc);
+    const old56 = schema === overviewSchema ? overviewSchema56 : detailSchema56;
+    assert.deepEqual(validate(old56, old), [], name);
+    assert.deepEqual(validate(schema, old), [], name);
+    const c = schema === overviewSchema ? checkView(old) : checkWorkDetail(old);
+    assert.equal(c.ok, true, `${name}: ${c.ok ? '' : c.message}`);
+    assert.equal(c.ok && c.newerRevision, false, name);
+  }
+});
+
+test('the 57-shaped fixtures really carry the revision 2 fields (the alpha.56 schema refuses them)', () => {
+  let targets = 0;
+  for (const [name, doc, schema] of fixtures()) {
+    assert.equal(doc.viewRevision, 2, name);
+    const works: Json[] = schema === overviewSchema ? doc.works : [doc.work];
+    const remotes = works.filter((w) => w.target).map((w) => w.target.remote);
+    if (schema === overviewSchema) assert.ok(doc.activity.length > 0, `${name}: a feed`);
+    if (!remotes.length) continue;
+    targets++;
+    for (const r of remotes) {
+      assert.equal(typeof r.line, 'string', name);
+      assert.equal(typeof r.checkedAt, 'string', name);
+    }
+    const old56 = schema === overviewSchema ? overviewSchema56 : detailSchema56;
+    const errors = validate(old56, doc).join();
+    assert.match(errors, /unknown field line/, name);
+    assert.match(errors, /unknown field checkedAt/, name);
+  }
+  assert.ok(targets >= 4, 'overview and accepted detail fixtures, both languages');
+});
+
+/**
+ * Whether the feed has the event of one verification row, as the harness
+ * writes it (`activityLine` in its projection): a gate row by the controller
+ * with the same verdict, gate, attempt and phase; a review row by the reviewer
+ * with the same verdict, runtime and, for a read row, "read the diff".
+ */
+function feedHasEvidence(
+  feed: ActivityEntry[],
+  workId: string,
+  r: VerificationRow,
+  lang: 'en' | 'ru',
+): boolean {
+  const ru = lang === 'ru';
+  const phase = r.phase
+    ? ru
+      ? { candidate: 'кандидат', integration: 'интеграция' }[r.phase]
+      : r.phase
+    : undefined;
+  const attempt =
+    r.attempt === undefined ? undefined : ru ? `попытка ${r.attempt}` : `attempt ${r.attempt}`;
+  return feed.some((e) => {
+    if (instantMs(e.at) !== instantMs(r.at!)) return false;
+    // A plan or contract review row names its subject; its event has no work or attempt.
+    const ofSubject = r.kind === 'review' && r.gate !== workId && e.subject === r.gate;
+    if (!ofSubject && e.workId !== workId) return false;
+    // A whole attempt token: «attempt 1,» or «attempt 1)», never «attempt 10».
+    if (!ofSubject && attempt && !new RegExp(`${attempt}[,)]`).test(e.plain)) return false;
+    if (r.kind === 'review') {
+      if (e.subject !== r.gate) return false;
+      const action = r.result === 'passed' ? 'review.approved' : 'review.changes-requested';
+      const read = ru ? 'читал diff, ничего не запускал' : 'read the diff, ran nothing';
+      return (
+        e.actor === 'reviewer' &&
+        e.action === action &&
+        e.plain.startsWith(`reviewer ${r.by} `) &&
+        // The harness says what the reviewer did only for a review inside an attempt.
+        (ofSubject || r.how !== 'read' || e.plain.includes(read))
+      );
+    }
+    const action =
+      r.how === 'reused' ? 'gate.reused' : r.result === 'passed' ? 'gate.passed' : 'gate.failed';
+    const where = `${phase ? `, ${phase}` : ''})`;
+    return (
+      e.actor === 'controller' &&
+      e.action === action &&
+      new RegExp(`(проверк[уа]|check) ${r.gate}[: ]`).test(e.plain) &&
+      e.plain.includes(`${attempt}${where}`)
+    );
+  });
+}
+
+test('fixture activity follows the harness feed: newest first, its actors and event codes', () => {
+  // The vocabulary harness alpha.57 emits (docs/release-notes/0.1.0-alpha.57.md);
+  // the schema keeps both open strings, the panel shows an unknown one as is.
+  const actors = new Set(['controller', 'writer', 'reviewer', 'lead', 'operator', 'host']);
+  const actions = new Set([
+    'attempt.started',
+    'attempt.failed',
+    'attempt.cancelled',
+    'attempt.expired',
+    'attempt.interrupted',
+    'work.accepted',
+    'gate.passed',
+    'gate.failed',
+    'gate.recheck',
+    'gate.reused',
+    'gate.not-launched',
+    'review.approved',
+    'review.changes-requested',
+    'review.escalated',
+    'question.asked',
+    'question.answered',
+  ]);
+  for (const f of ['../fixtures/view.sample.json', '../fixtures/ru/view.sample.json']) {
+    const doc = read(f);
+    const feed = doc.activity as ActivityEntry[];
+    const from = instantMs(doc.history.from);
+    const to = instantMs(doc.history.to);
+    for (const [i, e] of feed.entries()) {
+      assert.ok(actors.has(e.actor), `${f}: actor ${e.actor}`);
+      assert.ok(actions.has(e.action), `${f}: action ${e.action}`);
+      const at = instantMs(e.at);
+      assert.ok(at >= from && at <= to, `${f}: ${e.at} inside the history window`);
+      if (i) assert.ok(instantMs(feed[i - 1]!.at) >= at, `${f}: newest first at ${i}`);
+    }
+  }
+  // The feed agrees with the evidence the other documents record: every gate
+  // row that ran or was reused and every review verdict has its event at the
+  // same time, with the same verdict, actor, attempt and phase; every
+  // question asked or answered in the window, of the overview and of the
+  // work details (closed works included), has its event.
+  for (const [lang, overview, details] of [
+    ['en', viewFixture, [workFixture, acceptedFixture]],
+    [
+      'ru',
+      read('../fixtures/ru/view.sample.json'),
+      [read('../fixtures/ru/work.sample.json'), read('../fixtures/ru/work.accepted.sample.json')],
+    ],
+  ] as const) {
+    const feed = overview.activity as ActivityEntry[];
+    for (const d of details)
+      for (const r of d.verification as VerificationRow[]) {
+        if (!r.at || r.how === 'not-checked') continue;
+        assert.ok(
+          feedHasEvidence(feed, d.work.id, r, lang),
+          `${lang}: no matching event for ${r.kind} ${r.gate} at ${r.at}`,
+        );
+      }
+    const from = instantMs(overview.history.from);
+    const questions = [
+      ...(overview.questions as OperatorQuestion[]),
+      ...details.flatMap((d) => d.questions as OperatorQuestion[]),
+    ];
+    for (const q of questions) {
+      if (instantMs(q.createdAt) >= from)
+        assert.ok(
+          feed.some(
+            (e) =>
+              e.action === 'question.asked' &&
+              e.actor === 'writer' &&
+              e.subject === q.requestId &&
+              e.workId === q.workId &&
+              instantMs(e.at) === instantMs(q.createdAt),
+          ),
+          `${lang}: asked ${q.requestId}`,
+        );
+      const b = q.answerBasis;
+      if (b && instantMs(b.at) >= from)
+        assert.ok(
+          feed.some(
+            (e) =>
+              e.action === 'question.answered' &&
+              e.actor === b.by &&
+              e.subject === q.requestId &&
+              instantMs(e.at) === instantMs(b.at),
+          ),
+          `${lang}: answered ${q.requestId}`,
+        );
+    }
+  }
+  // The matcher refuses a contradicting event: another verdict, actor, attempt or phase.
+  const row: VerificationRow = {
+    gate: 'unit',
+    kind: 'gate',
+    phase: 'candidate',
+    result: 'passed',
+    how: 'executed',
+    by: 'harness',
+    attempt: 1,
+    at: '2026-11-19T11:11:00.000Z',
+  };
+  const good: ActivityEntry = {
+    at: row.at!,
+    actor: 'controller',
+    action: 'gate.passed',
+    workId: 'w',
+    plain: 'the controller ran check unit: passed (w, attempt 1, candidate)',
+  };
+  assert.ok(feedHasEvidence([good], 'w', row, 'en'));
+  for (const bad of [
+    { ...good, action: 'gate.failed' },
+    { ...good, actor: 'operator' },
+    { ...good, plain: 'the controller ran check unit: passed (w, attempt 2, candidate)' },
+    { ...good, plain: 'the controller ran check unit: passed (w, attempt 10, candidate)' },
+    { ...good, plain: 'the controller ran check unit: passed (w, attempt 1, integration)' },
+    { ...good, plain: 'the controller ran check unitx: passed (w, attempt 1, candidate)' },
+    { ...good, workId: 'v' },
+    { ...good, at: '2026-11-19T11:11:01.000Z' },
+  ])
+    assert.equal(feedHasEvidence([bad], 'w', row, 'en'), false, JSON.stringify(bad));
+  const review: VerificationRow = {
+    gate: 'w',
+    kind: 'review',
+    result: 'passed',
+    how: 'read',
+    by: 'codex',
+    attempt: 1,
+    at: row.at!,
+  };
+  const verdict: ActivityEntry = {
+    ...good,
+    subject: 'w',
+    actor: 'reviewer',
+    action: 'review.approved',
+    plain:
+      'reviewer codex approved the changes of w (attempt 1, candidate); read the diff, ran nothing',
+  };
+  assert.ok(feedHasEvidence([verdict], 'w', review, 'en'));
+  for (const bad of [
+    { ...verdict, action: 'review.changes-requested' },
+    { ...verdict, plain: verdict.plain.replace('codex', 'claude') },
+    {
+      ...verdict,
+      plain: verdict.plain.replace('; read the diff, ran nothing', '; ran commands: 2'),
+    },
+    { ...verdict, plain: verdict.plain.replace('attempt 1,', 'attempt 10,') },
+    { ...verdict, subject: 'other' },
+    { ...verdict, subject: undefined },
+  ])
+    assert.equal(feedHasEvidence([bad], 'w', review, 'en'), false, JSON.stringify(bad));
+  // Both languages describe the same events.
+  const en = read('../fixtures/view.sample.json').activity as ActivityEntry[];
+  const ru = read('../fixtures/ru/view.sample.json').activity as ActivityEntry[];
+  const key = (e: ActivityEntry) => [e.at, e.actor, e.action, e.workId, e.subject].join('|');
+  assert.deepEqual(ru.map(key), en.map(key));
+});
+
+test('alpha.55 documents (revision 0) stay valid under the alpha.56 and .57 schemas and pass the gate', () => {
+  // The real alpha.55 envelope, under every schema version.
   assert.equal(harnessEmpty55.data.viewRevision, 0);
   assert.deepEqual(validate(overviewSchema55, harnessEmpty55.data), []);
+  assert.deepEqual(validate(overviewSchema56, harnessEmpty55.data), []);
   assert.deepEqual(validate(overviewSchema, harnessEmpty55.data), []);
   const real = checkView(harnessEmpty55.data);
   assert.equal(real.ok, true, real.ok ? '' : real.message);
@@ -100,7 +370,12 @@ test('alpha.55 documents (revision 0) stay valid under the alpha.56 schemas and 
     const old55 = schema === overviewSchema ? overviewSchema55 : detailSchema55;
     // A 55-shaped copy is a real alpha.55 document: valid under the alpha.55 schema…
     assert.deepEqual(validate(old55, old), [], name);
-    // …and still valid under the alpha.56 one: the revision 1 fields are optional.
+    // …and still valid under the alpha.56 and .57 ones: later fields are optional.
+    assert.deepEqual(
+      validate(schema === overviewSchema ? overviewSchema56 : detailSchema56, old),
+      [],
+      name,
+    );
     assert.deepEqual(validate(schema, old), [], name);
     const c = schema === overviewSchema ? checkView(old) : checkWorkDetail(old);
     assert.equal(c.ok, true, `${name}: ${c.ok ? '' : c.message}`);
@@ -108,9 +383,9 @@ test('alpha.55 documents (revision 0) stay valid under the alpha.56 schemas and 
   }
 });
 
-test('the 56-shaped fixtures really carry the revision 1 fields (the alpha.55 schema refuses them)', () => {
-  for (const [name, doc, schema] of fixtures()) {
-    assert.equal(doc.viewRevision, 1, name);
+test('the fixtures really carry the revision 1 fields (the alpha.55 schema refuses them)', () => {
+  for (const [name, full, schema] of fixtures()) {
+    const doc = asAlpha56(full);
     const old55 = schema === overviewSchema ? overviewSchema55 : detailSchema55;
     const errors = validate(old55, doc).join();
     assert.match(errors, /unknown field answerBasis/, name);
@@ -460,7 +735,13 @@ const shapes: [string, Json, Record<string, string>][] = [
   [
     'works[].target.remote',
     overviewSchema[ov].works.items[ov].target[ov].remote,
-    shape<TargetView['remote']>({ state: 'req:s', trackingRef: 'opt:s', reason: 'opt:s' }),
+    shape<TargetView['remote']>({
+      state: 'req:s',
+      trackingRef: 'opt:s',
+      reason: 'opt:s',
+      checkedAt: 'opt:s',
+      line: 'opt:s',
+    }),
   ],
   [
     'works[].question',
@@ -1052,6 +1333,8 @@ test(
       assert.equal(checkView(view).ok, true);
       assert.equal(view.health.warnings[0].code, 'STATE_NOT_FOUND');
       assert.equal(existsSync(state), false, 'harness view never creates the state');
+      // From revision 2 the harness keeps a feed: an absent state has an empty one.
+      if (view.viewRevision >= 2) assert.deepEqual(view.activity, []);
       // From revision 1 the token is content-only: a second run over the same
       // (absent) state, at another clock, gives the same token and digest.
       if (view.viewRevision >= 1) {
