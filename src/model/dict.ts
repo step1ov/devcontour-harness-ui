@@ -580,6 +580,8 @@ const ru = {
     after: (ids: string) => `после ${ids}`,
     needsYou: (n: number) => (n ? `Нужно от вас (${n})` : 'Нужно от вас'),
     noQuestions: 'Сейчас от вас ничего не нужно.',
+    unknownQuestionState:
+      'Неизвестно: у вопроса состояние, которого панель не знает — посмотрите его в «Другие вопросы».',
     otherQuestions: 'Другие вопросы — ответ уже есть или его даёт не вы',
     kindQuestion: 'вопрос',
     unlistedAnswers: (works: string) =>
@@ -1201,6 +1203,8 @@ const en: Dict = {
     after: (ids: string) => `after ${ids}`,
     needsYou: (n: number) => (n ? `Needed from you (${n})` : 'Needed from you'),
     noQuestions: 'Nothing is needed from you now.',
+    unknownQuestionState:
+      'Unknown: a question is in a state this panel does not know — see it under “Other questions”.',
     otherQuestions: 'Other questions — already answered, or not yours to answer',
     kindQuestion: 'question',
     unlistedAnswers: (works: string) =>

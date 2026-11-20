@@ -118,20 +118,27 @@ const ANSWER_ACTIONS = new Set(['answer', 'answer-input']);
  * (`stop.ts`). A stage need joins the blocker of that code when no
  * escalation states the action, so one stop stays one line.
  */
-const CODE_ACTION: Readonly<Record<string, string>> = {
-  ATTEMPTS_EXHAUSTED: 'reset-attempts',
-  APPROVAL_STALE: 'review-plan',
-  APPROVAL_REQUIRED: 'review-plan',
-  BUDGET_EXHAUSTED: 'raise-budget',
-  BUDGET_UNKNOWN: 'raise-budget',
-  PAUSED: 'resume-queue',
-  GATE_FAILED: 'diagnose-failure',
-  REVIEW_REJECTED: 'diagnose-failure',
-  SCOPE_VIOLATION: 'diagnose-failure',
-  REVIEW_PROTOCOL_INVALID: 'user-decision',
-  CANCELLED: 'replan-dependents',
-  INPUT_REQUIRED: 'answer',
+const CODE_ACTIONS: Readonly<Record<string, readonly string[]>> = {
+  ATTEMPTS_EXHAUSTED: ['reset-attempts'],
+  APPROVAL_STALE: ['review-plan'],
+  APPROVAL_REQUIRED: ['review-plan'],
+  BUDGET_EXHAUSTED: ['raise-budget'],
+  BUDGET_UNKNOWN: ['raise-budget'],
+  PAUSED: ['resume-queue'],
+  GATE_FAILED: ['diagnose-failure'],
+  REVIEW_REJECTED: ['diagnose-failure'],
+  SCOPE_VIOLATION: ['diagnose-failure'],
+  REVIEW_PROTOCOL_INVALID: ['user-decision'],
+  CANCELLED: ['replan-dependents'],
+  INPUT_REQUIRED: ['answer', 'answer-input', 'apply-input'],
 };
+
+/**
+ * Stage actions that a dependent work's diagnosis gives while it waits for
+ * its dependency (`chain.ts`): they describe that wait, not a step of their
+ * own. Any other action (fix access, replan…) stays its own line.
+ */
+const DEPENDENT_NEED_ACTIONS = new Set(['diagnose-failure', 'wait', 'none']);
 
 const actorOf = (a: Actor | null | undefined): StepActor | null | undefined =>
   a === 'user' ? 'operator' : a;
@@ -201,9 +208,9 @@ function entriesOf(
           e.actor === actor &&
           e.action === undefined &&
           e.code !== undefined &&
-          CODE_ACTION[e.code] === needs.action,
+          (CODE_ACTIONS[e.code] ?? []).includes(needs.action),
       ) ??
-      (dependent
+      (dependent && DEPENDENT_NEED_ACTIONS.has(needs.action)
         ? out.find((e) => e.code !== undefined && DEPENDENCY_CODES.has(e.code))
         : undefined);
     if (same) {
@@ -244,11 +251,13 @@ function mergeSame(steps: Step[], graphOf: (id: string) => string | undefined): 
         graph(o) === graph(s) &&
         o.actor === s.actor &&
         o.code === s.code &&
-        o.action === s.action &&
+        // One record may name the action and another not: the same stop.
+        (o.action === s.action || o.action === undefined || s.action === undefined) &&
         o.plain === s.plain &&
         o.code !== undefined,
     );
     if (same) {
+      if (same.action === undefined && s.action !== undefined) same.action = s.action;
       for (const id of s.workIds) if (!same.workIds.includes(id)) same.workIds.push(id);
       same.records.push(...s.records);
     } else out.push(s);
@@ -455,8 +464,9 @@ export function dependencyState(
   const w = view.works.find((x) => x.id === id);
   if (!w) return { kind: 'unknown' };
   if (SLOT_STAGES.has(w.stage.name)) return { kind: 'running', stage: w.stage.name };
+  // An explicit wait for its own dependency wins over a queued stage.
+  if (steps.dependencies.some((d) => d.workId === id)) return { kind: 'waits' };
   if (steps.queue.some((q) => q.workId === id && !q.unexplained) || w.stage.name === 'queued')
     return { kind: 'queue' };
-  if (steps.dependencies.some((d) => d.workId === id)) return { kind: 'waits' };
   return { kind: 'unknown', stage: w.stage.name };
 }

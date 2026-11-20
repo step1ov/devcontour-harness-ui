@@ -433,23 +433,48 @@ test('stopped run (EN): the same agreement in English', () => {
   assert.doesNotMatch(text, /\(0\)/);
 });
 
-test('an unknown failure group stays its key, in a code tag', () => {
+test('an unknown failure group stays its key, in a code tag; running works too', () => {
   const v = check2('../fixtures/ru/view.stopped.json');
   const w0 = v.works[0]!;
+  const line = 'попыток 3; отказов 2 (defect 1, brand-new 1); осталось попыток 1 из 3';
   const odd: OperatorView = {
     ...v,
-    works: [
-      {
-        ...w0,
-        attempts: {
-          ...w0.attempts,
-          line: 'попыток 2; отказов 2 (defect 1, brand-new 1); осталось попыток 0 из 3',
-        },
-      },
-      v.works[1]!,
-    ],
+    works: [{ ...w0, attempts: { ...w0.attempts, line } }, v.works[1]!],
   };
   const html = renderToStaticMarkup(<Overview view={odd} lang="ru" />);
-  assert.match(html, /ошибка в коде<\/span>|ошибка в коде/);
-  assert.match(html, /<code>brand-new<\/code>/);
+  const at = html.indexOf('data-testid="decision-attempts"');
+  const row = html.slice(at, html.indexOf('</div>', at));
+  assert.match(row, /<span data-bucket="defect">ошибка в коде/);
+  assert.match(row, /<span data-bucket="brand-new"><code>brand-new<\/code>/);
+  // A running work shows its line the same way.
+  const running: OperatorView = {
+    ...odd,
+    works: [{ ...odd.works[0]!, stage: { name: 'writer', next: [] }, blockers: [] }, odd.works[1]!],
+    escalations: [],
+  };
+  const now = renderToStaticMarkup(<Overview view={running} lang="ru" />);
+  const part = now.slice(now.indexOf('data-testid="now"'), now.indexOf('data-testid="decisions"'));
+  assert.match(part, /<span data-bucket="defect">ошибка в коде/);
+  assert.doesNotMatch(part.replace(/<[^>]+>/g, ''), /defect 1/);
+});
+
+test('an unknown question state is never "nothing is needed" in the section either', () => {
+  const odd: OperatorView = {
+    ...view,
+    questions: [{ ...view.questions[0]!, state: 'awaiting-something-new' }],
+    works: view.works.filter((w) => w.id !== 'export-csv' && w.id !== 'docs-page'),
+    progress: { ...view.progress, waitingOperator: 0 },
+  };
+  for (const [lang, re] of [
+    ['ru', /Неизвестно: у вопроса состояние, которого панель не знает/],
+    ['en', /Unknown: a question is in a state this panel does not know/],
+  ] as const) {
+    const html = renderToStaticMarkup(<Overview view={odd} lang={lang} />);
+    const needs = html.slice(
+      html.indexOf('data-testid="needs-you"'),
+      html.indexOf('data-testid="now"'),
+    );
+    assert.match(needs, re);
+    assert.doesNotMatch(needs, /ничего не нужно|Nothing is needed/);
+  }
 });

@@ -92,6 +92,8 @@ export function Overview({
   const otherActors = [...new Set(steps.other.map((s) => s.actor))];
   const count = (stage: string) =>
     Object.hasOwn(progress.byStage, stage) ? Number(progress.byStage[stage]) || 0 : 0;
+  const clipped = Boolean(view.truncated?.questions || view.truncated?.escalations);
+  const oddState = view.questions.some((q) => !KNOWN_QUESTION_STATES.has(String(q.state)));
   const sentence = headerSentence(
     {
       running: progress.running,
@@ -107,9 +109,7 @@ export function Overview({
       waitingOperator: progress.waitingOperator,
       // A clipped list or a question state this build does not know makes the
       // count a floor: the sentence then never says "nothing is needed".
-      incomplete:
-        Boolean(view.truncated?.questions || view.truncated?.escalations) ||
-        view.questions.some((q) => !KNOWN_QUESTION_STATES.has(String(q.state))),
+      incomplete: clipped || oddState,
     },
     lang,
   );
@@ -175,9 +175,7 @@ export function Overview({
         </Heading>
         {yours === 0 && steps.unlistedAnswers.length === 0 && hiddenWaiting === 0 ? (
           <p className="hui-muted">
-            {view.truncated?.questions || view.truncated?.escalations
-              ? t.header.unknownClipped
-              : o.noQuestions}
+            {clipped ? t.header.unknownClipped : oddState ? o.unknownQuestionState : o.noQuestions}
           </p>
         ) : (
           <ul className="hui-list">
@@ -289,8 +287,11 @@ export function Overview({
                   ) : null}
                 </div>
                 <div className="hui-muted">
-                  {w.attempts.line ??
-                    o.attemptsShort(w.attempts.used, w.attempts.max, w.attempts.left)}
+                  {w.attempts.line ? (
+                    <AttemptsText line={w.attempts.line} t={t} />
+                  ) : (
+                    o.attemptsShort(w.attempts.used, w.attempts.max, w.attempts.left)
+                  )}
                   {w.attempts.lastFailure ? `; ${o.lastStopped(w.attempts.lastFailure.plain)}` : ''}
                 </div>
               </li>

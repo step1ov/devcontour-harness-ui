@@ -396,3 +396,58 @@ test('review round 1: a dependency is never "nobody acts" when the view does not
   });
   assert.equal(dep({ stage: { name: 'queued', next: [] } }).dependencies.length, 1);
 });
+
+test('review round 2: own stage actions stay, one stop per code, approvals merge, chains', () => {
+  const base = { ...stopped, escalations: [] as OperatorView['escalations'], questions: [] };
+  // A stage need the operator has to act on is never folded into a dependency wait.
+  const access = nextSteps({
+    ...base,
+    works: [
+      work('w', {
+        dependsOn: ['gone'],
+        blockers: [{ code: 'DEPENDENCY_INCOMPLETE', plain: 'waits', actor: null }],
+        stage: { name: 'blocked', next: [], needs: { actor: 'operator', action: 'fix-access' } },
+      }),
+    ],
+  });
+  assert.deepEqual(
+    access.operator.map((x) => x.action),
+    ['fix-access'],
+  );
+  assert.equal(access.dependencies.length, 1);
+  // The lead applies an answer: the INPUT_REQUIRED blocker and the stage are one line.
+  const apply = nextSteps({
+    ...base,
+    works: [
+      work('w', {
+        blockers: [{ code: 'INPUT_REQUIRED', plain: 'answer given', actor: 'lead' }],
+        stage: { name: 'input', next: [], needs: { actor: 'lead', action: 'apply-input' } },
+      }),
+    ],
+  });
+  assert.deepEqual(
+    apply.lead.map((x) => [x.code, x.action, x.records.length]),
+    [['INPUT_REQUIRED', 'apply-input', 2]],
+  );
+  // One plan approval named with and without its action is still one line.
+  const [a, b] = stopped.works;
+  const approval = nextSteps({
+    ...base,
+    works: [
+      { ...a!, blockers: [a!.blockers[0]!], stage: { name: 'blocked', next: [] } },
+      {
+        ...b!,
+        dependsOn: [],
+        blockers: [b!.blockers[0]!],
+        stage: { name: 'blocked', next: [], needs: { actor: 'lead', action: 'review-plan' } },
+      },
+    ],
+  });
+  assert.deepEqual(
+    approval.lead.map((x) => [x.workIds, x.action]),
+    [[[W1, W2], 'review-plan']],
+  );
+  // docs-page waits for export-csv itself: a work behind it is told so, not "just queued".
+  const chain = nextSteps(sample);
+  assert.deepEqual(dependencyState(sample, chain, 'docs-page'), { kind: 'waits' });
+});

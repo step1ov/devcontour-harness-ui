@@ -64,8 +64,11 @@ test('stopped run: one decision for you after the lead, the waits say whose turn
   // The codes are one click away, not in the sentence.
   const details = needs.getByTestId('step-details');
   await expect(details).not.toHaveAttribute('open');
+  const code = details.locator('code', { hasText: 'ATTEMPTS_EXHAUSTED' }).first();
+  await expect(code).toBeHidden();
   await details.locator('summary').click();
-  await expect(details).toContainText('ATTEMPTS_EXHAUSTED');
+  await expect(details).toHaveAttribute('open', '');
+  await expect(code).toBeVisible();
 
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
