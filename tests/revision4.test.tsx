@@ -642,3 +642,84 @@ test('a remaining range without an elapsed time keeps the range; the ring has no
   assert.doesNotMatch(t, /закончившихся попыток пока слишком мало/);
   assert.match(t, /По 6 закончившимся попыткам/);
 });
+
+// Harness 0.1.0-alpha.62: a state nothing has run with says so
+// (`progress.queue.neverRun`), and a view without a tracker snapshot says why
+// it has no run slice (`scopeReason`). Older documents keep the old words.
+const empty62 = read('./contract/harness/empty-state.view.json').data;
+const empty60 = read('./contract/harness-0.1.0-alpha.60/empty-state.view.json').data;
+
+test('never run: the harness line instead of «Очередь идёт», and «harness ещё не читал задачи»', () => {
+  // A made-up Russian document of the same shape as the real alpha.62 empty state.
+  const ruEmpty = structuredClone(empty62);
+  ruEmpty.progress.queue.line = 'Ещё ничего не запускали — ведущий начнёт с harness run.';
+  for (const m of [overview(ruEmpty), html(<Overview view={viewOf(empty62)} lang="ru" />)]) {
+    assert.match(m, /data-testid="queue-state"[^>]*>Ещё не запускали</);
+    assert.doesNotMatch(shown(m), /Очередь идёт|Очередь стоит/);
+    assert.match(shown(m), /harness ещё не читал задачи из трекера/);
+    assert.doesNotMatch(shown(m), /эта версия harness не сообщает/);
+  }
+  // The harness's own line, in the language it was asked for.
+  assert.match(
+    overview(ruEmpty),
+    /data-testid="queue-line"[^>]*>Ещё ничего не запускали — ведущий начнёт с harness run\.</,
+  );
+  const en = overview(empty62, 'en');
+  assert.match(en, /data-testid="queue-state"[^>]*>Not started yet</);
+  assert.match(
+    en,
+    /data-testid="queue-line"[^>]*>Nothing has run yet — the lead starts with harness run\.</,
+  );
+  assert.match(shown(en), /the harness has not read the tracker tasks yet/);
+  // Not a problem on the way: nothing ran, so nothing stands.
+  assert.doesNotMatch(shown(en), /the queue will not move by itself/);
+  // The Tasks screen says the same about the run slice.
+  assert.match(
+    shown(html(<Tasks view={viewOf(ruEmpty)} lang="ru" />)),
+    /harness ещё не читал задачи из трекера/,
+  );
+  // A pause still wins over «not started».
+  const paused = structuredClone(ruEmpty);
+  paused.progress.queue.paused = true;
+  assert.match(overview(paused), /data-testid="queue-state"[^>]*>Очередь на паузе/);
+});
+
+test('an alpha.60 empty state (no neverRun/scopeReason) reads as never run from STATE_NOT_FOUND', () => {
+  assert.equal(Object.hasOwn(empty60.progress.queue, 'neverRun'), false);
+  const m = overview(empty60);
+  assert.match(m, /data-testid="queue-state"[^>]*>Ещё не запускали</);
+  // No harness line: the panel's own words.
+  assert.match(
+    m,
+    /data-testid="queue-line"[^>]*>Ещё ничего не запускали — ведущий начнёт с harness run\.</,
+  );
+  assert.match(shown(m), /harness ещё не читал задачи из трекера/);
+});
+
+test('scope absent: an older revision says it does not report, an unknown reason is named', () => {
+  // A made-up revision 4 document that ran: works, no scope, no reason (alpha.60/61).
+  const ran = structuredClone(ru);
+  delete ran.scope;
+  delete ran.forecast;
+  for (const m of [shown(overview(ran)), shown(html(<Tasks view={viewOf(ran)} lang="ru" />))]) {
+    assert.match(m, /эта версия harness не сообщает остальные задачи прогона/);
+    assert.doesNotMatch(m, /Ещё не запускали/);
+  }
+  // The same document with the harness reason.
+  const reason = { ...structuredClone(ran), scopeReason: 'no-snapshot' };
+  assert.match(shown(overview(reason)), /harness ещё не читал задачи из трекера/);
+  const unread = { ...structuredClone(ran), scopeReason: 'unreadable' };
+  assert.match(
+    shown(overview(unread)),
+    /снимок задач трекера есть, но harness не смог его прочитать/,
+  );
+  assert.doesNotMatch(shown(overview(unread)), /не сообщает|ещё не читал/);
+  // A reason this build does not know: passes the gate, named as is, never «не сообщает».
+  const future = { ...structuredClone(ran), scopeReason: 'source-offline' };
+  const f = shown(overview(future));
+  assert.match(f, /среза задач прогона в представлении нет \(source-offline\)/);
+  assert.doesNotMatch(f, /не сообщает|не читал/);
+  // Dropped for size stays «не поместился», whatever the reason field says.
+  const dropped = { ...structuredClone(ran), truncated: { scope: 12 } };
+  assert.match(shown(overview(dropped)), /не поместился в представление/);
+});

@@ -41,6 +41,7 @@ import {
   attemptAverage,
   outsideHarness,
   overallProgress,
+  neverRun,
   scopeLeft,
   scopeOf,
   taskName,
@@ -68,6 +69,7 @@ import {
   WorkRef,
   actorLabel,
   clockOf,
+  scopeMissingText,
   type ScreenProps,
 } from './common.tsx';
 
@@ -176,8 +178,11 @@ export function Overview({
   // Who moves the queue. Revision 4 says it (`queue.runner`); before it the
   // panel read it from the controller and the running count (F-X).
   const runner = progress.queue.runner;
+  // Nothing has run with this state yet: the queue neither runs nor stands.
+  const fresh = !progress.queue.paused && neverRun(view);
   const standing =
     !progress.queue.paused &&
+    !fresh &&
     (runner !== undefined
       ? runner === 'not-running'
       : !health.controller.present && progress.running === 0 && harnessLeft > 0);
@@ -216,20 +221,28 @@ export function Overview({
           </p>
           <div className="hui:flex hui:flex-wrap hui:items-center hui:gap-2 hui-header">
             <Badge
-              tone={progress.queue.paused || standing ? 'warn' : allCancelled ? 'neutral' : 'ok'}
+              tone={
+                progress.queue.paused || standing
+                  ? 'warn'
+                  : allCancelled || fresh
+                    ? 'neutral'
+                    : 'ok'
+              }
               data-testid="queue-state"
             >
               {progress.queue.paused
                 ? o.queuePaused(progress.queue.reason ?? '')
-                : standing
-                  ? o.queueStanding
-                  : allCancelled
-                    ? o.queueCancelled
-                    : allDone
-                      ? outsideLeft
-                        ? o.queueHarnessDone
-                        : o.queueDone
-                      : o.queueRunning}
+                : fresh
+                  ? o.queueNeverRun
+                  : standing
+                    ? o.queueStanding
+                    : allCancelled
+                      ? o.queueCancelled
+                      : allDone
+                        ? outsideLeft
+                          ? o.queueHarnessDone
+                          : o.queueDone
+                        : o.queueRunning}
             </Badge>
             {progress.queue.paused ? (
               <span data-status="blocked" data-testid="queue-who" className="hui:text-sm">
@@ -262,9 +275,9 @@ export function Overview({
                 )}
               </span>
             ) : null}
-            {standingLine && !standing ? (
+            {fresh || (standingLine && !standing) ? (
               <span className="hui:text-sm" data-testid="queue-line">
-                {standingLine}
+                {standingLine ?? o.neverRunLine}
               </span>
             ) : null}
             <span className="hui:text-sm hui:text-muted-foreground">
@@ -414,7 +427,7 @@ export function Overview({
           ) : null
         ) : (
           <p className="hui:text-xs hui:text-muted-foreground" data-testid="scope-missing">
-            {view.truncated?.scope ? t.r4.scopeDropped(view.truncated.scope) : o.scopeMissing}
+            {scopeMissingText(view, t)}
           </p>
         )}
       </Block>

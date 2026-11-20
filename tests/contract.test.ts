@@ -1,9 +1,13 @@
 // Contract with devcontour-harness: the view schema is owned by the harness.
 // tests/contract/harness/*.schema.json are verbatim copies of the harness
 // schemas (schemas/operator-view.schema.json, schemas/work-detail-view.schema.json
-// of 0.1.0-alpha.60, view revision 4); empty-state.view.json is a real
-// `harness view --lang en` envelope of that version for a state that does not
-// exist yet (examples/two-vendors policy). tests/contract/harness-0.1.0-alpha.59/
+// of the unreleased 0.1.0-alpha.62, view revision 4: the harness
+// fix/empty-state checkout, whose package still says 0.1.0-alpha.61 — refresh
+// from the published package on release); empty-state.view.json is a real
+// `harness view --lang en` envelope of that checkout for a state that does not
+// exist yet (examples/two-vendors policy). tests/contract/harness-0.1.0-alpha.60/
+// keeps the same files of 0.1.0-alpha.60 (revision 4 without
+// `progress.queue.neverRun` and `scopeReason`), harness-0.1.0-alpha.59/
 // (revision 3), harness-0.1.0-alpha.57/ (revision 2, also alpha.58),
 // harness-0.1.0-alpha.56/ and harness-0.1.0-alpha.55/ keep the same files of
 // 0.1.0-alpha.59, .57, .56 (revision 1) and .55 (revision 0): the panel
@@ -72,6 +76,9 @@ const harnessEmpty57 = read('./contract/harness-0.1.0-alpha.57/empty-state.view.
 const overviewSchema59 = read('./contract/harness-0.1.0-alpha.59/operator-view.schema.json');
 const detailSchema59 = read('./contract/harness-0.1.0-alpha.59/work-detail-view.schema.json');
 const harnessEmpty59 = read('./contract/harness-0.1.0-alpha.59/empty-state.view.json');
+const overviewSchema60 = read('./contract/harness-0.1.0-alpha.60/operator-view.schema.json');
+const detailSchema60 = read('./contract/harness-0.1.0-alpha.60/work-detail-view.schema.json');
+const harnessEmpty60 = read('./contract/harness-0.1.0-alpha.60/empty-state.view.json');
 const overviewSchema55 = read('./contract/harness-0.1.0-alpha.55/operator-view.schema.json');
 const detailSchema55 = read('./contract/harness-0.1.0-alpha.55/work-detail-view.schema.json');
 const harnessEmpty55 = read('./contract/harness-0.1.0-alpha.55/empty-state.view.json');
@@ -95,10 +102,16 @@ test('both fixtures and a real harness document are valid under the harness sche
     assert.deepEqual(validate(detailSchema, read('../fixtures/ru/' + f)), [], f);
   assert.equal(harnessEmpty.ok, true);
   assert.equal(harnessEmpty.data.viewRevision, 4);
-  assert.equal(harnessEmpty.data.source.producerVersion, '0.1.0-alpha.60');
+  // The unreleased alpha.62 checkout: its package version is still alpha.61.
+  assert.equal(harnessEmpty.data.source.producerVersion, '0.1.0-alpha.61');
   // No state: no connector slice, no tracker questions, no forecast, no updates check.
   for (const k of ['scope', 'sourceQuestions', 'forecast', 'updates'])
     assert.equal(Object.hasOwn(harnessEmpty.data, k), false, k);
+  // …and the harness says why: nothing has run, no tracker snapshot yet.
+  assert.equal(harnessEmpty.data.scopeReason, 'no-snapshot');
+  assert.equal(harnessEmpty.data.progress.queue.neverRun, true);
+  assert.equal(Object.hasOwn(harnessEmpty.data.progress.queue, 'runner'), false);
+  assert.match(harnessEmpty.data.progress.queue.line, /^Nothing has run yet/);
   assert.deepEqual(validate(overviewSchema, harnessEmpty.data), []);
   // A state that does not exist yet has a feed with nothing in it: `[]`, not a missing field.
   assert.deepEqual(harnessEmpty.data.activity, []);
@@ -158,6 +171,27 @@ test('alpha.57/58 documents (revision 2) stay valid under the alpha.59 schemas a
     const c = schema === overviewSchema ? checkView(old) : checkWorkDetail(old);
     assert.equal(c.ok && c.newerRevision, false, name);
   }
+});
+
+test('alpha.60 documents (revision 4 without neverRun/scopeReason) stay valid under the newer schemas and pass the gate', () => {
+  assert.equal(harnessEmpty60.data.viewRevision, 4);
+  assert.equal(harnessEmpty60.data.source.producerVersion, '0.1.0-alpha.60');
+  for (const k of ['scopeReason', 'scope'])
+    assert.equal(Object.hasOwn(harnessEmpty60.data, k), false);
+  assert.equal(Object.hasOwn(harnessEmpty60.data.progress.queue, 'neverRun'), false);
+  assert.deepEqual(validate(overviewSchema60, harnessEmpty60.data), []);
+  assert.deepEqual(validate(overviewSchema, harnessEmpty60.data), []);
+  const real = checkView(harnessEmpty60.data);
+  assert.equal(real.ok && real.newerRevision, false);
+  // The fixtures carry no alpha.62 field, so they are alpha.60 documents too.
+  for (const [name, doc, schema] of fixtures()) {
+    const old60 = schema === overviewSchema ? overviewSchema60 : detailSchema60;
+    assert.deepEqual(validate(old60, doc), [], name);
+  }
+  // The alpha.62 empty state really carries the new fields: the alpha.60 schema refuses them.
+  const errors = validate(overviewSchema60, harnessEmpty.data).join();
+  for (const k of ['neverRun', 'scopeReason'])
+    assert.match(errors, new RegExp(`unknown field ${k}`), k);
 });
 
 test('alpha.59 documents (revision 3) stay valid under the alpha.60 schemas and pass the gate', () => {
@@ -631,6 +665,7 @@ const shapes: [string, Json, Record<string, string>][] = [
       activity: 'opt:a<o>',
       decisions: 'opt:a<o>',
       scope: 'opt:o',
+      scopeReason: 'opt:s',
       sourceQuestions: 'opt:a<o>',
       forecast: 'opt:o',
       updates: 'opt:o',
@@ -975,6 +1010,7 @@ const shapes: [string, Json, Record<string, string>][] = [
       actor: 'opt:s',
       action: 'opt:s',
       runner: 'opt:s',
+      neverRun: 'opt:b',
       restartBy: 'opt:s',
       line: 'opt:s',
     }),
@@ -1229,6 +1265,8 @@ const shapes: [string, Json, Record<string, string>][] = [
       decisions: 'opt:n',
       scope: 'opt:n',
       sourceQuestions: 'opt:n',
+      workFields: 'opt:n',
+      whatsNew: 'opt:n',
     }),
   ],
   [
@@ -1463,6 +1501,11 @@ const vocabularies: [string, Json, string[]][] = [
     'progress.queue.runner',
     overviewSchema[ov].progress[ov].queue[ov].runner,
     vocab<NonNullable<ViewProgress['queue']['runner']>>()(['running', 'not-running']),
+  ],
+  [
+    'scopeReason',
+    overviewSchema[ov].scopeReason,
+    vocab<NonNullable<OperatorView['scopeReason']>>()(['no-snapshot', 'unreadable']),
   ],
   [
     'scope.tasks[].state',

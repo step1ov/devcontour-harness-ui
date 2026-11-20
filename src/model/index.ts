@@ -73,6 +73,8 @@ export {
   attemptAverage,
   outsideHarness,
   overallProgress,
+  neverRun,
+  scopeAbsence,
   scopeLeft,
   scopeOf,
   stageLeft,

@@ -14,7 +14,7 @@ type Json = Record<string, any>;
 export function asAlpha59<T>(doc: T): T {
   const d = structuredClone(doc) as Json;
   d.viewRevision = 3;
-  for (const k of ['scope', 'sourceQuestions', 'forecast', 'updates']) delete d[k];
+  for (const k of ['scope', 'scopeReason', 'sourceQuestions', 'forecast', 'updates']) delete d[k];
   if (d.truncated) {
     delete d.truncated.scope;
     delete d.truncated.sourceQuestions;
@@ -22,7 +22,7 @@ export function asAlpha59<T>(doc: T): T {
   }
   if (d.health) delete d.health.sources;
   if (d.progress?.queue)
-    for (const k of ['runner', 'restartBy', 'line']) delete d.progress.queue[k];
+    for (const k of ['runner', 'neverRun', 'restartBy', 'line']) delete d.progress.queue[k];
   for (const w of [...(d.works ?? []), ...(d.work ? [d.work] : [])]) {
     for (const b of w.blockers ?? []) delete b.step;
     if (w.attempts?.lastFailure) {

@@ -203,3 +203,36 @@ export function scopeLeft(view: OperatorView): ScopeLeft {
     range: { loMs: Math.ceil(works / slots) * average.ms, hiMs: works * average.ms },
   };
 }
+
+/**
+ * Nothing has run with this state directory yet: the harness says so
+ * (`progress.queue.neverRun`, alpha.62), or an older harness gives the empty
+ * view of a state that does not exist (`STATE_NOT_FOUND`) with no works.
+ * The queue then neither runs nor stands.
+ */
+export function neverRun(view: OperatorView): boolean {
+  if (view.progress.queue.neverRun === true) return true;
+  return (
+    view.progress.total === 0 &&
+    view.progress.queue.runner === undefined &&
+    view.health.warnings.some((w) => w.code === 'STATE_NOT_FOUND')
+  );
+}
+
+/**
+ * Why the view has no run slice (`scope` absent and not dropped for size):
+ * `not-read` — the harness has not read the tracker tasks yet (`scopeReason:
+ * no-snapshot`, or nothing has run at all); `unreadable` — a tracker snapshot
+ * exists but the harness could not read it; `other` — a reason this panel
+ * does not know; `not-reported` — an older harness without the field.
+ */
+export function scopeAbsence(
+  view: OperatorView,
+): 'not-read' | 'unreadable' | 'other' | 'not-reported' {
+  // A newer harness may name a reason this build does not know.
+  const reason = view.scopeReason as string | undefined;
+  if (reason === 'no-snapshot') return 'not-read';
+  if (reason === 'unreadable') return 'unreadable';
+  if (typeof reason === 'string') return 'other';
+  return neverRun(view) ? 'not-read' : 'not-reported';
+}

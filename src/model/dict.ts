@@ -832,6 +832,8 @@ const ru = {
     driftNotChecked: (n: number) => `не проверено: ${n}`,
     warnings: 'Предупреждения harness',
     queueStanding: 'Очередь стоит',
+    queueNeverRun: 'Ещё не запускали',
+    neverRunLine: 'Ещё ничего не запускали — ведущий начнёт с harness run.',
     queueDone: 'Всё принято',
     queueHarnessDone: 'Всё, что в harness, принято',
     queueCancelled: 'Всё отменено',
@@ -864,6 +866,11 @@ const ru = {
     } as Labels,
     scopeMissing:
       'Показаны только работы, которые уже переданы в harness: эта версия harness не сообщает остальные задачи прогона.',
+    scopeNotRead: 'Показаны только работы harness: harness ещё не читал задачи из трекера.',
+    scopeUnreadable:
+      'Показаны только работы harness: снимок задач трекера есть, но harness не смог его прочитать.',
+    scopeAbsent: (reason: string) =>
+      `Показаны только работы harness: среза задач прогона в представлении нет (${reason}).`,
     howAskLead: 'Как: попросите ведущего сбросить попытки (команда — в «подробностях»).',
     problems: (n: number) => (n ? `Проблемы по ходу (${n})` : 'Проблемы по ходу'),
     noProblems: 'Проблем по ходу не видно.',
@@ -1774,6 +1781,8 @@ const en: Dict = {
     driftNotChecked: (n: number) => `${n} not checked`,
     warnings: 'Harness warnings',
     queueStanding: 'The queue has stopped',
+    queueNeverRun: 'Not started yet',
+    neverRunLine: 'Nothing has run yet — the lead starts with harness run.',
     queueDone: 'All accepted',
     queueHarnessDone: 'All harness work accepted',
     queueCancelled: 'All cancelled',
@@ -1806,6 +1815,11 @@ const en: Dict = {
     } as Labels,
     scopeMissing:
       'Only work orders already handed to the harness are shown: this harness version does not report the other tasks of the run.',
+    scopeNotRead: 'Only harness works are shown: the harness has not read the tracker tasks yet.',
+    scopeUnreadable:
+      'Only harness works are shown: a tracker snapshot exists, but the harness could not read it.',
+    scopeAbsent: (reason: string) =>
+      `Only harness works are shown: the view has no run slice (${reason}).`,
     howAskLead: 'How: ask the lead agent to reset the attempts (the command is under “details”).',
     problems: (n: number) => (n ? `Problems so far (${n})` : 'Problems so far'),
     noProblems: 'No problems so far.',
