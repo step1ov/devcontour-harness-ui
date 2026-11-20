@@ -8,8 +8,14 @@ import { instantMs } from '../model/compat.ts';
 import { dict, knownLabel, label, type Dict, type Lang } from '../model/dict.ts';
 import { formatElapsed, questionStatus, stageLabel } from '../model/format.ts';
 import { attemptAverage, outsideHarness, overallProgress, scopeOf } from '../model/scope.ts';
-import { nextSteps, workName, withWorkNames } from '../model/steps.ts';
-import { leadAnswers, taskCards, type TaskCard as Card_, type TaskPhase } from '../model/tasks.ts';
+import { nextSteps, workName, withWorkNames, type NextSteps } from '../model/steps.ts';
+import {
+  leadAnswers,
+  taskCards,
+  writerEnvironmentStop,
+  type TaskCard as Card_,
+  type TaskPhase,
+} from '../model/tasks.ts';
 import type { OperatorView } from '../model/view.ts';
 import {
   AcceptedLine,
@@ -71,6 +77,7 @@ export function Tasks({ view, lang = 'ru', now, onOpenWork, workHref, timeZone }
           <TaskCardView
             key={c.work.id}
             c={c}
+            steps={steps}
             view={view}
             t={t}
             lang={lang}
@@ -124,6 +131,7 @@ export function Tasks({ view, lang = 'ru', now, onOpenWork, workHref, timeZone }
 
 function TaskCardView({
   c,
+  steps,
   view,
   t,
   lang,
@@ -132,6 +140,7 @@ function TaskCardView({
   timeZone,
 }: {
   c: Card_;
+  steps: NextSteps;
   view: OperatorView;
   t: Dict;
   lang: Lang;
@@ -147,8 +156,10 @@ function TaskCardView({
   const rounds = code.reduce((n, r) => n + r.rounds.used, 0);
   const cap = code.length === 1 ? code[0]!.rounds.max : null;
   const firstBlocker = w.blockers.find((b) => b.actor !== null) ?? w.blockers[0];
-  const nowText =
-    c.phase === 'accepted'
+  const blockedEnv = writerEnvironmentStop(view, steps, w);
+  const nowText = blockedEnv
+    ? k.nowWriterEnv(withWorkNames(view, blockedEnv.detail), blockedEnv.notCounted)
+    : c.phase === 'accepted'
       ? k.nowAccepted
       : c.phase === 'cancelled'
         ? k.nowCancelled

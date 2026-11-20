@@ -8,7 +8,7 @@ export { Overview, type OverviewProps } from './components/Overview.tsx';
 export { WorkDetail, verificationWords, type WorkDetailProps } from './components/WorkDetail.tsx';
 export { Reviews, type ReviewsProps } from './components/Reviews.tsx';
 export { Tasks, type TasksProps } from './components/Tasks.tsx';
-export { Timeline } from './components/Timeline.tsx';
+export { Timeline, partName } from './components/Timeline.tsx';
 export { Decisions, type DecisionsProps } from './components/Decisions.tsx';
 export { Activity, type ActivityFilter, type ActivityProps } from './components/Activity.tsx';
 export {

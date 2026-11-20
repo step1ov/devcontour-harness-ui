@@ -1,11 +1,11 @@
 // Contract with devcontour-harness: the view schema is owned by the harness.
 // tests/contract/harness/*.schema.json are verbatim copies of the harness
 // schemas (schemas/operator-view.schema.json, schemas/work-detail-view.schema.json
-// of 0.1.0-alpha.57, view revision 2); empty-state.view.json is a real
+// of 0.1.0-alpha.59, view revision 3); empty-state.view.json is a real
 // `harness view --lang en` envelope of that version for a state that does not
-// exist yet (examples/two-vendors policy). tests/contract/harness-0.1.0-alpha.56/
-// and tests/contract/harness-0.1.0-alpha.55/ keep the same files of
-// 0.1.0-alpha.56 (revision 1) and 0.1.0-alpha.55 (revision 0): the panel
+// exist yet (examples/two-vendors policy). tests/contract/harness-0.1.0-alpha.57/
+// (revision 2, also alpha.58), harness-0.1.0-alpha.56/ and harness-0.1.0-alpha.55/
+// keep the same files of 0.1.0-alpha.57, .56 (revision 1) and .55 (revision 0): the panel
 // still supports those harnesses (peer >=0.1.0-alpha.55), so 55- and
 // 56-shaped documents must pass their own and every newer schema and the
 // gate. With DEVCONTOUR_HARNESS_DIR pointing at a harness checkout the copies
@@ -44,7 +44,7 @@ import {
   type WorkView,
 } from '../src/model/index.ts';
 import { validate } from './contract/json-schema.ts';
-import { asAlpha55, asAlpha56 } from './legacy.ts';
+import { asAlpha55, asAlpha56, asAlpha57 } from './legacy.ts';
 import { instantMs } from '../src/model/compat.ts';
 
 type Json = Record<string, any>;
@@ -59,6 +59,9 @@ const harnessEmpty = read('./contract/harness/empty-state.view.json');
 const overviewSchema56 = read('./contract/harness-0.1.0-alpha.56/operator-view.schema.json');
 const detailSchema56 = read('./contract/harness-0.1.0-alpha.56/work-detail-view.schema.json');
 const harnessEmpty56 = read('./contract/harness-0.1.0-alpha.56/empty-state.view.json');
+const overviewSchema57 = read('./contract/harness-0.1.0-alpha.57/operator-view.schema.json');
+const detailSchema57 = read('./contract/harness-0.1.0-alpha.57/work-detail-view.schema.json');
+const harnessEmpty57 = read('./contract/harness-0.1.0-alpha.57/empty-state.view.json');
 const overviewSchema55 = read('./contract/harness-0.1.0-alpha.55/operator-view.schema.json');
 const detailSchema55 = read('./contract/harness-0.1.0-alpha.55/work-detail-view.schema.json');
 const harnessEmpty55 = read('./contract/harness-0.1.0-alpha.55/empty-state.view.json');
@@ -81,8 +84,8 @@ test('both fixtures and a real harness document are valid under the harness sche
   for (const f of ['work.sample.json', 'work.accepted.sample.json'])
     assert.deepEqual(validate(detailSchema, read('../fixtures/ru/' + f)), [], f);
   assert.equal(harnessEmpty.ok, true);
-  assert.equal(harnessEmpty.data.viewRevision, 2);
-  assert.equal(harnessEmpty.data.source.producerVersion, '0.1.0-alpha.57');
+  assert.equal(harnessEmpty.data.viewRevision, 3);
+  assert.equal(harnessEmpty.data.source.producerVersion, '0.1.0-alpha.59');
   assert.deepEqual(validate(overviewSchema, harnessEmpty.data), []);
   // A state that does not exist yet has a feed with nothing in it: `[]`, not a missing field.
   assert.deepEqual(harnessEmpty.data.activity, []);
@@ -128,10 +131,38 @@ test('alpha.56 documents (revision 1) stay valid under the alpha.57 schemas and 
   }
 });
 
+test('alpha.57/58 documents (revision 2) stay valid under the alpha.59 schemas and pass the gate', () => {
+  assert.equal(harnessEmpty57.data.viewRevision, 2);
+  assert.deepEqual(validate(overviewSchema57, harnessEmpty57.data), []);
+  assert.deepEqual(validate(overviewSchema, harnessEmpty57.data), []);
+  const real = checkView(harnessEmpty57.data);
+  assert.equal(real.ok && real.newerRevision, false);
+  for (const [name, doc, schema] of fixtures()) {
+    const old = asAlpha57(doc);
+    const old57 = schema === overviewSchema ? overviewSchema57 : detailSchema57;
+    assert.deepEqual(validate(old57, old), [], name);
+    assert.deepEqual(validate(schema, old), [], name);
+    const c = schema === overviewSchema ? checkView(old) : checkWorkDetail(old);
+    assert.equal(c.ok && c.newerRevision, false, name);
+  }
+});
+
+test('the 59-shaped detail fixtures carry an unused stage (the alpha.57 schema refuses it)', () => {
+  for (const f of ['work.sample.json', 'ru/work.sample.json']) {
+    const d = read('../fixtures/' + f);
+    assert.equal(d.viewRevision, 3, f);
+    assert.ok(
+      d.attempts[0].stages.some((s: Json) => s.unused === true),
+      f,
+    );
+    assert.notDeepEqual(validate(detailSchema57, d), [], f);
+  }
+});
+
 test('the 57-shaped fixtures really carry the revision 2 fields (the alpha.56 schema refuses them)', () => {
   let targets = 0;
   for (const [name, doc, schema] of fixtures()) {
-    assert.equal(doc.viewRevision, 2, name);
+    assert.equal(doc.viewRevision, 3, name);
     const works: Json[] = schema === overviewSchema ? doc.works : [doc.work];
     const remotes = works.filter((w) => w.target).map((w) => w.target.remote);
     if (schema === overviewSchema) assert.ok(doc.activity.length > 0, `${name}: a feed`);
@@ -1048,7 +1079,12 @@ const shapes: [string, Json, Record<string, string>][] = [
   [
     'detail attempts[].stages[]',
     detailSchema[ov].attempts.items[ov].stages.items,
-    shape<AttemptRow['stages'][number]>({ stage: 'req:s', durationMs: 'opt:n', outcome: 'opt:s' }),
+    shape<AttemptRow['stages'][number]>({
+      stage: 'req:s',
+      durationMs: 'opt:n',
+      outcome: 'opt:s',
+      unused: 'opt:b',
+    }),
   ],
   [
     'detail verification[]',

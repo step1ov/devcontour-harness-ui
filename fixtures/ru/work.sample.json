@@ -1,6 +1,6 @@
 {
   "viewVersion": 1,
-  "viewRevision": 2,
+  "viewRevision": 3,
   "generatedAt": "2026-11-19T12:00:00.000Z",
   "source": {
     "producer": "fixture",
@@ -65,17 +65,28 @@
       "startedAt": "2026-11-19T11:41:00.000Z",
       "stages": [
         {
+          "stage": "dependency-store",
+          "durationMs": 2000,
+          "outcome": "passed",
+          "unused": true
+        },
+        {
           "stage": "prepare",
-          "durationMs": 20000,
+          "durationMs": 18000,
           "outcome": "passed"
         },
         {
-          "stage": "writer",
+          "stage": "implementation",
           "durationMs": 600000,
           "outcome": "passed"
         },
         {
-          "stage": "gates"
+          "stage": "candidate-test:lint",
+          "durationMs": 30000,
+          "outcome": "passed"
+        },
+        {
+          "stage": "candidate-test:unit"
         }
       ]
     },
@@ -89,17 +100,23 @@
       "finishedAt": "2026-11-19T11:40:30.000Z",
       "stages": [
         {
+          "stage": "dependency-store",
+          "durationMs": 2000,
+          "outcome": "passed",
+          "unused": true
+        },
+        {
           "stage": "prepare",
-          "durationMs": 15000,
+          "durationMs": 13000,
           "outcome": "passed"
         },
         {
-          "stage": "writer",
+          "stage": "implementation",
           "durationMs": 690000,
           "outcome": "passed"
         },
         {
-          "stage": "gates",
+          "stage": "candidate-test:lint",
           "durationMs": 45000,
           "outcome": "failed"
         }

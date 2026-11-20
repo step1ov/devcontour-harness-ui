@@ -283,3 +283,75 @@ test('review round 2: all cancelled is not «всё принято»; the lead-a
   assert.doesNotMatch(shown(review), /\bg1\b/);
   assert.match(review, /<code>g1<\/code>/);
 });
+
+test('revision 3: a writer stopped by its environment waits for the lead and is not counted', () => {
+  // Made-up: the harness alpha.59 shape of a writer-environment stop (needs-lead, environment group).
+  const blocked: OperatorView = {
+    ...view,
+    works: view.works.map((w) =>
+      w.id === 'docs-page'
+        ? {
+            ...w,
+            dependsOn: [],
+            stage: {
+              name: 'stopped',
+              next: [],
+              needs: { actor: 'lead', action: 'diagnose-failure' },
+            },
+            blockers: [
+              {
+                code: 'APPROVAL_REQUIRED',
+                plain:
+                  'исполнитель остановился: окружение закрыло обязательный шаг; решение ведущего',
+                actor: 'lead',
+              },
+            ],
+            attempts: {
+              ...w.attempts,
+              used: 0,
+              left: 3,
+              neutral: { used: 1, max: 3 },
+              lastFailure: {
+                attempt: 1,
+                bucket: 'environment',
+                plain:
+                  'окружение — окружение закрыло исполнителю обязательный шаг: «listen EPERM 127.0.0.1»',
+              },
+            },
+          }
+        : w,
+    ),
+  };
+  const card = shown(
+    html(<Tasks view={blocked} lang="ru" />)
+      .split('<li class="hui-card-ui')
+      .find((x) => x.includes('data-testid="task-docs-page"'))!,
+  );
+  assert.match(
+    card,
+    /Ждёт ведущего: окружение не дало выполнить шаг — окружение закрыло исполнителю обязательный шаг: «listen EPERM 127\.0\.0\.1»\. Попытка не засчитана\./,
+  );
+  assert.match(card, /Дальше действует: ведущий/);
+  const problems = shown(
+    html(<Overview view={blocked} lang="ru" />)
+      .split('data-testid="problems"')[1]!
+      .split('data-testid="now"')[0]!,
+  );
+  assert.match(
+    problems,
+    /попытка 1: ждёт ведущего — окружение не дало выполнить шаг \(.*\); попытка не засчитана — действует: ведущий/,
+  );
+  const en = shown(html(<Tasks view={blocked} lang="en" />));
+  assert.match(
+    en,
+    /Waits for the lead agent: the environment did not let the writer run a step — .* The attempt is not counted\./,
+  );
+  // An ordinary environment failure that the harness retries itself is not this stop.
+  const retried: OperatorView = {
+    ...blocked,
+    works: blocked.works.map((w) =>
+      w.id === 'docs-page' ? { ...w, stage: { name: 'queued', next: [] }, blockers: [] } : w,
+    ),
+  };
+  assert.doesNotMatch(shown(html(<Tasks view={retried} lang="ru" />)), /Ждёт ведущего: окружение/);
+});

@@ -617,6 +617,8 @@ const ru = {
       'очередь стоит: harness не запущен, и после ответа или сброса работа сама не продолжится',
     lastFailure: (attempt: number, plain: string) => `попытка ${attempt} остановилась: ${plain}`,
     stoppedNoReason: 'остановлена, причина не сообщена',
+    writerEnv: (attempt: number, detail: string, notCounted: boolean) =>
+      `попытка ${attempt}: ждёт ведущего — окружение не дало выполнить шаг (${detail})${notCounted ? '; попытка не засчитана' : ''}`,
     stalled: (n: number) => `${rp(n, 'попытка зависла', 'попытки зависли', 'попыток зависло')}`,
     environment: (n: number) => `сбоев окружения: ${n}`,
     budgetExceeded: (spent: string, scope: string) =>
@@ -664,6 +666,8 @@ const ru = {
     nowWaits: (reason: string) => `Сейчас: ${reason}.`,
     nowQueued: 'Сейчас: ждёт своей очереди.',
     nowStage: (stage: string) => `Сейчас: этап «${stage}».`,
+    nowWriterEnv: (detail: string, notCounted: boolean) =>
+      `Ждёт ведущего: окружение не дало выполнить шаг — ${detail}.${notCounted ? ' Попытка не засчитана.' : ''}`,
     attempts: (used: number, max: number, left: number) =>
       `Попытки: израсходовано ${used} из ${max}, осталось ${left}`,
     reviewRounds: (used: number, max: number | null) =>
@@ -709,6 +713,21 @@ const ru = {
     latest: 'последняя',
     earlier: (n: number) => `Прежние попытки (${n})`,
     noAttempts: 'Попыток ещё не было: процесс начнётся с подготовки.',
+    unused: 'не используется',
+    part: {
+      fixed: {
+        'dependency-store': 'хранилище зависимостей',
+        prepare: 'подготовка зависимостей (prepare)',
+        'integration-prepare': 'подготовка зависимостей при интеграции',
+        implementation: 'исполнитель пишет код',
+        'implementation-reuse': 'взят прежний код',
+        'candidate-review': 'ревью кода',
+        'integration-review': 'ревью интеграции',
+        'integration-wait': 'ожидание интеграции',
+      } as Labels,
+      check: (gate: string) => `проверка ${gate}`,
+      integrationCheck: (gate: string) => `проверка ${gate} при интеграции`,
+    },
     total: (d: string) => `всего ${d}`,
     label: (stage: string, state: string, duration: string) =>
       `${stage}: ${state}${duration ? `, ${duration}` : ''}`,
@@ -1426,6 +1445,8 @@ const en: Dict = {
       'the queue stands: the harness is not running, and after an answer or a reset the work will not go on by itself',
     lastFailure: (attempt: number, plain: string) => `attempt ${attempt} stopped: ${plain}`,
     stoppedNoReason: 'stopped, no reason given',
+    writerEnv: (attempt: number, detail: string, notCounted: boolean) =>
+      `attempt ${attempt}: waits for the lead agent — the environment did not let the writer run a step (${detail})${notCounted ? '; the attempt is not counted' : ''}`,
     stalled: (n: number) => `${ep(n, 'attempt is', 'attempts are')} stalled`,
     environment: (n: number) => `environment failures: ${n}`,
     budgetExceeded: (spent: string, scope: string) => `budget exceeded (${scope}): spent ${spent}`,
@@ -1470,6 +1491,8 @@ const en: Dict = {
     nowWaits: (reason: string) => `Now: ${reason}.`,
     nowQueued: 'Now: waits its turn.',
     nowStage: (stage: string) => `Now: stage “${stage}”.`,
+    nowWriterEnv: (detail: string, notCounted: boolean) =>
+      `Waits for the lead agent: the environment did not let the writer run a step — ${detail}.${notCounted ? ' The attempt is not counted.' : ''}`,
     attempts: (used: number, max: number, left: number) =>
       `Attempts: ${used} of ${max} used, ${left} left`,
     reviewRounds: (used: number, max: number | null) =>
@@ -1514,6 +1537,21 @@ const en: Dict = {
     latest: 'latest',
     earlier: (n: number) => `Earlier attempts (${n})`,
     noAttempts: 'No attempt yet: the process starts with preparation.',
+    unused: 'not used',
+    part: {
+      fixed: {
+        'dependency-store': 'dependency store',
+        prepare: 'preparing the dependencies (prepare)',
+        'integration-prepare': 'preparing the dependencies for integration',
+        implementation: 'the writer writes the code',
+        'implementation-reuse': 'earlier code reused',
+        'candidate-review': 'code review',
+        'integration-review': 'integration review',
+        'integration-wait': 'waiting for integration',
+      } as Labels,
+      check: (gate: string) => `check ${gate}`,
+      integrationCheck: (gate: string) => `check ${gate} at integration`,
+    },
     total: (d: string) => `${d} in total`,
     label: (stage: string, state: string, duration: string) =>
       `${stage}: ${state}${duration ? `, ${duration}` : ''}`,

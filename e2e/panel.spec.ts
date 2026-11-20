@@ -252,8 +252,12 @@ test('a task card opens the process timeline of its work', async ({ page }) => {
   await page.getByTestId('task-locale-format').getByRole('link', { name: 'Весь процесс' }).click();
   await expect(page).toHaveURL(/#\/work\/locale-format$/);
   const tl = page.getByTestId('timeline');
-  await expect(tl.locator('li')).toHaveCount(6);
-  await expect(tl.locator('li[data-state="current"]')).toContainText('Проверки');
+  await expect(tl.locator(':scope > li')).toHaveCount(6);
+  await expect(tl.locator(':scope > li[data-state="current"]')).toContainText('Проверки');
+  // Revision 3: preparation is its own step with its time, and the unused store says so.
+  const prep = tl.locator(':scope > li').first();
+  await expect(prep).toContainText('Подготовкапройдено, 20 с');
+  await expect(prep).toContainText('хранилище зависимостей: не используется, 2 с');
   await expect(page.getByRole('link', { name: '← К задачам' })).toBeVisible();
 });
 

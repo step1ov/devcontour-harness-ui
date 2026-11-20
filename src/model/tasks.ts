@@ -118,7 +118,57 @@ export interface TimelineStep {
    * the work was accepted without it.
    */
   state: 'passed' | 'failed' | 'current' | 'ahead' | 'skipped' | 'next' | 'not-needed' | 'unknown';
+  /** Sum of the recorded parts' durations. */
   durationMs?: number;
+  /** Every part ran with nothing to do (revision 3: a dependency store without a seed). */
+  unused?: true;
+  /** The harness stages behind this step (`dependency-store`, `prepare`, `candidate-test:lint`…). */
+  parts?: AttemptRow['stages'];
+}
+
+/**
+ * The process step of a recorded harness stage: `dependency-store`,
+ * `prepare` (revision 3) and candidate environment steps prepare;
+ * `implementation` writes; `candidate-test:` / `-consumer:` / `-recheck:`
+ * check; `candidate-review` reviews; `integration…` integrates. The
+ * process names themselves (`prepare`, `writer`, `gates`, …) map to
+ * themselves; any other name stays its own step.
+ */
+export function processStageOf(stage: string): string {
+  if (PROCESS.includes(stage)) return stage;
+  if (stage === 'dependency-store' || stage.startsWith('candidate-environment')) return 'prepare';
+  if (stage === 'implementation' || stage === 'implementation-reuse') return 'writer';
+  if (/^candidate-(test|consumer|recheck):/.test(stage)) return 'gates';
+  if (stage === 'candidate-review') return 'review';
+  if (stage.startsWith('integration')) return 'integration';
+  return stage;
+}
+
+/** The recorded stages of an attempt grouped by process step, in record order. */
+function groupsOf(row: AttemptRow | undefined) {
+  const out = new Map<
+    string,
+    {
+      durationMs?: number;
+      outcome?: 'passed' | 'failed';
+      unused?: true;
+      parts: AttemptRow['stages'];
+    }
+  >();
+  for (const s of row?.stages ?? []) {
+    const key = processStageOf(s.stage);
+    const g = out.get(key) ?? { parts: [] };
+    g.parts.push(s);
+    out.set(key, g);
+  }
+  for (const g of out.values()) {
+    const known = g.parts.filter((p) => p.durationMs !== undefined);
+    if (known.length) g.durationMs = known.reduce((n, p) => n + p.durationMs!, 0);
+    if (g.parts.some((p) => p.outcome === 'failed')) g.outcome = 'failed';
+    else if (g.parts.every((p) => p.outcome === 'passed')) g.outcome = 'passed';
+    if (g.parts.every((p) => p.unused)) g.unused = true;
+  }
+  return out;
 }
 
 /** The process a work goes through, in order (design §5.2). */
@@ -141,15 +191,15 @@ export function timelineOf(
   work: WorkView,
   latest: boolean,
 ): TimelineStep[] {
-  const seen = new Map(row?.stages.map((s) => [s.stage, s]) ?? []);
+  const seen = groupsOf(row);
   const isAccepted = accepted(work);
   const terminal = isAccepted || work.stage.name === 'cancelled';
   const known = PROCESS.filter((s) => s !== 'acceptance');
   // Stages a newer harness reports that this build does not know keep their place after the known ones.
-  const extra = (row?.stages ?? []).map((s) => s.stage).filter((s) => !PROCESS.includes(s));
+  const extra = [...seen.keys()].filter((s) => !PROCESS.includes(s));
   const order = [...known, ...extra];
   const failedRow =
-    row?.status === 'failed' || (row?.stages ?? []).some((s) => s.outcome === 'failed');
+    row?.status === 'failed' || [...seen.values()].some((s) => s.outcome === 'failed');
   // A stopped latest attempt of a work that goes on: the rest comes in the next attempt.
   const notReached: TimelineStep['state'] =
     latest && !terminal && work.attempts.left > 0 ? 'next' : 'skipped';
@@ -180,6 +230,8 @@ export function timelineOf(
       stage,
       state,
       ...(s?.durationMs !== undefined ? { durationMs: s.durationMs } : {}),
+      ...(s?.unused ? { unused: true as const } : {}),
+      ...(s ? { parts: s.parts } : {}),
     });
   }
   out.push({
@@ -202,4 +254,30 @@ export function timelines(detail: WorkDetailView) {
     attempt: row,
     steps: timelineOf(row, detail.work, i === 0),
   }));
+}
+
+/**
+ * A writer that stopped on its environment (revision 3, harness alpha.59:
+ * cause `writer-environment`): the sandbox closed a step the writer must
+ * run, the lead decides, and the attempt is not counted. The view has no
+ * cause field; the panel reads it from what it does carry — a last failure
+ * of group `environment` on a work that is not running, with the lead to
+ * act — and says "not counted" only when the counters show it (the failed
+ * attempt is past the counted ones, or an uncounted failure is recorded).
+ * Proposal P13 asks the harness for the cause itself.
+ */
+export function writerEnvironmentStop(
+  view: OperatorView,
+  steps: NextSteps,
+  w: WorkView,
+): { detail: string; notCounted: boolean } | undefined {
+  const f = w.attempts.lastFailure;
+  if (!f || f.bucket !== 'environment') return undefined;
+  if (SLOT_STAGES.has(w.stage.name) || accepted(w) || w.stage.name === 'cancelled')
+    return undefined;
+  if (!actorsOn(steps, w.id, view).includes('lead')) return undefined;
+  // «окружение — <detail>»: the group is said by the panel, the detail by the harness.
+  const cut = f.plain.indexOf(' — ');
+  const detail = (cut >= 0 ? f.plain.slice(cut + 3) : f.plain).trim().replace(/[.\s]+$/, '');
+  return { detail, notCounted: f.attempt > w.attempts.used || w.attempts.neutral.used > 0 };
 }

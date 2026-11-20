@@ -18,6 +18,19 @@ const dot: Record<string, string> = {
   unknown: 'hui:bg-warn-soft hui:border-warn',
 };
 
+/**
+ * A recorded harness stage in words: «хранилище зависимостей», «подготовка
+ * зависимостей (prepare)», «проверка lint»; an unknown one as is.
+ */
+export function partName(t: Dict, stage: string): string {
+  const p = t.timeline.part;
+  if (Object.hasOwn(p.fixed, stage)) return p.fixed[stage]!;
+  const m = /^(candidate|integration)-(test|recheck|consumer):(.+)$/.exec(stage);
+  if (m) return m[1] === 'integration' ? p.integrationCheck(m[3]!) : p.check(m[3]!);
+  if (/^integration-prepare:/.test(stage)) return p.fixed['integration-prepare']!;
+  return stage;
+}
+
 /** The name of a timeline stage; a newer stage is shown as the stage label or as is. */
 export const stageName = (t: Dict, stage: string) =>
   Object.hasOwn(t.timeline.stage, stage) ? t.timeline.stage[stage]! : label(t.stage, stage);
@@ -72,8 +85,30 @@ export function Timeline({
                 {state}
                 {duration ? `, ${duration}` : ''}
               </span>
+              {s.unused ? (
+                <span className="hui:text-xs hui:text-muted-foreground" data-testid="unused">
+                  {t.timeline.unused}
+                </span>
+              ) : null}
               {s.stage === 'review' && review ? (
                 <span className="hui:text-xs hui:text-muted-foreground">{review}</span>
+              ) : null}
+              {s.parts && (s.parts.length > 1 || s.parts.some((p) => p.unused)) ? (
+                <ul className="hui:mt-1 hui:grid hui:list-none hui:gap-0.5 hui:text-xs hui:text-muted-foreground">
+                  {s.parts.map((p, j) => (
+                    <li key={j} data-part={p.stage}>
+                      {partName(t, p.stage)}
+                      {': '}
+                      {p.unused
+                        ? t.timeline.unused
+                        : label(
+                            t.timeline.state,
+                            p.outcome ?? (s.state === 'current' ? 'current' : 'unknown'),
+                          )}
+                      {p.durationMs !== undefined ? `, ${formatDuration(p.durationMs, lang)}` : ''}
+                    </li>
+                  ))}
+                </ul>
               ) : null}
             </span>
           </li>

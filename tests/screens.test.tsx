@@ -100,9 +100,11 @@ test('work detail (RU): now, stages, why a retry, what was checked and how', () 
   const tl = text(ru.slice(ru.indexOf('data-testid="timeline"')));
   assert.match(
     tl,
-    /^[^]*?Подготовкапройдено, 20 сНаписание кодапройдено, 10 минПроверкиидёт сейчасРевьювпередиИнтеграциявпередиПриёмкавпереди/,
+    /^[^]*?Подготовкапройдено, 20 схранилище зависимостей: не используется, 2 сподготовка зависимостей \(prepare\): пройдено, 18 сНаписание кодапройдено, 10 минПроверкиидёт сейчас, 30 спроверка lint: пройдено, 30 спроверка unit: идёт сейчасРевьювпередиИнтеграциявпередиПриёмкавпереди/,
   );
-  assert.match(ru, /Попытка 2 \(последняя\) · всего 10 мин 20 с/);
+  // The unused dependency store is said in words (revision 3); no raw stage id is shown.
+  assert.doesNotMatch(tl, /dependency-store|candidate-test/);
+  assert.match(ru, /Попытка 2 \(последняя\) · всего 10 мин 50 с/);
   // The earlier attempt stopped at the checks: what came after was not reached.
   const old = text(ru.slice(ru.indexOf('data-testid="earlier-attempts"')));
   assert.match(old, /Попытка 1 · ошибка в коде[^]*Проверкине прошло, 45 сРевьюне дошло/);

@@ -206,7 +206,8 @@ test('process timeline: stages with time and outcome; review is a stage; accepta
     [
       ['prepare', 'passed', 20_000],
       ['writer', 'passed', 600_000],
-      ['gates', 'current', undefined],
+      // The finished check (lint, 30 s) counts; the running one (unit) has no time yet.
+      ['gates', 'current', 30_000],
       ['review', 'ahead', undefined],
       ['integration', 'ahead', undefined],
       ['acceptance', 'ahead', undefined],
@@ -309,7 +310,7 @@ test('review fixes: accepted works ask nothing; running works keep named actors;
   const noReview = timelineOf(
     {
       ...accepted.attempts[0]!,
-      stages: accepted.attempts[0]!.stages.filter((s) => s.stage !== 'review'),
+      stages: accepted.attempts[0]!.stages.filter((s) => s.stage !== 'candidate-review'),
     },
     accepted.work,
     true,
@@ -421,5 +422,37 @@ test('review round 2: timeline never guesses a missing record or promises a next
   const cancelled = { ...running.work, stage: { name: 'cancelled', next: [] } };
   assert.ok(
     !timelineOf(stalled, cancelled, true).some((s) => s.state === 'next' || s.state === 'ahead'),
+  );
+});
+
+test('revision 3 stages: prepare and the dependency store group into preparation; revision 2 stays readable', () => {
+  const row = running.attempts[0]!;
+  const [prep] = timelineOf(row, running.work, true);
+  assert.equal(prep!.durationMs, 20_000);
+  assert.deepEqual(
+    prep!.parts!.map((p) => [p.stage, p.unused ?? false]),
+    [
+      ['dependency-store', true],
+      ['prepare', false],
+    ],
+  );
+  // The same attempt from alpha.57/58 (no `unused`): the same steps, nothing said unused.
+  const old = { ...row, stages: row.stages.map(({ unused: _u, ...s }) => s) };
+  const steps57 = timelineOf(old, running.work, true);
+  assert.equal(steps57[0]!.durationMs, 20_000);
+  assert.ok(!steps57.some((s) => s.unused || s.parts?.some((p) => p.unused)));
+  // Every recorded stage lands in a process step; integration stages in integration.
+  const accepted = read<WorkDetailView>('../fixtures/work.accepted.sample.json');
+  const all = timelineOf(accepted.attempts[0], accepted.work, true);
+  assert.deepEqual(
+    all.map((s) => [s.stage, s.state, s.parts?.length ?? 0]),
+    [
+      ['prepare', 'passed', 2],
+      ['writer', 'passed', 1],
+      ['gates', 'passed', 2],
+      ['review', 'passed', 1],
+      ['integration', 'passed', 2],
+      ['acceptance', 'passed', 0],
+    ],
   );
 });

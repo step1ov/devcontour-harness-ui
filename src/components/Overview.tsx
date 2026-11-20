@@ -38,7 +38,7 @@ import {
   scopeOf,
   stageLeft,
 } from '../model/scope.ts';
-import { splitQuestions } from '../model/tasks.ts';
+import { splitQuestions, writerEnvironmentStop } from '../model/tasks.ts';
 import { Badge, type Tone } from './ui/badge.tsx';
 import { Card, CardContent } from './ui/card.tsx';
 import { Progress } from './ui/progress.tsx';
@@ -812,7 +812,18 @@ function problemsOf(
   for (const w of view.works) {
     if (w.stage.name === 'done' || w.target !== undefined || w.stage.name === 'cancelled') continue;
     const f = w.attempts.lastFailure;
-    if (f)
+    const env = writerEnvironmentStop(view, steps, w);
+    if (f && env)
+      out.push({
+        kind: label(t.bucket, f.bucket),
+        tone: 'warn',
+        workId: w.id,
+        text: p.writerEnv(f.attempt, withWorkNames(view, env.detail), env.notCounted),
+        who: t.blocker.whoActs(actorLabel(t, 'lead')),
+        codes: [f.bucket],
+        blocked: true,
+      });
+    else if (f)
       out.push({
         kind: label(t.bucket, f.bucket),
         tone: 'bad',

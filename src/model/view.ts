@@ -1,10 +1,10 @@
 // Operator view: the read-only document the panel renders. The schema is
 // owned by devcontour-harness (`operatorViewSchema` in its
 // src/contracts/operator-view.ts, JSON Schema schemas/operator-view.schema.json
-// and schemas/work-detail-view.schema.json, harness 0.1.0-alpha.57, view
-// version 1, revision 2; every revision 1 and 2 field is optional, so an
-// alpha.55 document (revision 0) and an alpha.56 one (revision 1) have the
-// same type). These types mirror it field by field; tests/contract.test.ts
+// and schemas/work-detail-view.schema.json, harness 0.1.0-alpha.59, view
+// version 1, revision 3; every revision 1–3 field is optional, so alpha.55
+// (revision 0), alpha.56 (1) and alpha.57/58 (2) documents have the same
+// type). These types mirror it field by field; tests/contract.test.ts
 // validates the fixtures against copies of the harness JSON Schemas. A host
 // adapter that builds a view from its own store follows the same schema.
 // Pure types: no node:*, no React.
@@ -552,7 +552,15 @@ export interface AttemptRow {
   model?: string;
   startedAt: string;
   finishedAt?: string;
-  stages: { stage: string; durationMs?: number; outcome?: 'passed' | 'failed' }[];
+  /**
+   * Timed stages of the attempt as the harness records them: `prepare` and
+   * `integration-prepare` (revision 3, harness alpha.59: preparing the
+   * dependencies is its own stage), `dependency-store`, `implementation`,
+   * `candidate-test:<gate>`, `candidate-review`, `integration-…`. `unused`
+   * (revision 3): the stage ran but had nothing to do (a dependency store
+   * that did not deploy a seed); it closes `passed`.
+   */
+  stages: { stage: string; durationMs?: number; outcome?: 'passed' | 'failed'; unused?: true }[];
 }
 
 /**
