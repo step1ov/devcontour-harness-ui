@@ -3,7 +3,7 @@
 // React. Sentences are phrasing over the view's own counts; no number is
 // derived here.
 
-import { instantMs } from './compat.ts';
+import { instantMs, isInstant } from './compat.ts';
 import { dict, type Lang } from './dict.ts';
 import type { TargetView } from './view.ts';
 
@@ -111,24 +111,23 @@ export function formatWhen(
   timeZone?: string,
   nowMs?: number,
 ): string | undefined {
-  const ms = instantMs(iso);
-  if (Number.isNaN(ms)) return undefined;
-  const at = parts(ms, timeZone);
+  if (!isInstant(iso)) return undefined;
+  const at = parts(instantMs(iso), timeZone);
   if (!at) return undefined;
   const time = `${at.hour}:${at.minute}`;
-  const dated = `${at.day}.${at.month}.${at.year} ${time}`;
+  const dated = `${at.day}.${at.month}.${at.year!.padStart(4, '0')} ${time}`;
   if (nowMs === undefined || !Number.isFinite(nowMs)) return dated;
   const today = parts(nowMs, timeZone);
   if (!today) return dated;
-  if (today.year === at.year && today.month === at.month && today.day === at.day) return time;
-  // The calendar day before the viewer's today, by date arithmetic (no DST guess).
-  const y = new Date(Date.UTC(Number(today.year), Number(today.month) - 1, Number(today.day) - 1));
-  const two = (n: number) => String(n).padStart(2, '0');
-  if (
-    String(y.getUTCFullYear()).padStart(4, '0') === at.year &&
-    two(y.getUTCMonth() + 1) === at.month &&
-    two(y.getUTCDate()) === at.day
-  )
+  const day = (p: Record<string, string>) => [Number(p.year), Number(p.month), Number(p.day)];
+  const [ay, am, ad] = day(at);
+  const [ty, tm, td] = day(today);
+  if (ay === ty && am === tm && ad === td) return time;
+  // The calendar day before the viewer's today, by date arithmetic (no 24 h
+  // guess across DST); setUTCFullYear keeps years 0-99 as they are.
+  const y = new Date(0);
+  y.setUTCFullYear(ty!, tm! - 1, td! - 1);
+  if (y.getUTCFullYear() === ay && y.getUTCMonth() + 1 === am && y.getUTCDate() === ad)
     return dict(lang).yesterday(time);
   return dated;
 }
@@ -145,38 +144,31 @@ export function footerSentence(
 
 /**
  * Where an accepted result is (`works[].target`), in one sentence. The remote
- * state is read by the harness from the local remote-tracking ref without a
- * fetch. From view revision 2 (harness alpha.57) a definite state carries the
- * harness `line` («в удалённой ветке origin/main ещё нет»), shown as written
- * after «Принято локально»; before, the sentence says "as of the last git
- * update on this machine". `unknown` or any state this build does not know
- * reads as unknown with the harness `reason`, never as "not pushed" or
- * "pushed", whatever its line says.
+ * state is read by the harness from this machine's copy of the remote branch
+ * (the remote-tracking ref) without a fetch. `pushed` and `not-pushed` are
+ * said from the state itself, with the branch from `trackingRef`, in the
+ * words of the harness line («принято локально; в удалённой ветке
+ * origin/main ещё нет»). The harness `line` is not quoted: it is clipped to
+ * 200 characters, and a long branch name can cut off the state word («ещё
+ * нет»), so the panel would show a negative state as an affirmative one.
+ * `unknown` or any state this build does not know reads as unknown with the
+ * harness `reason`, never as "not pushed" or "pushed".
  */
 export function targetSentence(target: Pick<TargetView, 'remote'>, lang: Lang): string {
-  const { state, reason, line } = target.remote;
+  const { state, reason, trackingRef } = target.remote;
   const t = dict(lang).target;
-  if (state === 'pushed' || state === 'not-pushed') {
-    const l = typeof line === 'string' ? line.trim() : '';
-    if (!l) return state === 'pushed' ? t.pushed : t.notPushed;
-    // The harness not-pushed line already starts with «принято локально»
-    // (in the view language, which may differ from the panel's): say it once.
-    const head = [dict('ru').target.acceptedLocally, dict('en').target.acceptedLocally].find((h) =>
-      l.toLowerCase().startsWith(h.toLowerCase()),
-    );
-    const body = head ? l.slice(head.length).replace(/^[\s;,:]+/, '') : l;
-    const text = t.withLine(body || l);
-    return /[.!?]$/.test(text) ? text : text + '.';
-  }
+  const ref =
+    typeof trackingRef === 'string' && trackingRef.trim() ? trackingRef.trim() : undefined;
+  if (state === 'pushed') return t.pushedOn(ref);
+  if (state === 'not-pushed') return t.notPushedOn(ref);
   return t.unknown(typeof reason === 'string' && reason.trim() ? `: ${reason.trim()}` : '');
 }
 
 /**
- * How fresh the remote state is (revision 2): the harness compared the
- * accepted commit with this machine's copy of the remote branch, and
- * `checkedAt` is when git last updated that copy. `undefined` (say nothing)
- * for a document without a harness line, which already says "as of the last
- * git update", and for an unknown state without a check time.
+ * How fresh the remote state is: the harness compared the accepted commit
+ * with this machine's copy of the remote branch, and `checkedAt` (revision 2)
+ * is when git last updated that copy. A definite state without `checkedAt`
+ * says the time is unknown; an unknown state without it says nothing more.
  */
 export function remoteFreshness(
   target: Pick<TargetView, 'remote'>,
@@ -184,12 +176,11 @@ export function remoteFreshness(
   timeZone?: string,
   nowMs?: number,
 ): string | undefined {
-  const { state, checkedAt, line } = target.remote;
+  const { state, checkedAt } = target.remote;
   const t = dict(lang).target;
   const when =
     typeof checkedAt === 'string' ? formatWhen(checkedAt, lang, timeZone, nowMs) : undefined;
   if (when) return t.checkedAt(when);
-  const definite = state === 'pushed' || state === 'not-pushed';
-  if (definite && typeof line === 'string' && line.trim()) return t.checkedAtUnknown;
+  if (state === 'pushed' || state === 'not-pushed') return t.checkedAtUnknown;
   return undefined;
 }

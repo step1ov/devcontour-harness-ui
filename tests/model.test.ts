@@ -316,17 +316,108 @@ test('httpViewSource passes the UI language as ?lang=', async () => {
 
 test('targetSentence: only pushed and not-pushed are definite; anything else is unknown', async () => {
   const { targetSentence } = await import('../src/model/i18n.ts');
-  const t = (state: string, reason?: string) => ({
-    remote: { state, ...(reason ? { reason } : {}) },
+  const t = (state: string, extra: Record<string, string> = {}) => ({
+    remote: { state, ...extra },
   });
-  assert.match(targetSentence(t('pushed'), 'en'), /^Accepted locally; on the remote \(as of/);
-  assert.match(targetSentence(t('not-pushed'), 'en'), /not on the remote yet/);
   assert.equal(
-    targetSentence(t('unknown', 'no tracking ref'), 'en'),
+    targetSentence(t('pushed', { trackingRef: 'origin/main' }), 'en'),
+    'Accepted locally; already on the remote branch origin/main.',
+  );
+  assert.equal(
+    targetSentence(t('not-pushed', { trackingRef: 'origin/main' }), 'ru'),
+    'Принято локально; в удалённой ветке origin/main ещё нет.',
+  );
+  assert.equal(
+    targetSentence(t('not-pushed'), 'en'),
+    'Accepted locally; not yet on the remote branch.',
+  );
+  assert.equal(
+    targetSentence(t('unknown', { reason: 'no tracking ref' }), 'en'),
     'Accepted locally; remote state unknown: no tracking ref.',
   );
   assert.equal(targetSentence(t('future-state'), 'en'), 'Accepted locally; remote state unknown.');
-  assert.match(targetSentence(t('unknown', 'нет ref'), 'ru'), /— неизвестно: нет ref\.$/);
+  assert.match(
+    targetSentence(t('unknown', { reason: 'нет ref' }), 'ru'),
+    /— неизвестно: нет ref\.$/,
+  );
+  // The line never decides the state.
+  assert.equal(
+    targetSentence(t('unknown', { line: 'already on the remote branch x' }), 'en'),
+    'Accepted locally; remote state unknown.',
+  );
+});
+
+test('formatWhen: today, yesterday by the calendar (DST, midnight, early years), else the date', async () => {
+  const { formatWhen } = await import('../src/model/i18n.ts');
+  const at = (iso: string) => Date.parse(iso);
+  const Z = 'UTC';
+  assert.equal(formatWhen('2026-11-19T11:51:40Z', 'ru', Z, at('2026-11-19T12:00:00Z')), '11:51');
+  assert.equal(
+    formatWhen('2026-11-18T18:05:00Z', 'ru', Z, at('2026-11-19T12:00:00Z')),
+    'вчера 18:05',
+  );
+  assert.equal(
+    formatWhen('2026-11-18T18:05:00Z', 'en', Z, at('2026-11-19T12:00:00Z')),
+    'yesterday 18:05',
+  );
+  assert.equal(
+    formatWhen('2026-11-17T18:05:00Z', 'ru', Z, at('2026-11-19T12:00:00Z')),
+    '17.11.2026 18:05',
+  );
+  // No viewer clock: always the date.
+  assert.equal(formatWhen('2026-11-19T11:51:40Z', 'ru', Z), '19.11.2026 11:51');
+  // Midnight: 23:59 of the day before is yesterday; 00:00 is today.
+  assert.equal(
+    formatWhen('2026-11-18T23:59:00Z', 'ru', Z, at('2026-11-19T00:01:00Z')),
+    'вчера 23:59',
+  );
+  assert.equal(formatWhen('2026-11-19T00:00:00Z', 'ru', Z, at('2026-11-19T00:01:00Z')), '00:00');
+  // Year and month boundaries.
+  assert.equal(
+    formatWhen('2026-12-31T22:00:00Z', 'ru', Z, at('2027-01-01T08:00:00Z')),
+    'вчера 22:00',
+  );
+  assert.equal(
+    formatWhen('2028-02-29T10:00:00Z', 'ru', Z, at('2028-03-01T08:00:00Z')),
+    'вчера 10:00',
+  );
+  // The zone decides the day: 23:30 UTC is already the next day in Moscow.
+  assert.equal(
+    formatWhen('2026-11-18T22:30:00Z', 'ru', 'Europe/Moscow', at('2026-11-19T09:00:00Z')),
+    '01:30',
+  );
+  // Spring forward (Berlin, 29.03.2026, a 23 h day): 00:30 on the 29th is
+  // yesterday for 00:30 on the 30th, though now − 24 h falls on the 28th.
+  assert.equal(
+    formatWhen('2026-03-28T23:30:00Z', 'ru', 'Europe/Berlin', at('2026-03-29T22:30:00Z')),
+    'вчера 00:30',
+  );
+  // Fall back (Berlin, 25.10.2026, a 25 h day): 23:30 on the 24th is two days
+  // back for 00:30 on the 26th, though only 26 h passed.
+  assert.equal(
+    formatWhen('2026-10-24T21:30:00Z', 'ru', 'Europe/Berlin', at('2026-10-25T23:30:00Z')),
+    '24.10.2026 23:30',
+  );
+  assert.equal(
+    formatWhen('2026-10-25T00:30:00Z', 'ru', 'Europe/Berlin', at('2026-10-25T23:30:00Z')),
+    'вчера 02:30',
+  );
+  // Early years stay themselves (Date.UTC would map 99 to 1999).
+  assert.equal(
+    formatWhen('0099-11-18T18:05:00Z', 'ru', Z, at('0099-11-19T12:00:00Z')),
+    'вчера 18:05',
+  );
+  assert.equal(
+    formatWhen('0099-11-10T18:05:00Z', 'ru', Z, at('0099-11-19T12:00:00Z')),
+    '10.11.0099 18:05',
+  );
+  // Not an instant: undefined, never a shifted date.
+  assert.equal(formatWhen('2026-02-30T10:00:00Z', 'ru', Z, at('2026-03-02T12:00:00Z')), undefined);
+  assert.equal(formatWhen('2026-11-19T10:00:00', 'ru', Z, at('2026-11-19T12:00:00Z')), undefined);
+  assert.equal(
+    formatWhen('2026-11-19T10:00:00Z', 'ru', 'Not/AZone', at('2026-11-19T12:00:00Z')),
+    undefined,
+  );
 });
 
 test('the gate checks the target and warnings the panel renders', () => {

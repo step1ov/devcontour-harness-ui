@@ -496,7 +496,7 @@
       "plain": "the writer asked question q-17 on export-csv (severity 8)"
     },
     {
-      "at": "2026-11-19T11:26:00.000Z",
+      "at": "2026-11-19T11:27:00.000Z",
       "actor": "lead",
       "action": "question.answered",
       "workId": "locale-format",
@@ -511,6 +511,13 @@
       "plain": "add-greeting was accepted (attempt 1): 3b1f9e0c2a7d on refs/heads/harness/accepted, locally"
     },
     {
+      "at": "2026-11-19T11:13:40.000Z",
+      "actor": "controller",
+      "action": "gate.reused",
+      "workId": "add-greeting",
+      "plain": "check unit was reused from the candidate: same tree, not run (add-greeting, attempt 1, integration)"
+    },
+    {
       "at": "2026-11-19T11:13:00.000Z",
       "actor": "reviewer",
       "action": "review.approved",
@@ -519,11 +526,25 @@
       "plain": "reviewer codex approved the changes of add-greeting (attempt 1, candidate); read the diff, ran nothing"
     },
     {
+      "at": "2026-11-19T11:11:00.000Z",
+      "actor": "controller",
+      "action": "gate.passed",
+      "workId": "add-greeting",
+      "plain": "the controller ran check unit: passed (add-greeting, attempt 1, candidate)"
+    },
+    {
       "at": "2026-11-19T11:10:30.000Z",
       "actor": "controller",
       "action": "gate.passed",
       "workId": "add-greeting",
       "plain": "the controller ran check lint: passed (add-greeting, attempt 1, candidate)"
+    },
+    {
+      "at": "2026-11-19T11:10:00.000Z",
+      "actor": "reviewer",
+      "action": "review.approved",
+      "subject": "g1",
+      "plain": "reviewer codex approved the plan g1, round 2"
     },
     {
       "at": "2026-11-19T11:00:00.000Z",
@@ -535,9 +556,9 @@
     {
       "at": "2026-11-18T18:05:00.000Z",
       "actor": "reviewer",
-      "action": "review.approved",
+      "action": "review.changes-requested",
       "subject": "g1",
-      "plain": "reviewer codex approved the plan g1, round 2"
+      "plain": "reviewer codex returned the plan g1: 1 blocking finding, round 1"
     }
   ],
   "decisions": [

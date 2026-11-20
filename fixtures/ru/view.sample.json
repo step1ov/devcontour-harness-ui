@@ -496,7 +496,7 @@
       "plain": "исполнитель задал вопрос q-17 по работе export-csv (важность 8)"
     },
     {
-      "at": "2026-11-19T11:26:00.000Z",
+      "at": "2026-11-19T11:27:00.000Z",
       "actor": "lead",
       "action": "question.answered",
       "workId": "locale-format",
@@ -511,6 +511,13 @@
       "plain": "работа add-greeting принята (попытка 1): 3b1f9e0c2a7d в refs/heads/harness/accepted, локально"
     },
     {
+      "at": "2026-11-19T11:13:40.000Z",
+      "actor": "controller",
+      "action": "gate.reused",
+      "workId": "add-greeting",
+      "plain": "проверка unit взята с кандидата: то же дерево, не запускалась (работа add-greeting, попытка 1, интеграция)"
+    },
+    {
       "at": "2026-11-19T11:13:00.000Z",
       "actor": "reviewer",
       "action": "review.approved",
@@ -519,11 +526,25 @@
       "plain": "reviewer codex одобрил изменения работы add-greeting (попытка 1, кандидат); читал diff, ничего не запускал"
     },
     {
+      "at": "2026-11-19T11:11:00.000Z",
+      "actor": "controller",
+      "action": "gate.passed",
+      "workId": "add-greeting",
+      "plain": "контроллер запустил проверку unit: прошла (работа add-greeting, попытка 1, кандидат)"
+    },
+    {
       "at": "2026-11-19T11:10:30.000Z",
       "actor": "controller",
       "action": "gate.passed",
       "workId": "add-greeting",
       "plain": "контроллер запустил проверку lint: прошла (работа add-greeting, попытка 1, кандидат)"
+    },
+    {
+      "at": "2026-11-19T11:10:00.000Z",
+      "actor": "reviewer",
+      "action": "review.approved",
+      "subject": "g1",
+      "plain": "reviewer codex одобрил план g1, раунд 2"
     },
     {
       "at": "2026-11-19T11:00:00.000Z",
@@ -535,9 +556,9 @@
     {
       "at": "2026-11-18T18:05:00.000Z",
       "actor": "reviewer",
-      "action": "review.approved",
+      "action": "review.changes-requested",
       "subject": "g1",
-      "plain": "reviewer codex одобрил план g1, раунд 2"
+      "plain": "reviewer codex вернул план g1: блокирующих замечаний 1, раунд 1"
     }
   ],
   "decisions": [

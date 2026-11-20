@@ -487,13 +487,11 @@ const ru = {
     `Данные harness на ${at ?? 'неизвестное время'}; панель ничего не меняет.`,
   yesterday: (time: string) => `вчера ${time}`,
   target: {
-    pushed:
-      'Принято локально; в удалённом репозитории — да (по последнему обновлению git на этой машине).',
-    notPushed:
-      'Принято локально; в удалённом репозитории — ещё нет (по последнему обновлению git на этой машине).',
     unknown: (why: string) => `Принято локально; в удалённом репозитории — неизвестно${why}.`,
-    acceptedLocally: 'Принято локально',
-    withLine: (line: string) => `Принято локально; ${line}`,
+    pushedOn: (ref: string | undefined) =>
+      `Принято локально; уже в удалённой ветке${ref ? ` ${ref}` : ''}.`,
+    notPushedOn: (ref: string | undefined) =>
+      `Принято локально; в удалённой ветке${ref ? ` ${ref}` : ''} ещё нет.`,
     checkedAt: (when: string) =>
       `Сверено с копией удалённой ветки на этой машине, без сети; git обновил копию: ${when}.`,
     checkedAtUnknown:
@@ -1061,12 +1059,11 @@ const en: Dict = {
     `Harness data as of ${at ?? 'an unknown time'}; the panel changes nothing.`,
   yesterday: (time: string) => `yesterday ${time}`,
   target: {
-    pushed: 'Accepted locally; on the remote (as of the last git update on this machine).',
-    notPushed:
-      'Accepted locally; not on the remote yet (as of the last git update on this machine).',
     unknown: (why: string) => `Accepted locally; remote state unknown${why}.`,
-    acceptedLocally: 'Accepted locally',
-    withLine: (line: string) => `Accepted locally; ${line}`,
+    pushedOn: (ref: string | undefined) =>
+      `Accepted locally; already on the remote branch${ref ? ` ${ref}` : ''}.`,
+    notPushedOn: (ref: string | undefined) =>
+      `Accepted locally; not yet on the remote branch${ref ? ` ${ref}` : ''}.`,
     checkedAt: (when: string) =>
       `Compared with this machine's copy of the remote branch, no network; git updated the copy: ${when}.`,
     checkedAtUnknown:

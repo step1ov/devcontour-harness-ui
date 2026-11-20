@@ -70,9 +70,13 @@ export function Activity({
   );
   const span = instantMs(view.history.to) - instantMs(view.history.from);
   const windowText = Number.isFinite(span) && span > 0 ? formatWindow(span, lang) : undefined;
+  // The glossary names only the actors in the feed, not a chosen filter value.
   const terms = [
     ...new Set(
-      actors.filter((a) => Object.hasOwn(ACTOR_TERM, a)).map((a) => ACTOR_TERM[a] as GlossaryId),
+      (all ?? [])
+        .map((e) => String(e.actor))
+        .filter((a) => Object.hasOwn(ACTOR_TERM, a))
+        .map((a) => ACTOR_TERM[a] as GlossaryId),
     ),
   ];
   const chips = (

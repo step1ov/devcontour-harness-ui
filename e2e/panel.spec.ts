@@ -14,11 +14,11 @@ const screens: [string, string, RegExp][] = [
   [
     'work-accepted',
     '#/work/add-greeting',
-    /Принято локально; в удалённой ветке origin\/harness\/accepted ещё нет\.[\s\S]*git обновил копию: (вчера|18\.11\.2026) 20:30/,
+    /Принято локально; в удалённой ветке origin\/harness\/accepted ещё нет\.[\s\S]*git обновил копию: вчера 20:30/,
   ],
   ['reviews', '#/reviews', /раунды 2 из 6/],
   ['decisions', '#/decisions', /Временные \(1\)/],
-  ['activity', '#/activity', /Кто что делал[\s\S]*контроллер[\s\S]*(вчера|18\.11\.2026) 21:05/],
+  ['activity', '#/activity', /Кто что делал[\s\S]*контроллер[\s\S]*вчера 21:05/],
   ['settings', '#/settings', /Технические вопросы решает ведущий: да/],
   ['history', '#/history', /Наибольшая нагрузка за окно/],
   ['health', '#/health', /Контроллер работает/],
@@ -31,6 +31,8 @@ async function open(page: Page, hash: string, lang = 'ru') {
 
 for (const [name, hash, key] of screens) {
   test(`${name}: key text, no horizontal scroll, axe clean`, async ({ page }, info) => {
+    // The viewer's clock is fixed shortly after the demo data (19.11.2026 15:00 Moscow time).
+    await page.clock.setFixedTime(new Date('2026-11-19T12:05:00Z'));
     await open(page, hash);
     await expect(page.locator('main')).toContainText(key);
     const overflow = await page.evaluate(
@@ -88,20 +90,32 @@ test('a work link opens the detail, and "what was checked" lands on the rows', a
   await expect(page.locator('#verification')).toBeInViewport();
 });
 
-test('the day after the demo data: «вчера» before the time, the date before that', async ({
-  page,
-}) => {
-  // The page clock is the viewer's: the demo view is of 19.11.2026 15:00 Moscow time.
-  await page.clock.setFixedTime(new Date('2026-11-19T12:05:00Z'));
-  await open(page, '#/activity');
-  await expect(page.getByTestId('activity-feed')).toContainText('вчера 21:05');
-  await expect(page.getByTestId('activity-feed')).toContainText('14:51');
-  await page.clock.setFixedTime(new Date('2026-11-21T12:05:00Z'));
-  await open(page, '#/work/add-greeting');
-  await expect(page.getByTestId('remote-checked')).toContainText(
-    'git обновил копию: 18.11.2026 20:30',
-  );
-});
+// The demo feed: 19.11 14:51 (newest) … 18.11 21:05 (oldest); the remote copy
+// was updated on 18.11 at 20:30 (Moscow time, playwright.config).
+const days: [string, string, string[], string[]][] = [
+  ['the day of the oldest event', '2026-11-18T19:00:00Z', ['21:05'], ['20:30']],
+  ['the day of the data', '2026-11-19T12:05:00Z', ['14:51', 'вчера 21:05'], ['вчера 20:30']],
+  [
+    'the day after',
+    '2026-11-20T12:05:00Z',
+    ['вчера 14:51', '18.11.2026 21:05'],
+    ['18.11.2026 20:30'],
+  ],
+  ['two days after', '2026-11-21T12:05:00Z', ['19.11.2026 14:51'], ['18.11.2026 20:30']],
+];
+for (const [when, now, feed, remote] of days)
+  test(`times by the viewer's clock on ${when}: today bare, «вчера», then the date`, async ({
+    page,
+  }) => {
+    await page.clock.setFixedTime(new Date(now));
+    await open(page, '#/activity');
+    const list = page.getByTestId('activity-feed').locator('ol time');
+    for (const t of feed)
+      await expect(list.filter({ hasText: new RegExp(`^${t}$`) })).toHaveCount(1);
+    await open(page, '#/work/add-greeting');
+    for (const t of remote)
+      await expect(page.getByTestId('remote-checked')).toContainText(`git обновил копию: ${t}.`);
+  });
 
 test('who did what: filter by work, then open the work from an event', async ({ page }) => {
   await open(page, '#/activity');
@@ -111,7 +125,7 @@ test('who did what: filter by work, then open the work from an event', async ({ 
     .getByRole('link', { name: 'add-greeting' })
     .click();
   await expect(page).toHaveURL(/#\/activity\?work=add-greeting$/);
-  await expect(feed).toContainText('показано 4 из 10');
+  await expect(feed).toContainText('показано 6 из 13');
   await expect(feed).not.toContainText('locale-format; пишет');
   await feed.locator('ol a', { hasText: 'add-greeting' }).first().click();
   await expect(page).toHaveURL(/#\/work\/add-greeting$/);

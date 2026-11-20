@@ -155,8 +155,8 @@ test('work detail (EN) and the accepted work: where it is, drift and the checks 
   assert.match(okEn, /Accepted locally; not yet on the remote branch origin\/harness\/accepted\./);
 });
 
-test('remote line: definite states quote the harness line, anything else is unknown, never pushed', () => {
-  const withRemote = (remote: Record<string, unknown>, now?: number) =>
+test('remote line: the state says pushed or not, in harness words; anything else is unknown', () => {
+  const withRemote = (remote: Record<string, unknown>, lang: 'en' | 'ru' = 'en') =>
     text(
       html(
         <WorkDetail
@@ -164,9 +164,8 @@ test('remote line: definite states quote the harness line, anything else is unkn
             ...accepted,
             work: { ...accepted.work, target: { ...accepted.work.target!, remote } as never },
           }}
-          lang="en"
+          lang={lang}
           timeZone={TZ}
-          {...(now === undefined ? {} : { now })}
         />,
       ),
     );
@@ -183,11 +182,25 @@ test('remote line: definite states quote the harness line, anything else is unkn
     withRemote({ state: 'pushed', checkedAt: '2026-11-10T09:00:00Z', line: 'already on x' }),
     /git updated the copy: 10\.11\.2026 09:00\./,
   );
-  // No reflog: the check time is unknown, said so.
+  // No reflog: the check time is unknown, said so; no tracking ref: no name.
   assert.match(
-    withRemote({ state: 'not-pushed', line: 'accepted locally; not yet on the remote branch o/m' }),
-    /Accepted locally; not yet on the remote branch o\/m\. Compared with this machine.{1,6}s copy of the remote branch, no network; when git updated the copy is unknown\./,
+    withRemote({ state: 'not-pushed' }),
+    /Accepted locally; not yet on the remote branch\. Compared with this machine.{1,6}s copy of the remote branch, no network; when git updated the copy is unknown\./,
   );
+  // A long branch name: the harness clips its line at 200 and cuts off «ещё
+  // нет» (as `remoteOf` + the projection do); the panel still says "not yet".
+  const ref = 'origin/' + 'b'.repeat(180);
+  const full = `принято локально; в удалённой ветке ${ref} ещё нет`;
+  const clipped = full.slice(0, 199) + '…';
+  assert.ok(!clipped.includes('ещё нет'), 'the clipped harness line lost the state word');
+  const ru = withRemote({ state: 'not-pushed', trackingRef: ref, line: clipped }, 'ru');
+  assert.match(ru, new RegExp(`Принято локально; в удалённой ветке ${ref} ещё нет\\.`));
+  assert.doesNotMatch(ru, /…/);
+  const en = withRemote({
+    state: 'not-pushed',
+    line: ('accepted locally; not yet on the remote branch ' + 'c'.repeat(300)).slice(0, 199) + '…',
+  });
+  assert.match(en, /Accepted locally; not yet on the remote branch\./, 'no trackingRef: no name');
   // Unknown: the reason, not the line; never pushed or not pushed.
   const unknown = withRemote({
     state: 'unknown',
@@ -199,15 +212,20 @@ test('remote line: definite states quote the harness line, anything else is unkn
   // A state this build does not know, even with a line that says pushed, is unknown.
   const future = withRemote({
     state: 'mirrored',
+    trackingRef: 'origin/main',
     line: 'already on the remote branch origin/main',
     checkedAt: '2026-11-19T11:00:00Z',
   });
   assert.match(future, /Accepted locally; remote state unknown\./);
   assert.doesNotMatch(future, /already on the remote/);
-  // A blank line falls back to the panel sentence of the state.
+  // A not-pushed state whose line claims otherwise is still "not yet".
   assert.match(
-    withRemote({ state: 'pushed', line: '  ' }),
-    /on the remote \(as of the last git update/,
+    withRemote({
+      state: 'not-pushed',
+      trackingRef: 'o/m',
+      line: 'already on the remote branch o/m',
+    }),
+    /Accepted locally; not yet on the remote branch o\/m\./,
   );
 });
 
@@ -476,7 +494,10 @@ test('who did what: harness lines as written, actor chips, times with «вчер
   );
   assert.ok(t.indexOf('11:51') < t.indexOf('вчера 18:05'), 'newest first, as the harness sends it');
   // The event of the day before the view: «вчера», not a bare time.
-  assert.match(t, /вчера 18:05 reviewer reviewer codex одобрил план g1, раунд 2/);
+  assert.match(
+    t,
+    /вчера 18:05 reviewer reviewer codex вернул план g1: блокирующих замечаний 1, раунд 1/,
+  );
   assert.match(
     a,
     /data-actor="writer">исполнитель<\/span> <span class="hui-plain">исполнитель задал вопрос q-17/,
@@ -487,7 +508,7 @@ test('who did what: harness lines as written, actor chips, times with «вчер
     a,
     /<a class="hui-link" href="#\/work\/export-csv"><span class="hui-sr">открыть работу <\/span><code>export-csv<\/code><\/a>/,
   );
-  assert.equal((a.match(/href="#\/work\//g) ?? []).length, 9);
+  assert.equal((a.match(/href="#\/work\//g) ?? []).length, 11);
   // Filters by work and by actor, and the glossary of the actors present.
   assert.match(a, /href="\{&quot;workId&quot;:&quot;add-greeting&quot;\}"/);
   assert.match(a, /href="\{&quot;actor&quot;:&quot;reviewer&quot;\}"/);
@@ -505,7 +526,7 @@ test('who did what: harness lines as written, actor chips, times with «вчер
       />,
     ),
   );
-  assert.match(byWork, /показано 4 из 10/);
+  assert.match(byWork, /показано 6 из 13/);
   assert.doesNotMatch(byWork, /locale-format; пишет/);
   // A filter that matches nothing is not "nothing happened".
   const none = text(
@@ -513,13 +534,25 @@ test('who did what: harness lines as written, actor chips, times with «вчер
   );
   assert.match(none, /По выбранному фильтру событий нет\./);
   assert.doesNotMatch(none, /ничего не происходило/);
+  assert.doesNotMatch(none, /хост: что это значит/, 'a chosen filter is not an actor of the feed');
+  // A filter by a present actor keeps exactly its events.
+  const byActor = html(
+    <Activity view={ruView} lang="ru" filter={{ actor: 'controller' }} filterHref={() => '#'} />,
+  );
+  assert.match(text(byActor), /показано 8 из 13/);
+  const chips = [...byActor.matchAll(/data-actor="([^"]+)"/g)].map((m) => m[1]);
+  assert.equal(chips.length, 8);
+  assert.deepEqual([...new Set(chips)], ['controller']);
   // English: the same screen in the English dictionary.
   const en = text(html(<Activity view={view} lang="en" timeZone={TZ} />));
   assert.match(en, /Harness events of the last 24 h, newest first\./);
-  assert.match(en, /yesterday 18:05 reviewer reviewer codex approved the plan g1, round 2/);
   assert.match(
     en,
-    /11:26 lead agent the lead answered question q-12 on locale-format \(technical question\)/,
+    /yesterday 18:05 reviewer reviewer codex returned the plan g1: 1 blocking finding, round 1/,
+  );
+  assert.match(
+    en,
+    /11:27 lead agent the lead answered question q-12 on locale-format \(technical question\)/,
   );
 });
 

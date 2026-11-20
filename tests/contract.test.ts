@@ -190,6 +190,47 @@ test('fixture activity follows the harness feed: newest first, its actors and ev
       if (i) assert.ok(instantMs(feed[i - 1]!.at) >= at, `${f}: newest first at ${i}`);
     }
   }
+  // The feed agrees with the evidence the other documents record: every gate
+  // row that ran or was reused and every review verdict of the accepted work
+  // has its event at the same time, and every recorded answer too.
+  for (const [lang, overview, details] of [
+    ['en', viewFixture, [acceptedFixture]],
+    [
+      'ru',
+      read('../fixtures/ru/view.sample.json'),
+      [read('../fixtures/ru/work.accepted.sample.json')],
+    ],
+  ] as const) {
+    const feed = overview.activity as ActivityEntry[];
+    for (const d of details)
+      for (const r of d.verification as VerificationRow[]) {
+        if (!r.at || r.how === 'not-checked') continue;
+        const want =
+          r.kind === 'review' ? 'review.approved' : r.how === 'reused' ? 'gate.reused' : 'gate.';
+        const hit = feed.find(
+          (e) =>
+            e.workId === d.work.id &&
+            instantMs(e.at) === instantMs(r.at!) &&
+            e.action.startsWith(want) &&
+            (r.kind === 'review' || e.plain.includes(` ${r.gate}`)),
+        );
+        assert.ok(hit, `${lang}: no event for ${r.kind} ${r.gate} at ${r.at}`);
+      }
+    for (const q of overview.questions as OperatorQuestion[]) {
+      if (!q.answerBasis) continue;
+      const hit = feed.find((e) => e.action === 'question.answered' && e.subject === q.requestId);
+      assert.ok(hit, `${lang}: no answer event for ${q.requestId}`);
+      assert.equal(instantMs(hit.at), instantMs(q.answerBasis.at), `${lang}: ${q.requestId}`);
+      assert.equal(hit.actor, q.answerBasis.by, `${lang}: who answered ${q.requestId}`);
+    }
+    const asked = feed.filter((e) => e.action === 'question.asked').map((e) => e.subject);
+    for (const q of overview.questions as OperatorQuestion[])
+      if (
+        instantMs(q.createdAt) >= instantMs(overview.history.from) &&
+        q.state === 'awaiting-answer'
+      )
+        assert.ok(asked.includes(q.requestId), `${lang}: asked ${q.requestId}`);
+  }
   // Both languages describe the same events.
   const en = read('../fixtures/view.sample.json').activity as ActivityEntry[];
   const ru = read('../fixtures/ru/view.sample.json').activity as ActivityEntry[];
