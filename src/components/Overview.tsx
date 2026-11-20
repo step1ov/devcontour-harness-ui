@@ -15,10 +15,10 @@ import {
   usd,
 } from '../model/format.ts';
 import { instantMs } from '../model/compat.ts';
-import { dict, knownLabel, label, type Dict } from '../model/dict.ts';
+import { dict, knownLabel, label, type Dict, type Lang } from '../model/dict.ts';
 import { footerSentence, headerSentence } from '../model/i18n.ts';
 import {
-  actorsOn,
+  dependencyState,
   nextSteps,
   withWorkNames,
   workName,
@@ -81,6 +81,13 @@ export function Overview({
   // Works listed with a location; the count itself is `progress.done`.
   const accepted = view.works.filter((w) => w.target !== undefined);
   const yours = asking.length + steps.operator.length;
+  // Works the harness counts as waiting for you that no item here names.
+  const named = new Set([
+    ...asking.map((q) => q.workId),
+    ...steps.operator.flatMap((s) => s.workIds),
+    ...steps.unlistedAnswers,
+  ]);
+  const hiddenWaiting = Math.max(0, progress.waitingOperator - named.size);
   const others = steps.lead.length + steps.other.length + steps.dependencies.length;
   const otherActors = [...new Set(steps.other.map((s) => s.actor))];
   const count = (stage: string) =>
@@ -166,7 +173,7 @@ export function Overview({
         <Heading t={t} term="decision">
           {o.needsYou(yours)}
         </Heading>
-        {yours === 0 && steps.unlistedAnswers.length === 0 ? (
+        {yours === 0 && steps.unlistedAnswers.length === 0 && hiddenWaiting === 0 ? (
           <p className="hui-muted">
             {view.truncated?.questions || view.truncated?.escalations
               ? t.header.unknownClipped
@@ -238,6 +245,9 @@ export function Overview({
             ))}
           </ul>
         )}
+        {hiddenWaiting ? (
+          <p data-testid="unlisted-waiting">{o.unlistedWaiting(hiddenWaiting)}</p>
+        ) : null}
         {steps.unlistedAnswers.length ? (
           <p data-testid="unlisted-answers">
             {o.unlistedAnswers(steps.unlistedAnswers.map((id) => workName(view, id)).join(', '))}
@@ -344,6 +354,7 @@ export function Overview({
                   t={t}
                   view={view}
                   links={links}
+                  lang={lang}
                 />
               ))}
             </ul>
@@ -630,12 +641,14 @@ function DependencyLine({
   t,
   view,
   links,
+  lang,
 }: {
   d: DependencyWait;
   steps: NextSteps;
   t: Dict;
   view: OperatorView;
   links: Links;
+  lang: Lang;
 }) {
   const o = t.overview;
   return (
@@ -645,20 +658,25 @@ function DependencyLine({
       </WorkRef>{' '}
       {o.waitsFor}{' '}
       {d.on.map((id, i) => {
-        const who = actorsOn(steps, id);
+        const st = dependencyState(view, steps, id);
+        const stage = (name: string) => stageLabel(name, lang);
+        const who =
+          st.kind === 'actors'
+            ? o.nextThere(st.actors.map((a) => actorLabel(t, a)).join(o.then))
+            : st.kind === 'running'
+              ? o.runningThere(stage(st.stage))
+              : st.kind === 'queue'
+                ? o.nobodyThere
+                : st.kind === 'waits'
+                  ? o.waitsThere
+                  : o.unknownThere(st.stage === undefined ? undefined : stage(st.stage));
         return (
           <span key={id}>
             {i ? '; ' : ''}
             <WorkRef id={id} {...links}>
               <strong>{workName(view, id)}</strong>
             </WorkRef>{' '}
-            <span className="hui-who">
-              (
-              {who.length
-                ? o.nextThere(who.map((a) => actorLabel(t, a)).join(o.then))
-                : o.nobodyThere}
-              )
-            </span>
+            <span className="hui-who">({who})</span>
           </span>
         );
       })}

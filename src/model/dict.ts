@@ -609,6 +609,12 @@ const ru = {
     nextThere: (who: string) => `по ней дальше действует: ${who}`,
     then: ', затем ',
     nobodyThere: 'по ней никто — просто ждёт очереди',
+    runningThere: (stage: string) => `по ней действует: harness — этап «${stage}»`,
+    waitsThere: 'по ней никто — она сама ждёт другой работы',
+    unknownThere: (stage: string | undefined) =>
+      `по ней кто действует — неизвестно${stage ? ` (этап «${stage}»)` : ' (её нет в этом представлении)'}`,
+    unlistedWaiting: (n: number) =>
+      `Ещё ${n} ${ruPlural(n, ['работа ждёт', 'работы ждут', 'работ ждут'])} вашего действия, но в этом представлении не ${n === 1 ? 'показана' : 'показаны'} — выполните harness status.`,
     now: (running: number, slots: number) => `Сейчас в работе (${running} из ${slots} мест)`,
     nothingRunning: 'Сейчас ничего не выполняется.',
     runningUnlisted: (n: number) =>
@@ -1224,6 +1230,12 @@ const en: Dict = {
     nextThere: (who: string) => `on that one, acts: ${who}`,
     then: ', then ',
     nobodyThere: 'on that one, nobody — it just waits its turn',
+    runningThere: (stage: string) => `on that one, acts: the harness — stage “${stage}”`,
+    waitsThere: 'on that one, nobody — it waits for another work order itself',
+    unknownThere: (stage: string | undefined) =>
+      `on that one, who acts is unknown${stage ? ` (stage “${stage}”)` : ' (not in this view)'}`,
+    unlistedWaiting: (n: number) =>
+      `${n} more work order${n === 1 ? ' waits' : 's wait'} for your action but ${n === 1 ? 'is' : 'are'} not in this view — run harness status.`,
     now: (running: number, slots: number) => `Working now (${running} of ${slots} slots)`,
     nothingRunning: 'Nothing is running.',
     runningUnlisted: (n: number) =>

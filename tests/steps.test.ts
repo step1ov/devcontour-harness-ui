@@ -10,6 +10,7 @@ import { checkView, headerSentence, type OperatorView, type WorkView } from '../
 import {
   actorsOn,
   attemptsLineParts,
+  dependencyState,
   nextSteps,
   withWorkNames,
   workName,
@@ -269,4 +270,129 @@ test('work names: the title key, a readable id, or the title of an opaque id', (
     withWorkNames(stopped, `ждёт зависимости ${W1} — она остановлена`),
     'ждёт зависимости WEB-1 — она остановлена',
   );
+});
+
+test('review round 1: stage needs never join an unrelated stop; plans, terminal works, answers', () => {
+  // Without WEB-2's escalation (a clipped list) its stage need (lead:
+  // diagnose-failure) belongs to the dependency wait, not to the plan approval.
+  const clipped = nextSteps({
+    ...stopped,
+    escalations: stopped.escalations.filter((e) => e.workId !== W2),
+  });
+  assert.equal(clipped.lead.length, 1);
+  assert.equal(clipped.lead[0]!.action, undefined);
+  assert.deepEqual(clipped.lead[0]!.workIds, [W1, W2]);
+  assert.deepEqual(
+    clipped.dependencies[0]!.records.map((r) => r.source),
+    ['blocker', 'needs'],
+  );
+  // Without WEB-1's escalation the reset still is one line: the stage need
+  // joins the blocker whose code asks for that action.
+  const noEsc = nextSteps({ ...stopped, escalations: [] });
+  assert.equal(noEsc.operator.length, 1);
+  assert.equal(noEsc.operator[0]!.action, 'reset-attempts');
+  assert.equal(noEsc.operator[0]!.code, 'ATTEMPTS_EXHAUSTED');
+
+  // The same approval text on two plans is two approvals.
+  const twoPlans = nextSteps({
+    ...stopped,
+    works: [stopped.works[0]!, { ...stopped.works[1]!, graphId: 'g-other', dependsOn: [] }],
+  });
+  assert.deepEqual(
+    twoPlans.lead.filter((x) => x.code === 'APPROVAL_STALE').map((x) => x.workIds),
+    [[W1], [W2]],
+  );
+
+  // A finished work whose stage says "nobody, nothing" is not waiting anywhere.
+  const done = nextSteps({
+    ...stopped,
+    escalations: [],
+    works: [
+      work('ok', {
+        blockers: [],
+        stage: { name: 'done', next: [], needs: { actor: null, action: 'none' } },
+      }),
+    ],
+  });
+  assert.deepEqual(
+    [done.queue, done.operator, done.lead, done.other, done.dependencies],
+    [[], [], [], [], []],
+  );
+
+  // A technical question the lead may answer is the question, not a lead line too.
+  const q = { ...sample.questions[0]!, workId: 'export-csv' };
+  const technical = nextSteps({
+    ...sample,
+    questions: [q],
+    escalations: [
+      {
+        workId: 'export-csv',
+        code: 'INPUT_REQUIRED',
+        actor: 'lead',
+        action: 'answer-input',
+        since: sample.generatedAt,
+      },
+    ],
+  });
+  assert.deepEqual(technical.lead, []);
+  assert.equal(technical.questions.length, 1);
+});
+
+test('review round 1: a dependency is never "nobody acts" when the view does not say so', () => {
+  const base = { ...stopped, escalations: [] as OperatorView['escalations'], questions: [] };
+  const dep = (over: Partial<WorkView>) =>
+    nextSteps({
+      ...base,
+      works: [
+        work('w', {
+          dependsOn: ['d'],
+          blockers: [{ code: 'NOT_READY', plain: 'waits', actor: null }],
+          stage: { name: 'blocked', next: [] },
+        }),
+        work('d', over),
+      ],
+    });
+  const state = (over: Partial<WorkView> | undefined) => {
+    const v: OperatorView = over
+      ? {
+          ...base,
+          works: [
+            work('w', {
+              dependsOn: ['d'],
+              blockers: [{ code: 'NOT_READY', plain: 'waits', actor: null }],
+              stage: { name: 'blocked', next: [] },
+            }),
+            work('d', over),
+          ],
+        }
+      : {
+          ...base,
+          works: [
+            work('w', {
+              dependsOn: ['d'],
+              blockers: [{ code: 'NOT_READY', plain: 'waits', actor: null }],
+              stage: { name: 'blocked', next: [] },
+            }),
+          ],
+        };
+    return dependencyState(v, nextSteps(v), 'd');
+  };
+  assert.deepEqual(state(undefined), { kind: 'unknown' }); // not in the view
+  assert.deepEqual(state({ stage: { name: 'writer', next: [] } }), {
+    kind: 'running',
+    stage: 'writer',
+  });
+  assert.deepEqual(state({ stage: { name: 'queued', next: [] } }), { kind: 'queue' });
+  assert.deepEqual(
+    state({
+      stage: { name: 'input', next: [], needs: { actor: 'operator', action: 'answer' } },
+      blockers: [{ code: 'INPUT_REQUIRED', actor: 'operator' }],
+    }),
+    { kind: 'actors', actors: ['operator'] }, // an unlisted question is still yours
+  );
+  assert.deepEqual(state({ stage: { name: 'stopped', next: [] } }), {
+    kind: 'unknown',
+    stage: 'stopped',
+  });
+  assert.equal(dep({ stage: { name: 'queued', next: [] } }).dependencies.length, 1);
 });

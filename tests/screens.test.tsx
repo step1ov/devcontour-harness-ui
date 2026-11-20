@@ -743,8 +743,8 @@ test('words with grounds (§5.9): every checked, accepted and blocked element sa
     en: /on the remote|not on the remote yet|remote state unknown|where is unknown|accepted locally; the remote branch is in the work order detail/,
   };
   const who = {
-    ru: /действует: \S|никто — просто ждёт очереди|кто действует — неизвестно/,
-    en: /acts: \S|nobody — it just waits its turn|who acts is unknown/,
+    ru: /действует: \S|никто — просто ждёт очереди|никто — она сама ждёт другой работы|кто действует — неизвестно/,
+    en: /acts: \S|nobody — it just waits its turn|nobody — it waits for another work order itself|who acts is unknown/,
   };
   let counts = { checked: 0, accepted: 0, blocked: 0 };
   for (const { name, v, d } of variants())
@@ -825,12 +825,13 @@ test('review fixes: truncation, pause, plan statuses, counters, time budgets, un
     })),
     questions: [],
     escalations: [],
+    progress: { ...view.progress, waitingOperator: 0 },
     truncated: { questions: 2, escalations: 1 },
   };
   const c = html(<Overview view={clipped} lang="ru" />);
   assert.doesNotMatch(c, /Сейчас от вас ничего не нужно/);
   assert.doesNotMatch(c, /Никто, кроме вас, сейчас ничего не должен сделать/);
-  assert.equal(c.match(/неизвестно — список обрезан/g)?.length, 2); // both sections
+  assert.equal(c.match(/неизвестно — список обрезан/g)?.length, 3); // the header and both sections
   assert.match(c, /ещё 2 не показано/);
   const paused: OperatorView = {
     ...view,

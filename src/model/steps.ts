@@ -16,7 +16,7 @@
 // when several records name the same thing (the escalation, the blocker
 // and the stage of one stop). Pure: no node:*, no React.
 
-import { questionStatus } from './format.ts';
+import { SLOT_STAGES, questionStatus } from './format.ts';
 import type {
   Actor,
   BlockerView,
@@ -113,6 +113,26 @@ export const DEPENDENCY_CODES: ReadonlySet<string> = new Set([
 const ANSWER_CODES = new Set(['INPUT_REQUIRED']);
 const ANSWER_ACTIONS = new Set(['answer', 'answer-input']);
 
+/**
+ * The action a stop code asks for, as the harness diagnosis gives it
+ * (`stop.ts`). A stage need joins the blocker of that code when no
+ * escalation states the action, so one stop stays one line.
+ */
+const CODE_ACTION: Readonly<Record<string, string>> = {
+  ATTEMPTS_EXHAUSTED: 'reset-attempts',
+  APPROVAL_STALE: 'review-plan',
+  APPROVAL_REQUIRED: 'review-plan',
+  BUDGET_EXHAUSTED: 'raise-budget',
+  BUDGET_UNKNOWN: 'raise-budget',
+  PAUSED: 'resume-queue',
+  GATE_FAILED: 'diagnose-failure',
+  REVIEW_REJECTED: 'diagnose-failure',
+  SCOPE_VIOLATION: 'diagnose-failure',
+  REVIEW_PROTOCOL_INVALID: 'user-decision',
+  CANCELLED: 'replan-dependents',
+  INPUT_REQUIRED: 'answer',
+};
+
 const actorOf = (a: Actor | null | undefined): StepActor | null | undefined =>
   a === 'user' ? 'operator' : a;
 
@@ -125,7 +145,12 @@ interface Entry {
   records: StepRecord[];
 }
 
-function entriesOf(w: WorkView | undefined, workId: string, escalations: Escalation[]) {
+function entriesOf(
+  w: WorkView | undefined,
+  workId: string,
+  escalations: Escalation[],
+  dependent: boolean,
+) {
   const out: Entry[] = [];
   const find = (actor: Entry['actor'], code: string | undefined) =>
     out.find((e) => e.actor === actor && e.code === code);
@@ -164,15 +189,28 @@ function entriesOf(w: WorkView | undefined, workId: string, escalations: Escalat
   if (needs) {
     const actor = actorOf(needs.actor);
     const record: StepRecord = { source: 'needs', actor: needs.actor, action: needs.action };
-    // The stage names the next action of one of the stops above: join the
-    // record of the same actor that has no action yet, or the same action.
+    // The stage names the next action of one of the stops above. It joins
+    // the record of the same actor and action, or the blocker whose code
+    // asks for that action; else the wait for a dependency, which the stage
+    // of a dependent work describes; else it is its own line. Actor alone
+    // proves nothing: a lead diagnosis is not a plan approval.
     const same =
       out.find((e) => e.actor === actor && e.action === needs.action) ??
-      out.find((e) => e.actor === actor && e.action === undefined);
+      out.find(
+        (e) =>
+          e.actor === actor &&
+          e.action === undefined &&
+          e.code !== undefined &&
+          CODE_ACTION[e.code] === needs.action,
+      ) ??
+      (dependent
+        ? out.find((e) => e.code !== undefined && DEPENDENCY_CODES.has(e.code))
+        : undefined);
     if (same) {
       same.records.push(record);
-      same.action ??= needs.action;
-    } else out.push({ actor, action: needs.action, records: [record] });
+      if (same.actor === actor) same.action ??= needs.action;
+    } else if (actor !== null) out.push({ actor, action: needs.action, records: [record] });
+    // A need of nobody (`actor: null`, action `none`) asks for nothing: no line.
   }
   return out;
 }
@@ -189,14 +227,21 @@ const stepOf = (e: Entry, workIds: string[], subject?: string): Step => ({
   records: e.records,
 });
 
-/** Same thing to do for several works (one plan approval): one line. */
-function mergeSame(steps: Step[]): Step[] {
+/**
+ * Same thing to do for several works of one plan (one plan approval): one
+ * line. Works of different plans (`graphId`) stay apart — each plan is
+ * approved on its own.
+ */
+function mergeSame(steps: Step[], graphOf: (id: string) => string | undefined): Step[] {
   const out: Step[] = [];
+  const graph = (x: Step) => (x.workIds.length ? graphOf(x.workIds[0]!) : undefined);
   for (const s of steps) {
     const same = out.find(
       (o) =>
         o.subject === undefined &&
         s.subject === undefined &&
+        graph(o) !== undefined &&
+        graph(o) === graph(s) &&
         o.actor === s.actor &&
         o.code === s.code &&
         o.action === s.action &&
@@ -215,12 +260,14 @@ function mergeSame(steps: Step[]): Step[] {
 export function nextSteps(view: OperatorView): NextSteps {
   const questions = view.questions.filter((q) => questionStatus(q).needsAnswer);
   const answerOnly = new Set<string>();
+  const asking = new Set(questions.map((q) => q.workId));
   const operator: Step[] = [];
   const lead: Step[] = [];
   const other: Step[] = [];
   const dependencies: DependencyWait[] = [];
   const queue: QueueWait[] = [];
   const byId = new Map(view.works.map((w) => [w.id, w]));
+  const graphOf = (id: string) => byId.get(id)?.graphId;
   const unfinished = (id: string) => {
     const d = byId.get(id);
     // A dependency outside the (possibly clipped) list counts as unfinished.
@@ -234,8 +281,8 @@ export function nextSteps(view: OperatorView): NextSteps {
   ];
   for (const id of [...new Set(ids)]) {
     const w = byId.get(id);
-    const entries = entriesOf(w, id, view.escalations);
     const waitsOn = (w?.dependsOn ?? []).filter(unfinished);
+    const entries = entriesOf(w, id, view.escalations, waitsOn.length > 0);
     const dep: DependencyWait | undefined = waitsOn.length
       ? { workId: id, on: waitsOn, code: '', records: [] }
       : undefined;
@@ -255,16 +302,18 @@ export function nextSteps(view: OperatorView): NextSteps {
         continue;
       }
       // Waiting for an answer is a question, not a decision: the item is the
-      // question of `questions`. When the question is not listed (a clipped
-      // list), the header falls back to `progress.waitingOperator`.
-      if (
-        e.actor === 'operator' &&
-        ((e.code !== undefined && ANSWER_CODES.has(e.code)) ||
-          (e.action !== undefined && ANSWER_ACTIONS.has(e.action)))
-      ) {
+      // question of `questions` (which also says whether the lead may answer
+      // it). The operator's record without a listed question is named as an
+      // unlisted answer; the lead's one with an asking question is that
+      // question too.
+      const answer =
+        (e.code !== undefined && ANSWER_CODES.has(e.code)) ||
+        (e.action !== undefined && ANSWER_ACTIONS.has(e.action));
+      if (answer && e.actor === 'operator') {
         answerOnly.add(id);
         continue;
       }
+      if (answer && asking.has(id)) continue;
       own.push(stepOf(e, [id]));
     }
     const waits = dep?.code ? dep : undefined;
@@ -279,7 +328,7 @@ export function nextSteps(view: OperatorView): NextSteps {
       } else if (s.actor === 'lead') lead.push(s);
       else other.push(s);
     }
-    if (w && (nobody.length || (!entries.length && !waits && isHeld(w))))
+    if (w && !isTerminal(w) && (nobody.length || (!entries.length && !waits && isHeld(w))))
       queue.push({ workId: id, blockers: nobody, unexplained: !nobody.length });
   }
   for (const e of view.escalations) {
@@ -304,14 +353,16 @@ export function nextSteps(view: OperatorView): NextSteps {
     questions,
     unlistedAnswers: [...answerOnly].filter((id) => !view.questions.some((q) => q.workId === id)),
     operator,
-    lead: mergeSame(lead),
-    other: mergeSame(other),
+    lead: mergeSame(lead, graphOf),
+    other: mergeSame(other, graphOf),
     dependencies,
     queue,
   };
 }
 
 const isHeld = (w: WorkView) => w.stage.name === 'stopped' || w.stage.name === 'blocked';
+const isTerminal = (w: WorkView) =>
+  w.stage.name === 'done' || w.stage.name === 'cancelled' || w.target !== undefined;
 
 /**
  * Who acts on a work next, in order: lead steps that come first, then the
@@ -324,7 +375,8 @@ export function actorsOn(steps: NextSteps, workId: string): StepActor[] {
   };
   const mine = (s: Step) => s.workIds.includes(workId);
   for (const s of steps.operator.filter(mine)) for (const f of s.after) add(f.actor);
-  if (steps.questions.some((q) => q.workId === workId)) add('operator');
+  if (steps.questions.some((q) => q.workId === workId) || steps.unlistedAnswers.includes(workId))
+    add('operator');
   for (const s of steps.operator.filter(mine)) add(s.actor);
   for (const s of steps.lead.filter(mine)) add(s.actor);
   for (const s of steps.other.filter(mine)) add(s.actor);
@@ -374,4 +426,37 @@ export function withWorkNames(view: Pick<OperatorView, 'works'>, text: string): 
   for (const w of view.works)
     if (w.id.length >= 6) out = out.split(w.id).join(workName(view, w.id));
   return out;
+}
+
+/** What a dependency is doing, for «ждёт WEB-1 (…)». */
+export type DependencyState =
+  | { kind: 'actors'; actors: StepActor[] }
+  /** Working now (a slot stage): the harness and its agents act. */
+  | { kind: 'running'; stage: string }
+  /** Just waits its turn (`actor: null`), nothing is needed. */
+  | { kind: 'queue' }
+  /** Waits for another work itself. */
+  | { kind: 'waits' }
+  /** Not in this view (a clipped list), or nothing said about it. */
+  | { kind: 'unknown'; stage?: string };
+
+/**
+ * What a dependency is doing, for the dependent's line: who acts on it, or
+ * that it runs, waits its turn, waits itself, or is not known here. Never
+ * "nobody acts" for a work this view does not show.
+ */
+export function dependencyState(
+  view: Pick<OperatorView, 'works'>,
+  steps: NextSteps,
+  id: string,
+): DependencyState {
+  const actors = actorsOn(steps, id);
+  if (actors.length) return { kind: 'actors', actors };
+  const w = view.works.find((x) => x.id === id);
+  if (!w) return { kind: 'unknown' };
+  if (SLOT_STAGES.has(w.stage.name)) return { kind: 'running', stage: w.stage.name };
+  if (steps.queue.some((q) => q.workId === id && !q.unexplained) || w.stage.name === 'queued')
+    return { kind: 'queue' };
+  if (steps.dependencies.some((d) => d.workId === id)) return { kind: 'waits' };
+  return { kind: 'unknown', stage: w.stage.name };
 }

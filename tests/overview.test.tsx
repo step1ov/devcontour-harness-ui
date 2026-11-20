@@ -47,10 +47,18 @@ test('overview without questions and with a paused queue', () => {
   // export-csv still waits for an answer the view no longer lists: said, not hidden.
   assert.match(html, /Waiting for your answer, but the question is not in this view: export-csv\./);
   assert.doesNotMatch(html, /Nothing is needed from you now/);
-  const calm: OperatorView = {
+  const quiet = {
     ...paused,
     works: paused.works.filter((w) => w.id !== 'export-csv' && w.id !== 'docs-page'),
   };
+  // The harness still counts one work waiting for you that no item names: said, never "nothing".
+  const counted = renderToStaticMarkup(<Overview lang="en" view={quiet} />);
+  assert.match(
+    counted,
+    /1 more work order waits for your action but is not in this view — run harness status\./,
+  );
+  assert.doesNotMatch(counted, /Nothing is needed from you now/);
+  const calm: OperatorView = { ...quiet, progress: { ...quiet.progress, waitingOperator: 0 } };
   assert.match(
     renderToStaticMarkup(<Overview lang="en" view={calm} />),
     /Nothing is needed from you now\./,
