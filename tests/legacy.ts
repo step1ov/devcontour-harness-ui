@@ -1,9 +1,30 @@
 // The same document as an older harness sends it, for the compatibility
 // tests: tests/contract.test.ts validates these shapes against the copied
-// alpha.55 and alpha.56 schemas, so the screen and live tests that use them
+// alpha.55, alpha.56 and alpha.57 schemas, so the screen and live tests that use them
 // really feed the panel an old document, not a new one with a lower number.
 
 type Json = Record<string, any>;
+
+/**
+ * Harness alpha.57/58 (revision 2): no `unused` stages, and no prepare
+ * stages of their own — preparing ran inside `implementation` (its time is
+ * added there) and inside the integration step.
+ */
+export function asAlpha57<T>(doc: T): T {
+  const d = structuredClone(doc) as Json;
+  d.viewRevision = 2;
+  for (const a of d.attempts ?? []) {
+    const stages: Json[] = a.stages ?? [];
+    const prep = stages.filter((s) => s.stage === 'prepare');
+    const impl = stages.find((s) => s.stage === 'implementation');
+    if (impl && impl.durationMs !== undefined)
+      for (const p of prep) impl.durationMs += p.durationMs ?? 0;
+    a.stages = stages
+      .filter((s) => s.stage !== 'prepare' && !String(s.stage).startsWith('integration-prepare'))
+      .map(({ unused: _u, ...s }) => s);
+  }
+  return d as T;
+}
 
 /**
  * Harness alpha.56 (revision 1): no activity feed, and a remote state that is
@@ -11,7 +32,7 @@ type Json = Record<string, any>;
  * tracking ref).
  */
 export function asAlpha56<T>(doc: T): T {
-  const d = structuredClone(doc) as Json;
+  const d = asAlpha57(doc) as Json;
   d.viewRevision = 1;
   delete d.activity;
   if (d.truncated) delete d.truncated.activity;

@@ -20,6 +20,7 @@ import {
   AttemptsText,
   AnswerBasisLine,
   BlockerLine,
+  Codes,
   Heading,
   StageStatus,
   Term,
@@ -29,6 +30,8 @@ import {
   type ScreenProps,
 } from './common.tsx';
 import { ReviewSubjectCard } from './Reviews.tsx';
+import { Timeline } from './Timeline.tsx';
+import { timelineOf, timelines } from '../model/tasks.ts';
 
 export interface WorkDetailProps extends ScreenProps {
   detail: WorkDetailView;
@@ -98,34 +101,30 @@ export function WorkDetail({
   const clipped = (what: string, n: number | undefined) =>
     n ? <p className="hui-muted hui-clipped">{w.detailClipped(what, n)}</p> : null;
 
-  // Stage strip: the latest attempt's stages with their outcome, then the stages ahead.
-  const seen = new Set<string>();
-  const steps: { stage: string; state: string; durationMs?: number }[] = [];
-  for (const s of latest?.stages ?? []) {
-    seen.add(s.stage);
-    steps.push({
-      stage: s.stage,
-      state:
-        s.outcome === 'passed'
-          ? w.stagePassed
-          : s.outcome === 'failed'
-            ? w.stageFailed
-            : s.stage === work.stage.name && SLOT_STAGES.has(s.stage)
-              ? w.stageCurrent
-              : w.stageNoOutcome,
-      ...(s.durationMs !== undefined ? { durationMs: s.durationMs } : {}),
-    });
-  }
-  if (!seen.has(work.stage.name) && SLOT_STAGES.has(work.stage.name))
-    steps.push({ stage: work.stage.name, state: w.stageCurrent });
-  for (const n of work.stage.next) if (!seen.has(n)) steps.push({ stage: n, state: w.stageAhead });
+  // The process timeline of the latest attempt, and of the earlier ones (design §5.2).
+  const lines = detail.attempts.length
+    ? timelines(detail)
+    : [{ attempt: undefined, steps: timelineOf(undefined, work, true) }];
+  const codeReviews = detail.reviews.filter((r) => r.kind === 'code');
+  const reviewText = codeReviews.length
+    ? t.tasks.reviewRounds(
+        codeReviews.reduce((n, r) => n + r.rounds.used, 0),
+        codeReviews.length === 1 ? codeReviews[0]!.rounds.max : null,
+      )
+    : undefined;
+  const latestLine = lines[0]!;
+  const earlier = lines.slice(1);
+  const total = latest?.stages.reduce((n, s) => n + (s.durationMs ?? 0), 0) ?? 0;
 
   return (
     <section className="hui hui-work" aria-labelledby="hui-work-title" lang={lang}>
       <header className="hui-row hui-header">
         <h2 className="hui-title" id="hui-work-title">
-          <code>{work.id}</code>
-          {work.title ? <span className="hui-work-title"> {work.title}</span> : null}
+          {work.title ? (
+            <span className="hui-work-title">{work.title}</span>
+          ) : (
+            <code>{work.id}</code>
+          )}
         </h2>
         <StageStatus w={work} lang={lang} linkProps={links} verificationHref={verificationHref} />
         {work.liveness ? (
@@ -133,6 +132,7 @@ export function WorkDetail({
             {label(t.liveness, work.liveness)}
           </span>
         ) : null}
+        {work.title ? <Codes t={t} codes={[work.id]} /> : null}
       </header>
 
       <div className="hui-panel" data-testid="work-now">
@@ -141,12 +141,6 @@ export function WorkDetail({
         </Heading>
         <p>
           <StageStatus w={work} lang={lang} linkProps={links} verificationHref={verificationHref} />
-          {work.stage.step ? (
-            <>
-              {' '}
-              (<code>{work.stage.step}</code>)
-            </>
-          ) : null}
           {work.stage.since
             ? ' ' +
               w.since(
@@ -155,14 +149,18 @@ export function WorkDetail({
               )
             : ''}
           {typical ? '; ' + typical : ''}
-          {work.stage.step || work.stage.since || typical ? '.' : ''}{' '}
+          {work.stage.since || typical ? '.' : ''}{' '}
           {work.stage.next.length
             ? w.next(work.stage.next.map((s) => stageLabel(s, lang).toLowerCase()).join(', '))
             : w.nothingNext}
         </p>
+        {work.stage.step ? <Codes t={t} codes={[work.stage.step]} /> : null}
         {work.stage.needs ? (
           <p data-status="blocked">
-            {w.needs(actorLabel(t, work.stage.needs.actor), work.stage.needs.action)}
+            {w.needs(
+              actorLabel(t, work.stage.needs.actor),
+              label(t.action, work.stage.needs.action),
+            )}
           </p>
         ) : null}
         {work.runtime ? (
@@ -179,22 +177,41 @@ export function WorkDetail({
 
       <div className="hui-panel" data-testid="work-stages">
         <Heading t={t} term="gates">
-          {w.stages}
+          {t.timeline.title}
         </Heading>
-        <ol className="hui-steps">
-          {steps.map((s, i) => (
-            <li key={i} className="hui-step">
-              <span>{stageLabel(s.stage, lang)}</span>{' '}
-              <span className="hui-muted">
-                — {s.state}
-                {s.durationMs !== undefined ? `, ${formatDuration(s.durationMs, lang)}` : ''}
-              </span>
-            </li>
-          ))}
-        </ol>
+        <p className="hui-muted">
+          {latestLine.attempt ? (
+            <>
+              {t.timeline.attempt(latestLine.attempt.attempt)} ({t.timeline.latest})
+              {total ? ' · ' + t.timeline.total(formatDuration(total, lang)) : ''}
+            </>
+          ) : (
+            t.timeline.noAttempts
+          )}
+        </p>
+        <Timeline steps={latestLine.steps} lang={lang} review={reviewText} testid="timeline" />
+        {earlier.length ? (
+          <details className="hui-term hui-earlier" data-testid="earlier-attempts">
+            <summary>{t.timeline.earlier(earlier.length)}</summary>
+            <div className="hui:mt-2 hui:grid hui:gap-3">
+              {earlier.map((l, i) => (
+                <div key={i} className="hui:grid hui:gap-1">
+                  <span className="hui:text-sm hui:font-medium">
+                    {t.timeline.attempt(l.attempt!.attempt)}
+                    {l.attempt!.failureBucket
+                      ? ' · ' + label(t.bucket, l.attempt!.failureBucket)
+                      : ''}
+                  </span>
+                  <Timeline steps={l.steps} lang={lang} compact />
+                </div>
+              ))}
+            </div>
+          </details>
+        ) : null}
         {clipped(w.clippedName.stages!, detail.truncated?.stages)}
         <div className="hui-terms">
           <Term id="integration" t={t} named />
+          <Term id="review" t={t} named />
         </div>
       </div>
 
@@ -238,8 +255,8 @@ export function WorkDetail({
           <p className="hui-muted">{w.noAttempts}</p>
         ) : (
           <ul className="hui-list">
-            {detail.attempts.map((r) => (
-              <li key={r.attempt} className="hui-item">
+            {detail.attempts.map((r, i) => (
+              <li key={i} className="hui-item">
                 <strong>{w.attemptRow(r.attempt)}</strong>{' '}
                 <span className="hui-badge">{label(w.attemptStatus, r.status)}</span>{' '}
                 {r.failureBucket ? <span>{label(t.bucket, r.failureBucket)} · </span> : null}
@@ -340,7 +357,7 @@ export function WorkDetail({
           <ul className="hui-list">
             {detail.questions.map((q) => (
               <li key={q.requestId} className="hui-item">
-                <code>{q.requestId}</code>{' '}
+                <Codes t={t} codes={[q.requestId, t.question.version(q.version)]} />
                 <span className="hui-badge">{t.question.severity(q.severity)}</span>{' '}
                 {q.title ? <span>{q.title}</span> : null}
                 {q.plain ? (

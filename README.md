@@ -15,7 +15,7 @@
 данные harness, а не пересказ агента: что ждёт вашего ответа, что идёт
 сейчас, как именно проверена работа и где лежит принятый результат.
 
-> Статус: `0.1.0-alpha.3`. Все экраны только для чтения: обзор, детали
+> Статус: `0.1.0-alpha.4`. Все экраны только для чтения: обзор, детали
 > работы, ревью, решения, кто что делал, настройки, история и здоровье, на
 > русском и английском. Данные — файл представления или живой
 > `harness view` (`--state`, harness `0.1.0-alpha.55` и новее). Схемой
@@ -24,9 +24,11 @@
 > кто и почему ответил на вопрос, итоги окна истории и замечает изменения по
 > токену harness. С `0.1.0-alpha.57` (ревизия 2) — ещё ленту «кто что
 > делал» и есть ли принятая работа в удалённой ветке (по копии ветки на этой
-> машине, без сети). С alpha.55 и alpha.56 всё прочее работает, как раньше.
+> машине, без сети). С `0.1.0-alpha.59` (ревизия 3) — подготовку
+> зависимостей отдельным шагом со временем и неиспользуемое хранилище
+> зависимостей. С alpha.55–.58 всё прочее работает, как раньше.
 > [Дизайн](docs/design.md) описывает схему, экраны, безопасность и этапы;
-> изменения — в заметках к выпускам [0.1.0-alpha.3](docs/release-notes/0.1.0-alpha.3.md), [0.1.0-alpha.2](docs/release-notes/0.1.0-alpha.2.md)
+> изменения — в заметках к выпускам [0.1.0-alpha.4](docs/release-notes/0.1.0-alpha.4.md), [0.1.0-alpha.3](docs/release-notes/0.1.0-alpha.3.md), [0.1.0-alpha.2](docs/release-notes/0.1.0-alpha.2.md)
 > и [0.1.0-alpha.1](docs/release-notes/0.1.0-alpha.1.md).
 
 ## Язык
@@ -44,7 +46,7 @@
 версия, как и у harness):
 
 ```sh
-npm install --save-dev --save-exact devcontour-harness@0.1.0-alpha.58 devcontour-harness-ui@0.1.0-alpha.3
+npm install --save-dev --save-exact devcontour-harness@0.1.0-alpha.59 devcontour-harness-ui@0.1.0-alpha.4
 npx devcontour-harness-ui --demo --lang ru      # демонстрационные данные
 # → {"ok":true,"url":"http://127.0.0.1:4790/","port":4790,"readOnly":true,...}
 ```
@@ -70,9 +72,11 @@ npx harness view --state <state> --policy .harness/policy.json > view.json   # �
 npx devcontour-harness-ui --view view.json
 ```
 
-Разделы — hash-адреса: `#/` обзор, `#/work/<id>` детали работы,
-`#/reviews`, `#/decisions`, `#/activity`, `#/settings`, `#/history`,
-`#/health`.
+Верхнее меню: Обзор · Задачи · Решения · Журнал · Настройки. Разделы —
+hash-адреса: `#/` обзор, `#/tasks` задачи, `#/work/<id>` процесс одной
+задачи, `#/decisions`, `#/activity`, `#/history`, `#/health` (журнал),
+`#/settings`; старый `#/reviews` ведёт на `#/tasks`. Тёмная тема — по
+системе или выбором в «Настройках».
 
 Флаги CLI:
 
@@ -109,15 +113,18 @@ Skill [`skills/harness-ui/SKILL.md`](skills/harness-ui/SKILL.md) позволя�
 ## Встраивание
 
 ```tsx
-import { Overview, WorkDetail, Reviews, Settings, History, Health } from 'devcontour-harness-ui';
+import { Overview, Tasks, WorkDetail, Settings, History, Health } from 'devcontour-harness-ui';
 import 'devcontour-harness-ui/styles.css';
 
 <Overview view={view} lang="ru" onOpenWork={(id) => navigate(id)} />;
 <WorkDetail detail={detail} lang="ru" workHref={(id) => `?work=${id}`} />;
 ```
 
-Экраны: `Overview`, `WorkDetail` (документ `harness view --work <id>`),
-`Reviews`, `Decisions`, `Activity`, `Settings`, `History`, `Health`. У всех
+Экраны: `Overview`, `Tasks`, `WorkDetail` (документ `harness view --work <id>`),
+`Reviews`, `Decisions`, `Activity`, `Settings`, `History`, `Health`.
+Стили собраны заранее (Tailwind с префиксом `hui:`, без preflight, только
+внутри `.hui`, слои `hui-*`; глобальны лишь регистрации `@property --tw-*`), Radix и компоненты shadcn/ui — внутри пакета: хосту нужен
+только React. У всех
 `lang` (по умолчанию `ru`), `timeZone`, `now` и навигация `onOpenWork` или
 `workHref`.
 

@@ -6,6 +6,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  rmSync,
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
@@ -439,5 +440,45 @@ test('live route: distinct work ids never run more than MAX_RUNS harness process
   } finally {
     await s.close();
     fake.remove();
+  }
+});
+
+test('health names the served app build; the page is revalidated, so a new build reaches open tabs', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'hui-build-'));
+  const app = join(dir, 'app');
+  mkdirSync(app);
+  writeFileSync(
+    join(app, 'index.html'),
+    '<!doctype html><html><head><script src="./assets/a-1.js"></script></head></html>',
+  );
+  const s = await startServer({ viewFile, appDir: app, version: 'test' });
+  try {
+    const first = await get(s.url + 'api/health');
+    assert.equal(first.headers['cache-control'], 'no-store');
+    const build = JSON.parse(first.body).build as string;
+    assert.match(build, /^[0-9a-f]{16}$/);
+    const page = await get(s.url);
+    assert.equal(page.status, 200);
+    assert.equal(page.headers['cache-control'], 'no-cache');
+    // The page names its own build: the tab compares what it runs, not a later health answer.
+    assert.match(page.body, new RegExp(`<meta name="hui-build" content="${build}" />`));
+    // A rebuilt app (new hashed bundle names): a new build id, which the open tab compares.
+    writeFileSync(
+      join(app, 'index.html'),
+      '<!doctype html><html><head><script src="./assets/a-2.js"></script></head></html>',
+    );
+    const next = JSON.parse((await get(s.url + 'api/health')).body).build as string;
+    assert.notEqual(next, build);
+  } finally {
+    await s.close();
+    // Only the directory this test created.
+    rmSync(dir, { recursive: true, force: true });
+  }
+  // Without an app bundle there is no build to name.
+  const bare = await startServer({ viewFile, appDir, version: 'test' });
+  try {
+    assert.equal(JSON.parse((await get(bare.url + 'api/health')).body).build, undefined);
+  } finally {
+    await bare.close();
   }
 });

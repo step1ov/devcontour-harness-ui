@@ -8,7 +8,11 @@ import type { ReactNode } from 'react';
 import { dict, knownLabel, label, type Dict, type GlossaryId, type Lang } from '../model/dict.ts';
 import { attemptsLineParts } from '../model/steps.ts';
 import { formatClock, remoteFreshness, targetSentence } from '../model/i18n.ts';
+import { SLOT_STAGES, formatRange, formatRough } from '../model/format.ts';
+import { stageLeft } from '../model/scope.ts';
 import type { Actor, BlockerView, OperatorQuestion, WorkView } from '../model/view.ts';
+import { Card, CardContent, CardHeader, CardTitle } from './ui/card.tsx';
+import { cn } from './ui/cn.ts';
 
 /** Props every screen takes. */
 export interface ScreenProps {
@@ -124,7 +128,7 @@ export function BlockerLine({ b, t }: { b: BlockerView; t: Dict }) {
       <span className="hui-who">
         {b.actor === null ? t.blocker.nobody : t.blocker.whoActs(actorLabel(t, b.actor))}
       </span>{' '}
-      <code className="hui-muted hui-code">{b.code}</code>
+      <Codes t={t} codes={[b.code]} />
     </li>
   );
 }
@@ -228,15 +232,19 @@ export function StageStatus({
     );
   }
   if (name === 'stopped' || name === 'blocked') {
-    const b = w.blockers[0];
+    // The reason that names someone first; a stage need names who acts when
+    // the reasons name nobody — never "nobody" while the view names someone.
+    const named = w.blockers.find((x) => x.actor !== null);
+    const b = named ?? w.blockers[0];
     const reason = b
       ? b.plain && b.plain.trim()
         ? b.plain
         : t.blocker.noReason(b.code)
       : w.stage.needs
-        ? w.stage.needs.action
+        ? label(t.action, w.stage.needs.action)
         : t.blocker.stoppedNoReason;
-    const actor = b ? b.actor : w.stage.needs ? w.stage.needs.actor : undefined;
+    const needs = w.stage.needs && w.stage.needs.actor !== null ? w.stage.needs.actor : undefined;
+    const actor = named ? named.actor : needs !== undefined ? needs : b ? b.actor : undefined;
     const who =
       actor === null
         ? t.blocker.nobody
@@ -306,5 +314,119 @@ export function AttemptsText({ line, t }: { line: string; t: Dict }) {
         );
       })}
     </>
+  );
+}
+
+/**
+ * A section of a screen as a card: a title with an optional glossary
+ * disclosure, and the content. `testid` names it for tests.
+ */
+export function Block({
+  title,
+  term,
+  t,
+  testid,
+  id,
+  className,
+  aside,
+  children,
+}: {
+  title: ReactNode;
+  term?: GlossaryId;
+  t: Dict;
+  testid?: string;
+  id?: string;
+  className?: string;
+  /** Short text at the end of the header line (a count, a time). */
+  aside?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <Card data-testid={testid} className={cn('hui-block', className)}>
+      <CardHeader>
+        <CardTitle id={id}>{title}</CardTitle>
+        {aside ? <span className="hui:text-sm hui:text-muted-foreground">{aside}</span> : null}
+        {term ? <Term id={term} t={t} /> : null}
+      </CardHeader>
+      <CardContent>{children}</CardContent>
+    </Card>
+  );
+}
+
+/**
+ * Technical codes behind a plain line (F-AA): never in the main text, only
+ * inside the «подробности» disclosure.
+ */
+export function Codes({ t, codes }: { t: Dict; codes: (string | undefined)[] }) {
+  const list = [...new Set(codes.filter((c): c is string => Boolean(c)))];
+  if (!list.length) return null;
+  return (
+    <details className="hui-term hui-codes" data-testid="codes">
+      <summary>{t.overview.details}</summary>
+      <p>
+        {list.map((c, i) => (
+          <span key={c}>
+            {i ? ', ' : ''}
+            <code>{c}</code>
+          </span>
+        ))}
+      </p>
+    </details>
+  );
+}
+
+/** Rough time of one work for the scope list: the rest of its stage, or one usual attempt. */
+export function WorkEta({
+  w,
+  t,
+  lang,
+  clock,
+  average,
+}: {
+  w: WorkView;
+  t: Dict;
+  lang: Lang;
+  clock: number;
+  average: { ms: number } | undefined;
+}) {
+  const e = t.eta;
+  let text: string | undefined;
+  if (w.stage.name === 'done' || w.target !== undefined || w.stage.name === 'cancelled')
+    text = undefined;
+  else if (SLOT_STAGES.has(w.stage.name)) {
+    const left = stageLeft(w, clock);
+    text = left
+      ? left.kind === 'over'
+        ? e.stageOver(formatRough(left.usualMaxMs, lang))
+        : e.stageLeft(formatRange(left.range, lang))
+      : e.stageUnknown;
+  } else text = average ? e.attempt(formatRough(average.ms, lang)) : e.unknown;
+  return text ? (
+    <span className="hui:text-xs hui:text-muted-foreground" data-testid="work-eta">
+      {text}
+    </span>
+  ) : null;
+}
+
+/** «Этап, скорее всего, закончится через 2–9 мин» for a running work. */
+export function StageLeftLine({
+  w,
+  t,
+  lang,
+  clock,
+}: {
+  w: WorkView;
+  t: Dict;
+  lang: Lang;
+  clock: number;
+}) {
+  const left = stageLeft(w, clock);
+  if (!left) return null;
+  return (
+    <div className="hui:text-sm" data-testid="stage-left">
+      {left.kind === 'over'
+        ? t.eta.stageOver(formatRough(left.usualMaxMs, lang))
+        : t.eta.stageLeft(formatRange(left.range, lang))}
+    </div>
   );
 }

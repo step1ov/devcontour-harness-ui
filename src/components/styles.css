@@ -1,504 +1,622 @@
-/* devcontour-harness-ui styles. Every colour, size and font is a `--hui-*`
-   variable. Defaults are declared on :root only, so a host (DevContour)
-   overrides them on any ancestor wrapper of the components; rules on `.hui`
-   only consume the variables and never declare them. */
+/* devcontour-harness-ui styles (design §7). Built by Tailwind CSS 4 into
+   dist/lib/styles.css; nothing here reaches the host page outside `.hui`:
+   - no Tailwind preflight; a small reset scoped to `.hui` instead;
+   - utilities carry the `hui:` prefix (`hui:flex`), theme variables the
+     `--hui-` prefix (`--hui-spacing`);
+   - every colour, size and font is a `--hui-*` variable. Defaults are
+     declared on :root only, so a host (DevContour) overrides them on any
+     ancestor wrapper of the components; rules on `.hui` only consume them.
+   scripts/build-css.mjs scopes Tailwind's property fallback to `.hui`, and
+   tests/styles.test.ts checks every selector of the built file. */
+
+/* Own layer names, so a host's `base` or `utilities` layers never reorder ours. */
+@layer hui-theme, hui-base, hui-components, hui-utilities;
+@import 'tailwindcss/theme.css' layer(hui-theme) prefix(hui);
+@import 'tailwindcss/utilities.css' layer(hui-utilities) source(none);
+@source '../components';
+@source '../app';
+
+/* Semantic colours (shadcn/ui names) over the panel tokens: utilities use
+   the token itself, so a host override of `--hui-*` restyles them too. */
+@theme inline {
+  --color-background: var(--hui-bg);
+  --color-foreground: var(--hui-text);
+  --color-card: var(--hui-surface);
+  --color-card-foreground: var(--hui-text);
+  --color-muted: var(--hui-muted-bg);
+  --color-muted-foreground: var(--hui-muted);
+  --color-border: var(--hui-border);
+  --color-primary: var(--hui-accent);
+  --color-primary-foreground: var(--hui-accent-fg);
+  --color-ok: var(--hui-ok);
+  --color-ok-soft: var(--hui-ok-bg);
+  --color-warn: var(--hui-warn);
+  --color-warn-soft: var(--hui-warn-bg);
+  --color-bad: var(--hui-bad);
+  --color-bad-soft: var(--hui-bad-bg);
+  --color-ring: var(--hui-focus);
+  --color-series-1: var(--hui-series-1);
+  --color-series-2: var(--hui-series-2);
+  --color-track: var(--hui-track);
+  --color-wait: var(--hui-wait);
+  --radius-panel: var(--hui-radius-card);
+  --radius-control: var(--hui-radius);
+  --font-ui: var(--hui-font);
+  --font-mono: var(--hui-font-code);
+  --shadow-card: var(--hui-shadow);
+}
 
 :where(:root) {
-  --hui-bg: #ffffff;
-  --hui-surface: #f6f7f9;
-  --hui-border: #d9dde3;
-  --hui-text: #1b1f24;
-  --hui-muted: #5b6470;
-  --hui-accent: #2856c9;
-  --hui-ok: #1d7a4a;
-  --hui-ok-bg: #e5f4ec;
-  --hui-warn: #8a5a00;
-  --hui-warn-bg: #fdf1d8;
-  --hui-bad: #b3261e;
+  --hui-bg: #f6f7f9;
+  --hui-surface: #ffffff;
+  --hui-muted-bg: #f1f3f5;
+  --hui-track: #e3e7ec;
+  --hui-wait: #d9a441;
+  --hui-border: #dde1e6;
+  --hui-text: #15181d;
+  --hui-muted: #586170;
+  --hui-accent: #2453c4;
+  --hui-accent-fg: #ffffff;
+  --hui-ok: #17683f;
+  --hui-ok-bg: #e3f4ea;
+  --hui-warn: #7a4d00;
+  --hui-warn-bg: #fdf0d3;
+  --hui-bad: #a4231b;
+  --hui-bad-bg: #fde8e6;
   --hui-font: system-ui, -apple-system, 'Segoe UI', sans-serif;
   --hui-font-code: ui-monospace, 'SF Mono', Menlo, monospace;
   --hui-radius: 8px;
+  --hui-radius-card: 12px;
   --hui-gap: 12px;
-  --hui-series-1: #2856c9;
+  --hui-shadow: 0 1px 2px rgb(16 24 40 / 0.06), 0 1px 3px rgb(16 24 40 / 0.08);
+  --hui-series-1: #2453c4;
   --hui-series-2: #b3261e;
-  --hui-guide: #5b6470;
-  --hui-focus: #2856c9;
+  --hui-guide: #586170;
+  --hui-focus: #2453c4;
 }
 
 @media (prefers-color-scheme: dark) {
   :where(:root:not([data-theme='light'])) {
-    --hui-bg: #14171b;
-    --hui-surface: #1d2126;
-    --hui-border: #333a42;
-    --hui-text: #e7eaee;
-    --hui-muted: #9aa4af;
-    --hui-accent: #7aa2ff;
-    --hui-ok: #6fd19c;
-    --hui-ok-bg: #173325;
-    --hui-warn: #f2c266;
-    --hui-warn-bg: #3a2d10;
-    --hui-bad: #ff8a80;
-    --hui-series-1: #5b8def;
-    --hui-series-2: #e5534b;
-    --hui-guide: #9aa4af;
-    --hui-focus: #7aa2ff;
+    --hui-bg: #0e1013;
+    --hui-surface: #171a1f;
+    --hui-muted-bg: #20242a;
+    --hui-track: #2b3038;
+    --hui-wait: #a67c2c;
+    --hui-border: #2e343c;
+    --hui-text: #e8ebef;
+    --hui-muted: #a0a9b4;
+    --hui-accent: #82a8ff;
+    --hui-accent-fg: #0e1013;
+    --hui-ok: #74d6a1;
+    --hui-ok-bg: #133022;
+    --hui-warn: #f3c46b;
+    --hui-warn-bg: #36290d;
+    --hui-bad: #ff958b;
+    --hui-bad-bg: #3a1714;
+    --hui-shadow: 0 1px 2px rgb(0 0 0 / 0.5);
+    --hui-series-1: #6f9bff;
+    --hui-series-2: #ef6a62;
+    --hui-guide: #a0a9b4;
+    --hui-focus: #82a8ff;
   }
 }
 :where(:root[data-theme='dark']) {
-  --hui-bg: #14171b;
-  --hui-surface: #1d2126;
-  --hui-border: #333a42;
-  --hui-text: #e7eaee;
-  --hui-muted: #9aa4af;
-  --hui-accent: #7aa2ff;
-  --hui-ok: #6fd19c;
-  --hui-ok-bg: #173325;
-  --hui-warn: #f2c266;
-  --hui-warn-bg: #3a2d10;
-  --hui-bad: #ff8a80;
-  --hui-series-1: #5b8def;
-  --hui-series-2: #e5534b;
-  --hui-guide: #9aa4af;
-  --hui-focus: #7aa2ff;
+  --hui-bg: #0e1013;
+  --hui-surface: #171a1f;
+  --hui-muted-bg: #20242a;
+  --hui-track: #2b3038;
+  --hui-wait: #a67c2c;
+  --hui-border: #2e343c;
+  --hui-text: #e8ebef;
+  --hui-muted: #a0a9b4;
+  --hui-accent: #82a8ff;
+  --hui-accent-fg: #0e1013;
+  --hui-ok: #74d6a1;
+  --hui-ok-bg: #133022;
+  --hui-warn: #f3c46b;
+  --hui-warn-bg: #36290d;
+  --hui-bad: #ff958b;
+  --hui-bad-bg: #3a1714;
+  --hui-shadow: 0 1px 2px rgb(0 0 0 / 0.5);
+  --hui-series-1: #6f9bff;
+  --hui-series-2: #ef6a62;
+  --hui-guide: #a0a9b4;
+  --hui-focus: #82a8ff;
 }
 
-.hui {
-  overflow-wrap: anywhere;
-  font-family: var(--hui-font);
-  color: var(--hui-text);
-  background: var(--hui-bg);
-  display: grid;
-  gap: var(--hui-gap);
-  min-width: 0;
-}
-.hui code {
-  font-family: var(--hui-font-code);
-  font-size: 0.9em;
-  overflow-wrap: anywhere;
-}
-.hui-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-.hui-title {
-  font-size: 1.25rem;
-  margin: 0;
-}
-.hui-lead {
-  font-size: 1.05rem;
-  margin: 0;
-}
-.hui-footer {
-  font-size: 0.85rem;
-}
-.hui-subtitle {
-  font-size: 1rem;
-  margin: 0 0 8px;
-}
-.hui-panel {
-  background: var(--hui-surface);
-  border: 1px solid var(--hui-border);
-  border-radius: var(--hui-radius);
-  padding: var(--hui-gap);
-  min-width: 0;
-}
-.hui-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 8px;
-}
-.hui-item {
-  min-width: 0;
-}
-.hui-secondary {
-  margin-top: 8px;
-}
-.hui-muted {
-  color: var(--hui-muted);
-  margin: 0;
-}
-.hui-badge {
-  display: inline-block;
-  border: 1px solid var(--hui-border);
-  border-radius: 999px;
-  padding: 0 8px;
-  font-size: 0.8rem;
-  line-height: 1.6;
-}
-.hui-ok {
-  color: var(--hui-ok);
-  background: var(--hui-ok-bg);
-}
-.hui-warn {
-  color: var(--hui-warn);
-  background: var(--hui-warn-bg);
-}
-.hui-bad {
-  color: var(--hui-bad);
-}
-.hui-link {
-  font: inherit;
-  color: var(--hui-accent);
-  background: none;
-  border: 0;
-  padding: 0;
-  cursor: pointer;
-  text-decoration: underline;
-}
-.hui-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: var(--hui-gap);
-  margin: 0;
-}
-.hui-grid dt {
-  color: var(--hui-muted);
-  font-size: 0.85rem;
-}
-.hui-grid dd {
-  margin: 0;
-  font-weight: 600;
-}
-.hui-totals {
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
-}
-.hui-totals .hui-term {
-  font-weight: 400;
+/* Scoped reset: only inside the panel, never on the host page. */
+@layer hui-base {
+  .hui,
+  .hui *,
+  .hui ::before,
+  .hui ::after {
+    box-sizing: border-box;
+  }
+  .hui :where(h1, h2, h3, h4, p, ul, ol, dl, dd, figure) {
+    margin: 0;
+  }
+  .hui :where(ul, ol) {
+    padding: 0;
+  }
 }
 
-/* S2 screens */
-.hui :focus-visible {
-  outline: 2px solid var(--hui-focus);
-  outline-offset: 2px;
-}
-.hui-heading {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 4px 12px;
-  margin: 0 0 8px;
-}
-.hui-heading .hui-subtitle,
-.hui-heading .hui-title {
-  margin: 0;
-}
-.hui-minor {
-  font-size: 0.95rem;
-  margin: 12px 0 6px;
-}
-.hui-term {
-  font-size: 0.85rem;
-  color: var(--hui-muted);
-  min-width: 0;
-}
-.hui-term summary {
-  cursor: pointer;
-  text-decoration: underline dotted;
-}
-.hui-term[open] {
-  flex-basis: 100%;
-}
-.hui-term p {
-  margin: 4px 0 0;
-  color: var(--hui-text);
-}
-.hui-terms {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 16px;
-}
-.hui-sr {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-  border: 0;
-}
-.hui-nested {
-  margin: 4px 0 0 12px;
-  gap: 4px;
-}
-.hui-who {
-  font-weight: 600;
-}
-.hui-code {
-  font-size: 0.8em;
-}
-.hui-warn-text {
-  color: var(--hui-warn);
-}
-.hui-plan {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.hui-plan-step {
-  border: 1px solid var(--hui-border);
-  border-radius: var(--hui-radius);
-  padding: 4px 8px;
-  min-width: 0;
-}
-.hui-current {
-  border-color: var(--hui-accent);
-  border-width: 2px;
-}
-.hui-steps {
-  margin: 0;
-  padding-left: 1.4em;
-  display: grid;
-  gap: 4px;
-}
-@media (min-width: 640px) {
-  .hui-steps {
+@layer hui-components {
+  .hui {
+    overflow-wrap: anywhere;
+    font-family: var(--hui-font);
+    color: var(--hui-text);
+    background: var(--hui-bg);
+    display: grid;
+    gap: var(--hui-gap);
+    min-width: 0;
+  }
+  .hui code {
+    font-family: var(--hui-font-code);
+    font-size: 0.9em;
+    overflow-wrap: anywhere;
+  }
+  .hui-row {
     display: flex;
     flex-wrap: wrap;
-    gap: 4px 24px;
+    align-items: center;
+    gap: 8px;
   }
-}
-.hui-facts {
-  list-style: none;
-  margin: 8px 0;
-  padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 16px;
-}
-.hui-card {
-  display: grid;
-  gap: 4px;
-}
-.hui-findings summary {
-  cursor: pointer;
-  font-weight: 600;
-  margin: 4px 0;
-}
-.hui-escalation {
-  margin: 4px 0 0;
-  color: var(--hui-warn);
-}
-.hui-split {
-  display: grid;
-  gap: var(--hui-gap);
-}
-@media (min-width: 640px) {
-  .hui-split {
-    grid-template-columns: 1fr 1fr;
+  .hui-title {
+    font-size: 1.25rem;
+    margin: 0;
   }
-}
-.hui-defs {
-  margin: 0;
-  display: grid;
-  gap: 6px;
-}
-.hui-def {
-  display: grid;
-  gap: 2px 12px;
-}
-@media (min-width: 640px) {
-  .hui-def {
-    grid-template-columns: minmax(200px, 1fr) 2fr;
+  .hui-lead {
+    font-size: 1.05rem;
+    margin: 0;
   }
-}
-.hui-def dt {
-  color: var(--hui-muted);
-}
-.hui-def dd {
-  margin: 0;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-.hui-default {
-  margin-left: 8px;
-  color: var(--hui-muted);
-}
-.hui-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.9rem;
-}
-.hui-table th,
-.hui-table td {
-  text-align: left;
-  padding: 6px 8px;
-  border-bottom: 1px solid var(--hui-border);
-  overflow-wrap: anywhere;
-}
-@media (max-width: 639px) {
-  .hui-table thead {
+  .hui-footer {
+    font-size: 0.85rem;
+  }
+  .hui-subtitle {
+    font-size: 1rem;
+    margin: 0 0 8px;
+  }
+  .hui-panel {
+    background: var(--hui-surface);
+    border: 1px solid var(--hui-border);
+    border-radius: var(--hui-radius-card);
+    box-shadow: var(--hui-shadow);
+    padding: 16px;
+    min-width: 0;
+  }
+  .hui-panel > :where(*) + :where(p, ul, ol, dl, div, table, details, figure) {
+    margin-top: 8px;
+  }
+  .hui-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 8px;
+  }
+  .hui-item {
+    min-width: 0;
+  }
+  .hui-secondary {
+    margin-top: 8px;
+  }
+  .hui-muted {
+    color: var(--hui-muted);
+    margin: 0;
+  }
+  .hui-badge {
+    display: inline-block;
+    border: 1px solid var(--hui-border);
+    border-radius: 999px;
+    padding: 0 8px;
+    font-size: 0.8rem;
+    line-height: 1.6;
+  }
+  .hui-ok {
+    color: var(--hui-ok);
+    background: var(--hui-ok-bg);
+  }
+  .hui-warn {
+    color: var(--hui-warn);
+    background: var(--hui-warn-bg);
+  }
+  .hui-bad {
+    color: var(--hui-bad);
+  }
+  .hui-link {
+    font: inherit;
+    color: var(--hui-accent);
+    background: none;
+    border: 0;
+    padding: 0;
+    cursor: pointer;
+    text-decoration: underline;
+  }
+  .hui-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: var(--hui-gap);
+    margin: 0;
+  }
+  .hui-grid dt {
+    color: var(--hui-muted);
+    font-size: 0.85rem;
+  }
+  .hui-grid dd {
+    margin: 0;
+    font-weight: 600;
+  }
+  .hui-totals {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  }
+  .hui-totals .hui-term {
+    font-weight: 400;
+  }
+
+  /* S2 screens */
+  .hui :focus-visible {
+    outline: 2px solid var(--hui-focus);
+    outline-offset: 2px;
+  }
+  .hui-heading {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 12px;
+    margin: 0 0 8px;
+  }
+  .hui-heading .hui-subtitle,
+  .hui-heading .hui-title {
+    margin: 0;
+  }
+  .hui-minor {
+    font-size: 0.95rem;
+    margin: 12px 0 6px;
+  }
+  .hui-term {
+    font-size: 0.85rem;
+    color: var(--hui-muted);
+    min-width: 0;
+  }
+  .hui-term summary {
+    cursor: pointer;
+    text-decoration: underline dotted;
+  }
+  .hui-term[open] {
+    flex-basis: 100%;
+  }
+  .hui-term p {
+    margin: 4px 0 0;
+    color: var(--hui-text);
+  }
+  .hui-terms {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+  }
+  .hui-sr {
     position: absolute;
     width: 1px;
     height: 1px;
+    padding: 0;
+    margin: -1px;
     overflow: hidden;
     clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
   }
-  .hui-table,
-  .hui-table tbody,
-  .hui-table tr,
-  .hui-table td {
-    display: block;
+  .hui-nested {
+    margin: 4px 0 0 12px;
+    gap: 4px;
   }
-  .hui-table tr {
+  .hui-who {
+    font-weight: 600;
+  }
+  .hui-code {
+    font-size: 0.8em;
+  }
+  .hui-warn-text {
+    color: var(--hui-warn);
+  }
+  .hui-plan {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .hui-plan-step {
     border: 1px solid var(--hui-border);
     border-radius: var(--hui-radius);
-    margin-bottom: 8px;
     padding: 4px 8px;
+    min-width: 0;
   }
-  .hui-table td {
-    border: 0;
-    padding: 2px 0;
+  .hui-current {
+    border-color: var(--hui-accent);
+    border-width: 2px;
   }
-  .hui-table td::before {
-    content: attr(data-label) ': ';
+  .hui-steps {
+    margin: 0;
+    padding-left: 1.4em;
+    display: grid;
+    gap: 4px;
+  }
+  @media (min-width: 640px) {
+    .hui-steps {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px 24px;
+    }
+  }
+  .hui-facts {
+    list-style: none;
+    margin: 8px 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 16px;
+  }
+  .hui-card {
+    display: grid;
+    gap: 4px;
+  }
+  .hui-findings summary {
+    cursor: pointer;
+    font-weight: 600;
+    margin: 4px 0;
+  }
+  .hui-escalation {
+    margin: 4px 0 0;
+    color: var(--hui-warn);
+  }
+  .hui-split {
+    display: grid;
+    gap: var(--hui-gap);
+  }
+  @media (min-width: 640px) {
+    .hui-split {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+  .hui-defs {
+    margin: 0;
+    display: grid;
+    gap: 6px;
+  }
+  .hui-def {
+    display: grid;
+    gap: 2px 12px;
+  }
+  @media (min-width: 640px) {
+    .hui-def {
+      grid-template-columns: minmax(200px, 1fr) 2fr;
+    }
+  }
+  .hui-def dt {
     color: var(--hui-muted);
   }
-}
-.hui-filter {
-  margin-bottom: 8px;
-}
-.hui-chip {
-  border: 1px solid var(--hui-border);
-  border-radius: 999px;
-  padding: 2px 10px;
-  color: var(--hui-accent);
-  text-decoration: none;
-  font-size: 0.85rem;
-}
-.hui-chip-on {
-  background: var(--hui-accent);
-  color: var(--hui-bg);
-}
-.hui-event {
-  overflow-wrap: anywhere;
-}
-.hui-when {
-  font-variant-numeric: tabular-nums;
-}
-.hui-actor {
-  font-weight: 600;
-}
-.hui-activity .hui-terms {
-  margin-top: 8px;
-  align-items: baseline;
-}
-.hui-charts {
-  display: grid;
-  gap: var(--hui-gap);
-}
-@media (min-width: 1024px) {
+  .hui-def dd {
+    margin: 0;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .hui-default {
+    margin-left: 8px;
+    color: var(--hui-muted);
+  }
+  .hui-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+  }
+  .hui-table th,
+  .hui-table td {
+    text-align: left;
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--hui-border);
+    overflow-wrap: anywhere;
+  }
+  @media (max-width: 639px) {
+    .hui-table thead {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+    }
+    .hui-table,
+    .hui-table tbody,
+    .hui-table tr,
+    .hui-table td {
+      display: block;
+    }
+    .hui-table tr {
+      border: 1px solid var(--hui-border);
+      border-radius: var(--hui-radius);
+      margin-bottom: 8px;
+      padding: 4px 8px;
+    }
+    .hui-table td {
+      border: 0;
+      padding: 2px 0;
+    }
+    .hui-table td::before {
+      content: attr(data-label) ': ';
+      color: var(--hui-muted);
+    }
+  }
+  .hui-filter {
+    margin-bottom: 8px;
+  }
+  .hui-chip {
+    border: 1px solid var(--hui-border);
+    border-radius: 999px;
+    padding: 2px 10px;
+    color: var(--hui-accent);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  .hui-chip-on {
+    background: var(--hui-accent);
+    color: var(--hui-bg);
+  }
+  .hui-event {
+    overflow-wrap: anywhere;
+  }
+  .hui-when {
+    font-variant-numeric: tabular-nums;
+  }
+  .hui-actor {
+    font-weight: 600;
+  }
+  .hui-activity .hui-terms {
+    margin-top: 8px;
+    align-items: baseline;
+  }
   .hui-charts {
-    grid-template-columns: 1fr 1fr;
+    display: grid;
+    gap: var(--hui-gap);
   }
-}
-.hui-chart {
-  margin: 0;
-  min-width: 0;
-}
-.hui-chart-summary {
-  margin: 0 0 8px;
-}
-.hui-svg {
-  display: block;
-  width: 100%;
-  height: 160px;
-}
-@media (max-width: 639px) {
+  @media (min-width: 1024px) {
+    .hui-charts {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+  .hui-chart {
+    margin: 0;
+    min-width: 0;
+  }
+  .hui-chart-summary {
+    margin: 0 0 8px;
+  }
   .hui-svg {
-    height: 120px;
+    display: block;
+    width: 100%;
+    height: 160px;
   }
-}
-.hui-axis {
-  stroke: var(--hui-border);
-  stroke-width: 1px;
-}
-.hui-guide {
-  stroke: var(--hui-guide);
-  stroke-width: 1.5px;
-  stroke-dasharray: 6 4;
-}
-.hui-bar.hui-s1 {
-  fill: var(--hui-series-1);
-}
-.hui-bar.hui-s2 {
-  fill: var(--hui-series-2);
-}
-.hui-line {
-  stroke-width: 2px;
-}
-.hui-line.hui-s1 {
-  stroke: var(--hui-series-1);
-}
-.hui-dashed {
-  stroke-dasharray: 6 4;
-}
-.hui-axis-labels {
-  display: flex;
-  justify-content: space-between;
-  font-size: 0.8rem;
-  color: var(--hui-muted);
-  margin-top: 4px;
-}
-.hui-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 16px;
-  font-size: 0.85rem;
-  margin-bottom: 4px;
-}
-.hui-key {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.hui-swatch {
-  display: inline-block;
-  width: 14px;
-  height: 10px;
-  border-radius: 2px;
-}
-.hui-swatch.hui-s1 {
-  background: var(--hui-series-1);
-}
-.hui-swatch.hui-s2 {
-  background: var(--hui-series-2);
-}
-.hui-swatch-dashed {
-  height: 0;
-  border-top: 2px dashed var(--hui-guide);
-  background: none !important;
-}
-.hui-swatch.hui-s1.hui-swatch-dashed {
-  border-top-color: var(--hui-series-1);
-}
-@media (prefers-reduced-motion: reduce) {
-  .hui *,
-  .hui *::before,
-  .hui *::after {
-    animation: none !important;
-    transition: none !important;
-    scroll-behavior: auto !important;
+  @media (max-width: 639px) {
+    .hui-svg {
+      height: 120px;
+    }
   }
-}
+  .hui-axis {
+    stroke: var(--hui-border);
+    stroke-width: 1px;
+  }
+  .hui-guide {
+    stroke: var(--hui-guide);
+    stroke-width: 1.5px;
+    stroke-dasharray: 6 4;
+  }
+  .hui-bar.hui-s1 {
+    fill: var(--hui-series-1);
+  }
+  .hui-bar.hui-s2 {
+    fill: var(--hui-series-2);
+  }
+  .hui-line {
+    stroke-width: 2px;
+  }
+  .hui-line.hui-s1 {
+    stroke: var(--hui-series-1);
+  }
+  .hui-dashed {
+    stroke-dasharray: 6 4;
+  }
+  .hui-axis-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.8rem;
+    color: var(--hui-muted);
+    margin-top: 4px;
+  }
+  .hui-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 16px;
+    font-size: 0.85rem;
+    margin-bottom: 4px;
+  }
+  .hui-key {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .hui-swatch {
+    display: inline-block;
+    width: 14px;
+    height: 10px;
+    border-radius: 2px;
+  }
+  .hui-swatch.hui-s1 {
+    background: var(--hui-series-1);
+  }
+  .hui-swatch.hui-s2 {
+    background: var(--hui-series-2);
+  }
+  .hui-swatch-dashed {
+    height: 0;
+    border-top: 2px dashed var(--hui-guide);
+    background: none !important;
+  }
+  .hui-swatch.hui-s1.hui-swatch-dashed {
+    border-top-color: var(--hui-series-1);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .hui *,
+    .hui *::before,
+    .hui *::after {
+      animation: none !important;
+      transition: none !important;
+      scroll-behavior: auto !important;
+    }
+  }
 
-.hui-header > *,
-.hui-row > * {
-  min-width: 0;
-  max-width: 100%;
-}
-.hui-badge {
-  max-width: 100%;
-}
-.app-detail {
-  display: block;
-  font-size: 0.85rem;
+  .hui-header > *,
+  .hui-row > * {
+    min-width: 0;
+    max-width: 100%;
+  }
+  .hui-badge {
+    max-width: 100%;
+  }
+  /* Cards of the redesign (alpha.4). */
+  .hui-codes {
+    display: inline-block;
+    vertical-align: baseline;
+    margin-left: 4px;
+  }
+  .hui-codes[open] {
+    display: block;
+    margin-left: 0;
+  }
+  .hui-stats > div {
+    background: var(--hui-surface);
+    border: 1px solid var(--hui-border);
+    border-radius: var(--hui-radius-card);
+    box-shadow: var(--hui-shadow);
+    padding: 12px 16px;
+    min-width: 0;
+  }
+  .hui-plan-step.hui-current {
+    border-width: 1px;
+    box-shadow: inset 3px 0 0 var(--hui-accent);
+  }
+  .hui-event a.hui-link {
+    display: inline-block;
+  }
+  .hui-question + .hui-question {
+    border-top: 1px solid var(--hui-border);
+    padding-top: 8px;
+  }
+  .hui-badge {
+    background: var(--hui-surface);
+  }
+  .hui-badge.hui-warn {
+    background: var(--hui-warn-bg);
+  }
+  .hui-badge.hui-ok {
+    background: var(--hui-ok-bg);
+  }
 }

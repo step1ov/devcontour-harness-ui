@@ -10,7 +10,8 @@ import { dict, label, type GlossaryId } from '../model/dict.ts';
 import { formatWindow } from '../model/format.ts';
 import { formatWhen } from '../model/i18n.ts';
 import type { OperatorView } from '../model/view.ts';
-import { Heading, Term, WorkRef, actorLabel, type ScreenProps } from './common.tsx';
+import { workName } from '../model/steps.ts';
+import { Codes, Heading, Term, WorkRef, actorLabel, type ScreenProps } from './common.tsx';
 
 export interface ActivityFilter {
   workId?: string;
@@ -160,10 +161,10 @@ export function Activity({
                   {e.workId ? (
                     <WorkRef id={e.workId} {...links}>
                       <span className="hui-sr">{v.openWork} </span>
-                      <code>{e.workId}</code>
+                      {workName(view, e.workId)}
                     </WorkRef>
                   ) : null}{' '}
-                  <code className="hui-muted hui-code">{e.action}</code>
+                  <Codes t={t} codes={[e.action]} />
                 </li>
               ))}
             </ol>

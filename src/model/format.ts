@@ -138,3 +138,31 @@ export function questionStatus(
       return { needsAnswer: false, text: t.unknownState(String(q.state)) };
   }
 }
+
+/**
+ * A rough length for an estimate: under a minute; whole minutes up to 30;
+ * then 5-minute steps; from an hour on, half hours; from 10 h on, hours.
+ * Rounded up (the high end of a range, a single figure), or down (`down`:
+ * the low end), so a range never looks narrower than the numbers.
+ */
+export function formatRough(ms: number, lang: Lang = 'en', down = false): string {
+  const r = dict(lang).rough;
+  if (!Number.isFinite(ms) || ms < 0) return dict(lang).unknown;
+  const round = down ? Math.floor : Math.ceil;
+  const min = ms / 60_000;
+  if (min < 1) return r.underMinute;
+  if (min <= 30) return r.minutes(Math.max(1, round(min)));
+  if (min < 60) return r.minutes(Math.max(30, Math.min(60, round(min / 5) * 5)));
+  const h = min / 60;
+  if (h < 10) return r.hours(Math.max(1, round(h * 2) / 2));
+  return r.hours(Math.max(10, round(h)));
+}
+
+/** A rough range: «около 15 мин», «до 5 мин», «50 мин – 2,5 ч» (never a bare 0). */
+export function formatRange(range: { loMs: number; hiMs: number }, lang: Lang = 'en'): string {
+  const r = dict(lang).rough;
+  const hi = formatRough(range.hiMs, lang);
+  if (range.loMs < 60_000) return range.hiMs < 60_000 ? r.underMinute : r.upTo(hi);
+  const lo = formatRough(range.loMs, lang, true);
+  return lo === hi ? r.about(hi) : r.between(lo, hi);
+}

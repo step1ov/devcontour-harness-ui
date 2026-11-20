@@ -20,7 +20,7 @@ export type ViewCheck =
     };
 
 /** Highest `viewRevision` this build knows how to render in full. */
-export const KNOWN_VIEW_REVISION = 2;
+export const KNOWN_VIEW_REVISION = 3;
 
 type Obj = Record<string, unknown>;
 const isObject = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);

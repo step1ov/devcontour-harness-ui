@@ -354,8 +354,15 @@ test('health warnings from the harness are listed with their code and message', 
   };
   const html = renderToStaticMarkup(<Overview lang="en" view={warned} />);
   const list = html.slice(html.indexOf('data-testid="warnings"'));
-  assert.match(list, /STATE_NOT_FOUND<\/code> there is no state yet/);
-  assert.match(list, /POLICY_DIGEST_MISMATCH<\/code> the policy differs/);
+  // The plain message first; the code only under «details» (F-AA).
+  assert.match(
+    list,
+    /there is no state yet <details[^>]*><summary>details<\/summary><p><span><code>STATE_NOT_FOUND<\/code>/,
+  );
+  assert.match(
+    list,
+    /the policy differs[^<]* <details[^>]*><summary>details<\/summary><p><span><code>POLICY_DIGEST_MISMATCH/,
+  );
   assert.doesNotMatch(
     renderToStaticMarkup(<Overview lang="en" view={view} />),
     /data-testid="warnings"/,

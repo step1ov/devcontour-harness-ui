@@ -358,6 +358,20 @@ function sendView(
 
 const inside = (root: string, file: string) => file === root || file.startsWith(root + sep);
 
+/**
+ * Identity of the served app build: a hash of its index.html, which names
+ * the hashed bundle files. An open tab compares it with the one it booted
+ * with and offers a reload when it changes (F-AF). `undefined` without a
+ * built app.
+ */
+async function buildOf(appDir: string): Promise<string | undefined> {
+  try {
+    return hashOf(await readFile(join(await realpath(resolve(appDir)), 'index.html'))).slice(0, 16);
+  } catch {
+    return undefined;
+  }
+}
+
 async function serveStatic(res: ServerResponse, appDir: string, pathname: string) {
   const notFound = () => send(res, 404, 'Not found', 'text/plain; charset=utf-8');
   const wanted = pathname === '/' ? '/index.html' : pathname;
@@ -374,7 +388,18 @@ async function serveStatic(res: ServerResponse, appDir: string, pathname: string
     // directory must not reach files outside it.
     const real = await realpath(lexical);
     if (!inside(root, real) || !(await stat(real)).isFile()) return notFound();
-    return send(res, 200, await readFile(real), types[extname(real)] ?? 'application/octet-stream');
+    // The page names the hashed bundle files: it is revalidated on every
+    // load, so a new panel build reaches an open tab on its next reload (F-AF).
+    const body = await readFile(real);
+    if (wanted !== '/index.html')
+      return send(res, 200, body, types[extname(real)] ?? 'application/octet-stream');
+    // The page carries the id of its own build, so an open tab compares the
+    // bundle it really runs with the one served now (F-AF).
+    const build = hashOf(body).slice(0, 16);
+    const page = body
+      .toString('utf8')
+      .replace('<head>', `<head>\n    <meta name="hui-build" content="${build}" />`);
+    return send(res, 200, page, types['.html']!, { 'cache-control': 'no-cache' });
   } catch {
     if (wanted === '/index.html') return send(res, 200, fallbackPage, types['.html']!);
     return notFound();
@@ -651,18 +676,21 @@ export async function startServer(options: ServeOptions): Promise<RunningServer>
       return serveViewFile(req, res, fileSource(params).viewFile!);
     }
     if (pathname === '/api/health') {
+      const build = await buildOf(options.appDir);
       return send(
         res,
         200,
         JSON.stringify({
           ok: true,
           version: options.version,
+          ...(build ? { build } : {}),
           readOnly: true,
           // What /api/events watches: a live `harness view` or a file.
           live: live ? 'state' : 'file',
           ...(options.lang ? { lang: options.lang } : {}),
         }),
         types['.json']!,
+        { 'cache-control': 'no-store' },
       );
     }
     return serveStatic(res, options.appDir, pathname);

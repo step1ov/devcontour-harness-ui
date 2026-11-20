@@ -253,8 +253,16 @@ test('a hidden tab never polls, even when a pending load fails after hiding', as
     await page.waitForTimeout(6500);
     expect(gets, 'GETs while hidden').toBe(1);
     await page.unroute('**/api/view**');
+    // Shown again: the tab loads at once (the real signal is that GET, answered
+    // with the new view), and then renders it.
+    const loaded = page.waitForResponse(
+      (r) => r.url().includes('/api/view') && r.status() === 200,
+      { timeout: 3000 },
+    );
     await setHidden(page, false);
-    await expect(page.locator('main')).toContainText('Новый скрытый вопрос', { timeout: 3000 });
+    const res = await loaded;
+    expect(JSON.stringify(await res.json())).toContain('Новый скрытый вопрос');
+    await expect(page.locator('main')).toContainText('Новый скрытый вопрос');
   } finally {
     await cli.stop();
     s.remove();

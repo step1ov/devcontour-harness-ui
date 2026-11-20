@@ -1,25 +1,52 @@
+/* Standalone app shell: the top menu, the page width, the notices. The
+   panel itself is styled by the package stylesheet (`.hui`). */
 :root {
   color-scheme: light dark;
 }
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+:root[data-theme='dark'] {
+  color-scheme: dark;
+}
 body {
   margin: 0;
-  padding: 16px;
   background: var(--hui-bg);
   color: var(--hui-text);
   font-family: var(--hui-font);
+  line-height: 1.5;
 }
 #root {
-  max-width: 1100px;
-  margin: 0 auto;
+  min-height: 100vh;
 }
 main:focus {
   outline: none;
 }
+.app-main {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.app-main > * {
+  min-width: 0;
+}
+.app-main > p {
+  margin: 0;
+}
 .app-note {
   color: var(--hui-muted);
+  overflow-wrap: anywhere;
+  font-size: 0.9rem;
 }
 .app-bad {
   color: var(--hui-bad);
+}
+.app-detail {
+  display: block;
+  font-size: 0.85rem;
 }
 .app-skip {
   position: absolute;
@@ -28,45 +55,84 @@ main:focus {
 .app-skip:focus {
   left: 16px;
   top: 8px;
-  background: var(--hui-bg);
+  background: var(--hui-surface);
+  color: var(--hui-text);
   padding: 4px 8px;
-  z-index: 1;
+  z-index: 2;
 }
 .app-nav {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 8px 16px;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 16px;
-  border-bottom: 1px solid var(--hui-border);
-  padding-bottom: 8px;
+  gap: 8px 16px;
 }
-.app-nav ul {
+.app-brand {
+  font-weight: 700;
+  margin-right: 8px;
+}
+.app-nav ul,
+.app-subnav ul {
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 16px;
+  gap: 4px;
 }
-.app-nav a {
-  color: var(--hui-accent);
+.app-nav ul {
+  flex: 1 1 auto;
 }
-.app-nav a[aria-current='page'] {
+.app-tab {
+  display: inline-block;
+  padding: 6px 12px;
+  border-radius: var(--hui-radius);
+  color: var(--hui-muted);
+  text-decoration: none;
+  font-weight: 500;
+}
+.app-tab:hover {
+  background: var(--hui-muted-bg);
+  color: var(--hui-text);
+}
+.app-tab-on {
+  background: var(--hui-muted-bg);
   color: var(--hui-text);
   font-weight: 700;
+}
+.app-lang {
+  color: var(--hui-accent);
+  font-size: 0.9rem;
+}
+.app-chip {
+  display: inline-block;
+  padding: 4px 12px;
+  border: 1px solid var(--hui-border);
+  border-radius: 999px;
+  color: var(--hui-text);
+  background: var(--hui-surface);
   text-decoration: none;
+  font-size: 0.9rem;
+}
+.app-chip-on {
+  background: var(--hui-accent);
+  border-color: var(--hui-accent);
+  color: var(--hui-accent-fg);
 }
 .app-nav a:focus-visible,
-.app-skip:focus-visible {
+.app-subnav a:focus-visible,
+.app-skip:focus-visible,
+.app-alert button:focus-visible {
   outline: 2px solid var(--hui-focus);
   outline-offset: 2px;
 }
-.app-note {
-  overflow-wrap: anywhere;
-}
-.app-detail {
-  display: block;
-  font-size: 0.85rem;
+@media (max-width: 639px) {
+  .app-brand {
+    width: 100%;
+  }
+  .app-tab {
+    padding: 6px 8px;
+  }
 }

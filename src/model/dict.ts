@@ -370,6 +370,14 @@ const enGlossary: Record<GlossaryId, { term: string; meaning: string }> = {
   },
 };
 
+/** «5 мин» + «15 мин» → «5–15 мин»; different units stay apart: «50 мин – 1,5 ч». */
+function joinRange(a: string, b: string, units: readonly string[]): string {
+  for (const u of units)
+    if (a.endsWith(u) && b.endsWith(u) && !/\D/.test(a.slice(0, -u.length).replace(/[.,]/, '')))
+      return `${a.slice(0, -u.length)}–${b}`;
+  return `${a} – ${b}`;
+}
+
 /** A label table: known codes map to words; any other code is shown as is. */
 type Labels = Record<string, string>;
 
@@ -397,7 +405,11 @@ const ru = {
     history: 'История',
     health: 'Здоровье',
     back: '← К обзору',
+    backTasks: '← К задачам',
     language: 'Язык',
+    tasks: 'Задачи',
+    journal: 'Журнал',
+    journalLabel: 'Разделы журнала',
   },
   app: {
     title: 'Панель harness',
@@ -418,6 +430,9 @@ const ru = {
     } as Labels,
     details: 'Подробности:',
     skip: 'К содержимому',
+    newBuild: (v: string) =>
+      `Панель обновилась${v ? ` (версия ${v})` : ''}: на этой вкладке открыта прежняя сборка.`,
+    reload: 'Обновить страницу',
   },
   // Units and numbers.
   usdUnknown: 'неизвестно',
@@ -567,6 +582,177 @@ const ru = {
     basis: (at: string, line: string) => `${at} — ${line}`,
     cancelled: 'Вопрос снят.',
     superseded: 'Вопрос заменён.',
+    leadAnswers:
+      'Отвечает ведущий: вопрос технический, и политика разрешает ему отвечать на такие. Вы тоже можете ответить.',
+  },
+  // First line of the Overview.
+  story: {
+    empty: 'Работ пока нет.',
+    allDone: (done: number, total: number, cancelled: number) =>
+      `Все работы приняты: ${done} из ${total}${cancelled ? `; отменено ${cancelled}` : ''}.`,
+    allCancelled: (n: number) =>
+      `Все работы отменены (${n}); принятых нет — что дальше, решает ведущий.`,
+    harnessDone: (done: number, outside: number) =>
+      `Всё, что передано в harness, принято (${done}); ещё ${rp(outside, 'задача не передана', 'задачи не переданы', 'задач не передано')} в harness — их передаёт ведущий.`,
+    onlyOutside: (outside: number) =>
+      `В harness пока нет работ; ${rp(outside, 'задача ждёт', 'задачи ждут', 'задач ждут')} передачи от ведущего.`,
+    workAt: (name: string, stage: string) => `${name} (этап «${stage}»)`,
+    running: (works: string[], more: number) =>
+      `Сейчас harness работает над ${works.join(' и ')}${more ? ` и ещё ${rp(more, 'работой', 'работами', 'работами')}` : ''}.`,
+    runningUnlisted: (n: number) =>
+      `Сейчас harness работает над ${rp(n, 'работой', 'работами', 'работами')}.`,
+    paused: 'Сейчас ничего не выполняется: очередь на паузе.',
+    waitsYou: 'Сейчас ничего не выполняется: работа ждёт вашего ответа или решения.',
+    standing: 'Сейчас ничего не выполняется: harness не запущен.',
+    waitsOthers: 'Сейчас ничего не выполняется: работы ждут своей очереди или ведущего.',
+  },
+  // «Проблемы по ходу».
+  problems: {
+    kindQueue: 'очередь',
+    kindStopped: 'остановка',
+    kindHealth: 'сбой',
+    kindBudget: 'бюджет',
+    kindDrift: 'изменено после приёмки',
+    standing:
+      'очередь стоит: harness не запущен, и после ответа или сброса работа сама не продолжится',
+    lastFailure: (attempt: number, plain: string) => `попытка ${attempt} остановилась: ${plain}`,
+    stoppedNoReason: 'остановлена, причина не сообщена',
+    writerEnv: (attempt: number) =>
+      `попытка ${attempt}: ждёт ведущего — окружение не дало исполнителю выполнить нужный шаг; попытка не засчитана`,
+    stalled: (n: number) => `${rp(n, 'попытка зависла', 'попытки зависли', 'попыток зависло')}`,
+    environment: (n: number) => `сбоев окружения: ${n}`,
+    budgetExceeded: (spent: string, scope: string) =>
+      `бюджет превышен (${scope}): потрачено ${spent}`,
+    drifted: (n: number) =>
+      `${rp(n, 'принятая работа изменена', 'принятые работы изменены', 'принятых работ изменены')} после приёмки`,
+  },
+  // Rough times.
+  rough: {
+    underMinute: 'меньше минуты',
+    minutes: (n: number) => `${n} мин`,
+    hours: (h: number) => `${String(h).replace('.', ',')} ч`,
+    about: (x: string) => `около ${x}`,
+    upTo: (x: string) => `до ${x}`,
+    between: (a: string, b: string) => joinRange(a, b, [' мин', ' ч']),
+  },
+  eta: {
+    stageLeft: (range: string) => `осталось на этапе: ${range}`,
+    stageOver: (max: string) => `этап идёт дольше обычного (обычно до ${max})`,
+    stageUnknown: 'сколько осталось на этапе — неизвестно',
+    attempt: (avg: string) => `одна попытка в среднем около ${avg}`,
+    unknown: 'срок неизвестен',
+  },
+  // Tasks screen.
+  tasks: {
+    label: 'Задачи',
+    title: 'Задачи',
+    intro:
+      'Каждая карточка — одна работа: что с ней сейчас, сколько попыток осталось, сколько раундов ревью прошло и кто действует дальше.',
+    empty: 'Работ пока нет.',
+    phase: {
+      accepted: 'Принята',
+      cancelled: 'Отменена',
+      running: 'Идёт работа',
+      question: 'Ждёт ответа',
+      stopped: 'Остановлена',
+      dependency: 'Ждёт другую работу',
+      queued: 'В очереди',
+      other: 'Ждёт',
+    } as Labels,
+    nowRunning: (stage: string, elapsed: string) =>
+      `Сейчас: этап «${stage}»${elapsed ? `, идёт ${elapsed}` : ''}.`,
+    nowAccepted: 'Принята; от неё больше ничего не нужно.',
+    nowCancelled: 'Отменена.',
+    nowWaits: (reason: string) => `Сейчас: ${reason}.`,
+    nowQueued: 'Сейчас: ждёт своей очереди.',
+    nowStage: (stage: string) => `Сейчас: этап «${stage}».`,
+    nowWriterEnv:
+      'Ждёт ведущего: окружение не дало исполнителю выполнить нужный шаг. Попытка не засчитана.',
+    attempts: (used: number, max: number, left: number) =>
+      `Попытки: израсходовано ${used} из ${max}, осталось ${left}`,
+    reviewRounds: (used: number, max: number | null) =>
+      `Раунды ревью кода: ${used}${max !== null ? ` из ${max}` : ''}`,
+    noReview: 'Ревью кода ещё не было',
+    next: {
+      nobody: 'Дальше: ничего не нужно',
+      harness: (stage: string) => `Дальше действует: harness (этап «${stage}»)`,
+      actors: (who: string) => `Дальше действует: ${who}`,
+      dependency: (on: string) => `Дальше: ждёт ${on}`,
+      queue: 'Дальше: ждёт своей очереди, ничего не нужно',
+      unknown: 'Кто действует дальше — неизвестно',
+    },
+    questions: (n: number) => `Вопросы по задаче (${n})`,
+    waitsOn: (works: string) => `Начнётся после: ${works}.`,
+    open: 'Весь процесс',
+    outside: (n: number) => `Ещё не переданы в harness (${n})`,
+    otherReviews: (n: number) => `Ревью плана и договоров (${n})`,
+    reviewsMoved: 'Раздел «Ревью» теперь внутри задач: ревью — один из этапов процесса.',
+  },
+  // Process timeline of a work.
+  timeline: {
+    title: 'Процесс',
+    stage: {
+      prepare: 'Подготовка',
+      writer: 'Написание кода',
+      gates: 'Проверки',
+      review: 'Ревью',
+      integration: 'Интеграция',
+      acceptance: 'Приёмка',
+    } as Labels,
+    state: {
+      passed: 'пройдено',
+      failed: 'не прошло',
+      current: 'идёт сейчас',
+      ahead: 'впереди',
+      skipped: 'не дошло',
+      next: 'в следующей попытке',
+      'not-needed': 'не понадобилось',
+      unknown: 'итог неизвестен',
+    } as Labels,
+    attempt: (n: number) => `Попытка ${n}`,
+    latest: 'последняя',
+    earlier: (n: number) => `Прежние попытки (${n})`,
+    noAttempts: 'Попыток ещё не было: процесс начнётся с подготовки.',
+    unused: 'не используется',
+    part: {
+      fixed: {
+        'dependency-store': 'хранилище зависимостей',
+        prepare: 'подготовка зависимостей',
+        'integration-prepare': 'подготовка зависимостей при интеграции',
+        'writer-dependencies': 'зависимости исполнителя',
+        implementation: 'исполнитель пишет код',
+        'implementation-reuse': 'взят прежний код',
+        'candidate-review': 'ревью кода',
+        'integration-review': 'ревью интеграции',
+        'integration-wait': 'ожидание интеграции',
+      } as Labels,
+      check: (gate: string) => `проверка ${gate}`,
+      recheck: (gate: string) => `повторная проверка ${gate}`,
+      consumerCheck: (gate: string, repo: string) => `проверка ${gate} у ${repo}`,
+      generate: (id: string) => `генерация ${id}`,
+      port: (port: string) => `проверка порта ${port}`,
+      inRepo: (what: string, repo: string) => `${what} у ${repo}`,
+      atIntegration: (what: string) => `${what} при интеграции`,
+      environment: {
+        setup: 'запуск окружения',
+        ready: 'окружение готово',
+        cleanup: 'очистка окружения',
+      } as Labels,
+      environmentOther: 'шаг окружения',
+      other: 'другой шаг harness',
+    },
+    total: (d: string) => `всего ${d}`,
+    label: (stage: string, state: string, duration: string) =>
+      `${stage}: ${state}${duration ? `, ${duration}` : ''}`,
+  },
+  // Appearance (Settings).
+  theme: {
+    title: 'Оформление',
+    label: 'Тема',
+    system: 'Как в системе',
+    light: 'Светлая',
+    dark: 'Тёмная',
+    note: 'Выбор хранится только в этом браузере.',
   },
   // Overview.
   overview: {
@@ -613,6 +799,7 @@ const ru = {
     nobodyThere: 'по ней никто — просто ждёт очереди',
     runningThere: (stage: string) => `по ней действует: harness — этап «${stage}»`,
     waitsThere: 'по ней никто — она сама ждёт другой работы',
+    cancelledThere: 'она отменена — ведущему нужно перепланировать',
     unknownThere: (stage: string | undefined) =>
       `по ней кто действует — неизвестно${stage ? ` (этап «${stage}»)` : ' (её нет в этом представлении)'}`,
     unlistedWaiting: (n: number) =>
@@ -643,6 +830,46 @@ const ru = {
     drift: 'Изменено после приёмки',
     driftNotChecked: (n: number) => `не проверено: ${n}`,
     warnings: 'Предупреждения harness',
+    queueStanding: 'Очередь стоит',
+    queueDone: 'Всё принято',
+    queueHarnessDone: 'Всё, что в harness, принято',
+    queueCancelled: 'Всё отменено',
+    legendCancelled: 'отменены',
+    standingWhy: 'harness не запущен, и сама очередь не пойдёт',
+    standingWho: 'ведущему нужно снова запустить harness',
+    scopeTitle: 'Весь объём работ',
+    scopeCounts: (done: number, total: number, running: number, waiting: number) =>
+      `Сделано ${done} из ${total} · в работе ${running} · ждут ${waiting}`,
+    scopeOutside: (n: number) => `· ещё не переданы в harness: ${n}`,
+    scopeCancelled: (n: number) => `· отменено ${n}`,
+    etaNoTotals:
+      'Сколько осталось, пока сказать нельзя: эта версия harness не сообщает итоги окна истории (время попыток).',
+    legendDone: 'приняты',
+    legendRunning: 'в работе',
+    legendWaiting: 'ждут',
+    legendOutside: 'ещё не в harness',
+    etaNothingLeft: 'Оставшейся работы нет.',
+    etaLeft: (range: string, n: number) =>
+      `Осталось: ${range} на ${rp(n, 'работу', 'работы', 'работ')} — если каждой хватит одной попытки; ожидание ответов людей сюда не входит.`,
+    etaUnknown: (n: number) =>
+      `Сколько осталось, пока сказать нельзя: нужно хотя бы ${rp(n, 'попытка', 'попытки', 'попыток')} за окно истории, чтобы знать их обычную длину.`,
+    etaBasis: (avg: string, n: number) =>
+      `Оценка по фактическому времени: попытка в среднем длится ${avg} (по ${n} ${ruPlural(n, ['попытке', 'попыткам', 'попыткам'])}, начатым в окне истории).`,
+    outsideTitle: (n: number) => `Ещё не переданы в harness (${n})`,
+    outsideState: {
+      'not-handed-over': 'не передана в harness',
+      'not-ready': 'ждёт готовности',
+      'in-harness': 'в harness',
+    } as Labels,
+    scopeMissing:
+      'Показаны только работы, которые уже переданы в harness: эта версия harness не сообщает остальные задачи прогона.',
+    howAskLead: 'Как: попросите ведущего сбросить попытки (команда — в «подробностях»).',
+    problems: (n: number) => (n ? `Проблемы по ходу (${n})` : 'Проблемы по ходу'),
+    noProblems: 'Проблем по ходу не видно.',
+    stageFor: (elapsed: string) => `идёт ${elapsed}`,
+    command: 'команда:',
+    unknownAction: 'Действие, которое панель не знает',
+    otherSubject: 'не про одну работу (см. «подробности»)',
   },
   budgetScope: { total: 'общий', group: 'группа', work: 'работа' } as Labels,
   budgetState: {
@@ -1030,7 +1257,11 @@ const en: Dict = {
     history: 'History',
     health: 'Health',
     back: '← To the overview',
+    backTasks: '← To the tasks',
     language: 'Language',
+    tasks: 'Tasks',
+    journal: 'Log',
+    journalLabel: 'Log sections',
   },
   app: {
     title: 'Harness panel',
@@ -1052,6 +1283,9 @@ const en: Dict = {
     },
     details: 'Details:',
     skip: 'Skip to content',
+    newBuild: (v: string) =>
+      `The panel was updated${v ? ` (version ${v})` : ''}: this tab shows the previous build.`,
+    reload: 'Reload the page',
   },
   usdUnknown: 'unknown',
   usdOf: (spent: string, limit: string) => `${spent} of ${limit}`,
@@ -1191,6 +1425,170 @@ const en: Dict = {
     basis: (at: string, line: string) => `${at} — ${line}`,
     cancelled: 'Question withdrawn.',
     superseded: 'Question replaced.',
+    leadAnswers:
+      'The lead agent answers: the question is technical, and the policy lets the lead answer such questions. You may answer too.',
+  },
+  story: {
+    empty: 'There are no work orders yet.',
+    allDone: (done: number, total: number, cancelled: number) =>
+      `All work is accepted: ${done} of ${total}${cancelled ? `; ${cancelled} cancelled` : ''}.`,
+    allCancelled: (n: number) =>
+      `All work orders were cancelled (${n}); nothing is accepted — the lead agent decides what comes next.`,
+    harnessDone: (done: number, outside: number) =>
+      `All harness work is accepted (${done}); ${ep(outside, 'more task is', 'more tasks are')} not handed to the harness yet — the lead agent hands them over.`,
+    onlyOutside: (outside: number) =>
+      `The harness has no work orders yet; ${ep(outside, 'task waits', 'tasks wait')} to be handed over by the lead agent.`,
+    workAt: (name: string, stage: string) => `${name} (stage “${stage}”)`,
+    running: (works: string[], more: number) =>
+      `The harness is working on ${works.join(' and ')}${more ? ` and ${ep(more, 'more work order', 'more work orders')}` : ''}.`,
+    runningUnlisted: (n: number) =>
+      `The harness is working on ${ep(n, 'work order', 'work orders')}.`,
+    paused: 'Nothing runs now: the queue is paused.',
+    waitsYou: 'Nothing runs now: the work waits for your answer or decision.',
+    standing: 'Nothing runs now: the harness is not running.',
+    waitsOthers: 'Nothing runs now: the work waits its turn or for the lead agent.',
+  },
+  problems: {
+    kindQueue: 'queue',
+    kindStopped: 'stop',
+    kindHealth: 'failure',
+    kindBudget: 'budget',
+    kindDrift: 'changed after acceptance',
+    standing:
+      'the queue stands: the harness is not running, and after an answer or a reset the work will not go on by itself',
+    lastFailure: (attempt: number, plain: string) => `attempt ${attempt} stopped: ${plain}`,
+    stoppedNoReason: 'stopped, no reason given',
+    writerEnv: (attempt: number) =>
+      `attempt ${attempt}: waits for the lead agent — the environment did not let the writer run a required step; the attempt is not counted`,
+    stalled: (n: number) => `${ep(n, 'attempt is', 'attempts are')} stalled`,
+    environment: (n: number) => `environment failures: ${n}`,
+    budgetExceeded: (spent: string, scope: string) => `budget exceeded (${scope}): spent ${spent}`,
+    drifted: (n: number) =>
+      `${ep(n, 'accepted work order was', 'accepted work orders were')} changed after acceptance`,
+  },
+  rough: {
+    underMinute: 'under a minute',
+    minutes: (n: number) => `${n} min`,
+    hours: (h: number) => `${h} h`,
+    about: (x: string) => `about ${x}`,
+    upTo: (x: string) => `up to ${x}`,
+    between: (a: string, b: string) => joinRange(a, b, [' min', ' h']),
+  },
+  eta: {
+    stageLeft: (range: string) => `left in this stage: ${range}`,
+    stageOver: (max: string) => `the stage takes longer than usual (usually up to ${max})`,
+    stageUnknown: 'how long the stage still takes is unknown',
+    attempt: (avg: string) => `one attempt takes about ${avg} on average`,
+    unknown: 'time unknown',
+  },
+  tasks: {
+    label: 'Tasks',
+    title: 'Tasks',
+    intro:
+      'Each card is one work order: what happens to it now, how many attempts are left, how many review rounds it had and who acts next.',
+    empty: 'There are no work orders yet.',
+    phase: {
+      accepted: 'Accepted',
+      cancelled: 'Cancelled',
+      running: 'In progress',
+      question: 'Waits for an answer',
+      stopped: 'Stopped',
+      dependency: 'Waits for other work',
+      queued: 'Queued',
+      other: 'Waiting',
+    } as Labels,
+    nowRunning: (stage: string, elapsed: string) =>
+      `Now: stage “${stage}”${elapsed ? `, for ${elapsed}` : ''}.`,
+    nowAccepted: 'Accepted; nothing more is needed for it.',
+    nowCancelled: 'Cancelled.',
+    nowWaits: (reason: string) => `Now: ${reason}.`,
+    nowQueued: 'Now: waits its turn.',
+    nowStage: (stage: string) => `Now: stage “${stage}”.`,
+    nowWriterEnv:
+      'Waits for the lead agent: the environment did not let the writer run a required step. The attempt is not counted.',
+    attempts: (used: number, max: number, left: number) =>
+      `Attempts: ${used} of ${max} used, ${left} left`,
+    reviewRounds: (used: number, max: number | null) =>
+      `Code review rounds: ${used}${max !== null ? ` of ${max}` : ''}`,
+    noReview: 'No code review yet',
+    next: {
+      nobody: 'Next: nothing is needed',
+      harness: (stage: string) => `Acts next: the harness (stage “${stage}”)`,
+      actors: (who: string) => `Acts next: ${who}`,
+      dependency: (on: string) => `Next: waits for ${on}`,
+      queue: 'Next: waits its turn, nothing is needed',
+      unknown: 'Who acts next is unknown',
+    },
+    questions: (n: number) => `Questions of this task (${n})`,
+    waitsOn: (works: string) => `Starts after: ${works}.`,
+    open: 'The whole process',
+    outside: (n: number) => `Not handed to the harness yet (${n})`,
+    otherReviews: (n: number) => `Plan and contract reviews (${n})`,
+    reviewsMoved: 'Reviews now live inside the tasks: a review is one stage of the process.',
+  },
+  timeline: {
+    title: 'Process',
+    stage: {
+      prepare: 'Preparation',
+      writer: 'Writing the code',
+      gates: 'Checks',
+      review: 'Review',
+      integration: 'Integration',
+      acceptance: 'Acceptance',
+    } as Labels,
+    state: {
+      passed: 'passed',
+      failed: 'did not pass',
+      current: 'running now',
+      ahead: 'ahead',
+      skipped: 'not reached',
+      next: 'in the next attempt',
+      'not-needed': 'not needed',
+      unknown: 'outcome unknown',
+    } as Labels,
+    attempt: (n: number) => `Attempt ${n}`,
+    latest: 'latest',
+    earlier: (n: number) => `Earlier attempts (${n})`,
+    noAttempts: 'No attempt yet: the process starts with preparation.',
+    unused: 'not used',
+    part: {
+      fixed: {
+        'dependency-store': 'dependency store',
+        prepare: 'preparing the dependencies',
+        'integration-prepare': 'preparing the dependencies for integration',
+        'writer-dependencies': "the writer's dependencies",
+        implementation: 'the writer writes the code',
+        'implementation-reuse': 'earlier code reused',
+        'candidate-review': 'code review',
+        'integration-review': 'integration review',
+        'integration-wait': 'waiting for integration',
+      } as Labels,
+      check: (gate: string) => `check ${gate}`,
+      recheck: (gate: string) => `recheck ${gate}`,
+      consumerCheck: (gate: string, repo: string) => `check ${gate} in ${repo}`,
+      generate: (id: string) => `generating ${id}`,
+      port: (port: string) => `port check ${port}`,
+      inRepo: (what: string, repo: string) => `${what} in ${repo}`,
+      atIntegration: (what: string) => `${what} at integration`,
+      environment: {
+        setup: 'starting the environment',
+        ready: 'environment ready',
+        cleanup: 'cleaning up the environment',
+      } as Labels,
+      environmentOther: 'environment step',
+      other: 'another harness step',
+    },
+    total: (d: string) => `${d} in total`,
+    label: (stage: string, state: string, duration: string) =>
+      `${stage}: ${state}${duration ? `, ${duration}` : ''}`,
+  },
+  theme: {
+    title: 'Appearance',
+    label: 'Theme',
+    system: 'Same as the system',
+    light: 'Light',
+    dark: 'Dark',
+    note: 'The choice is kept in this browser only.',
   },
   overview: {
     label: 'Harness overview',
@@ -1236,6 +1634,7 @@ const en: Dict = {
     nobodyThere: 'on that one, nobody — it just waits its turn',
     runningThere: (stage: string) => `on that one, acts: the harness — stage “${stage}”`,
     waitsThere: 'on that one, nobody — it waits for another work order itself',
+    cancelledThere: 'it was cancelled — the lead agent has to replan',
     unknownThere: (stage: string | undefined) =>
       `on that one, who acts is unknown${stage ? ` (stage “${stage}”)` : ' (not in this view)'}`,
     unlistedWaiting: (n: number) =>
@@ -1266,6 +1665,46 @@ const en: Dict = {
     drift: 'Changed after acceptance',
     driftNotChecked: (n: number) => `${n} not checked`,
     warnings: 'Harness warnings',
+    queueStanding: 'The queue has stopped',
+    queueDone: 'All accepted',
+    queueHarnessDone: 'All harness work accepted',
+    queueCancelled: 'All cancelled',
+    legendCancelled: 'cancelled',
+    standingWhy: 'the harness is not running, and the queue will not move by itself',
+    standingWho: 'the lead agent has to start the harness again',
+    scopeTitle: 'The whole scope',
+    scopeCounts: (done: number, total: number, running: number, waiting: number) =>
+      `Done ${done} of ${total} · in progress ${running} · waiting ${waiting}`,
+    scopeOutside: (n: number) => `· not handed to the harness yet: ${n}`,
+    scopeCancelled: (n: number) => `· cancelled ${n}`,
+    etaNoTotals:
+      'How long is left cannot be said yet: this harness version does not report the history window totals (attempt times).',
+    legendDone: 'accepted work',
+    legendRunning: 'in progress',
+    legendWaiting: 'waiting',
+    legendOutside: 'not in the harness yet',
+    etaNothingLeft: 'No work is left.',
+    etaLeft: (range: string, n: number) =>
+      `Left: ${range} for ${ep(n, 'work order', 'work orders')} — if one attempt is enough for each; waiting for people's answers is not included.`,
+    etaUnknown: (n: number) =>
+      `How long is left cannot be said yet: at least ${ep(n, 'attempt', 'attempts')} in the history window are needed to know their usual length.`,
+    etaBasis: (avg: string, n: number) =>
+      `Estimated from real times: an attempt takes ${avg} on average (over ${ep(n, 'attempt', 'attempts')} started in the history window).`,
+    outsideTitle: (n: number) => `Not handed to the harness yet (${n})`,
+    outsideState: {
+      'not-handed-over': 'not handed to the harness',
+      'not-ready': 'waits to be ready',
+      'in-harness': 'in the harness',
+    } as Labels,
+    scopeMissing:
+      'Only work orders already handed to the harness are shown: this harness version does not report the other tasks of the run.',
+    howAskLead: 'How: ask the lead agent to reset the attempts (the command is under “details”).',
+    problems: (n: number) => (n ? `Problems so far (${n})` : 'Problems so far'),
+    noProblems: 'No problems so far.',
+    stageFor: (elapsed: string) => `for ${elapsed}`,
+    command: 'command:',
+    unknownAction: 'An action this panel does not know',
+    otherSubject: 'not about one work order (see “details”)',
   },
   budgetScope: { total: 'total', group: 'group', work: 'work' },
   budgetState: { within: 'within', exceeded: 'exceeded', undetermined: 'undetermined' },

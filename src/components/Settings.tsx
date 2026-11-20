@@ -4,13 +4,23 @@
 // role (and repository) the effective code reviewer and where it comes from
 // are shown, by the harness resolution role -> repository -> global.
 
+import { RadioGroup } from './ui/radio-group.tsx';
 import { dict, label, type Dict } from '../model/dict.ts';
 import { formatDuration, usd } from '../model/format.ts';
 import type { Binding, OperatorView, ReviewRuleView, RoleBinding } from '../model/view.ts';
 import { Clipped, Heading, type ScreenProps } from './common.tsx';
 
+/** Theme choice of the viewer: follow the system, or light, or dark. */
+export type ThemeChoice = 'system' | 'light' | 'dark';
+
 export interface SettingsProps extends Pick<ScreenProps, 'lang'> {
   view: OperatorView;
+  /**
+   * The viewer's theme and its setter. Without `onThemeChange` (a host that
+   * owns the theme) the appearance block is not shown.
+   */
+  theme?: ThemeChoice;
+  onThemeChange?: (theme: ThemeChoice) => void;
 }
 
 const bindingText = (b: Binding, t: Dict) => t.settings.binding(b.runtime, b.model, b.effort);
@@ -64,7 +74,7 @@ export function reviewPairs(
   return out;
 }
 
-export function Settings({ view, lang = 'ru' }: SettingsProps) {
+export function Settings({ view, lang = 'ru', theme = 'system', onThemeChange }: SettingsProps) {
   const t = dict(lang);
   const v = t.settings;
   const s = view.settings;
@@ -102,6 +112,23 @@ export function Settings({ view, lang = 'ru' }: SettingsProps) {
       <Heading t={t} level={2} id="hui-settings-title">
         {v.label}
       </Heading>
+
+      {onThemeChange ? (
+        <div className="hui-panel" data-testid="settings-theme">
+          <Heading t={t}>{t.theme.title}</Heading>
+          <RadioGroup
+            value={theme}
+            onChange={onThemeChange}
+            label={t.theme.label}
+            options={[
+              { value: 'system', label: t.theme.system },
+              { value: 'light', label: t.theme.light },
+              { value: 'dark', label: t.theme.dark },
+            ]}
+          />
+          <p className="hui-muted">{t.theme.note}</p>
+        </div>
+      ) : null}
 
       <div className="hui-panel" data-testid="settings-who">
         <Heading t={t} term="writer">
