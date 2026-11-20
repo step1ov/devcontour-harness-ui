@@ -44,6 +44,8 @@ export type GlossaryId =
   | 'controller'
   | 'stalled'
   | 'waitsQueue'
+  | 'decision'
+  | 'waitsWork'
   | 'answerBasis'
   | 'failureBucket'
   | 'reviewRound'
@@ -144,6 +146,16 @@ const ruGlossary: Record<GlossaryId, { term: string; meaning: string }> = {
     term: 'ждёт очереди',
     meaning:
       'Работа ждёт свободного места или окончания работ, от которых зависит. Ничего делать не нужно.',
+  },
+  decision: {
+    term: 'решение',
+    meaning:
+      'harness остановил работу и сам её не продолжит: нужен человек или ведущий — сбросить попытки, согласовать план заново, увеличить бюджет и т. п. Это не вопрос: вопрос задаёт исполнитель, и в ответе нужно содержание, а решение — разрешение продолжать.',
+  },
+  waitsWork: {
+    term: 'ждёт другой работы',
+    meaning:
+      'Работа зависит от другой и начнётся, когда та будет принята. С ней самой делать ничего не нужно — действовать нужно по той работе, кто там указан.',
   },
   answerBasis: {
     term: 'кто и почему ответил',
@@ -290,6 +302,16 @@ const enGlossary: Record<GlossaryId, { term: string; meaning: string }> = {
     term: 'waits its turn',
     meaning:
       'The work waits for a free slot or for the works it depends on. Nothing needs to be done.',
+  },
+  decision: {
+    term: 'decision',
+    meaning:
+      'The harness stopped a work order and will not continue it on its own: a person or the lead has to act — reset the attempts, approve the plan again, raise the budget and so on. It is not a question: a question comes from the writer and needs content in the answer; a decision is a permission to go on.',
+  },
+  waitsWork: {
+    term: 'waits for another work order',
+    meaning:
+      'The work order depends on another one and starts once that one is accepted. Nothing needs to be done with it — act on the other work order, whoever is named there.',
   },
   answerBasis: {
     term: 'who answered and why',
@@ -454,6 +476,25 @@ const ru = {
     unclassified: 'без группы',
     input: 'нужен ответ',
   } as Labels,
+  // Harness action tokens (`stage.needs.action`, `escalations[].action`).
+  action: {
+    none: 'ничего не нужно',
+    wait: 'подождать',
+    'review-plan': 'согласовать план',
+    retry: 'повторить попытку',
+    'diagnose-failure': 'разобраться в причине сбоя',
+    'reset-attempts': 'сбросить попытки',
+    'raise-budget': 'увеличить бюджет',
+    'replan-dependents': 'перепланировать зависимые работы',
+    'recovery-decision': 'решить, как восстановить работу',
+    'user-decision': 'принять решение',
+    'resume-queue': 'снять очередь с паузы',
+    'fix-environment': 'исправить окружение',
+    'fix-access': 'исправить доступ',
+    'answer-input': 'ответить на вопрос',
+    'apply-input': 'применить ответ',
+    answer: 'ответить на вопрос',
+  } as Labels,
   // Header sentence and footer.
   header: {
     paused: 'очередь на паузе',
@@ -467,6 +508,7 @@ const ru = {
     waiting: (n: number) =>
       `${n} ${ruPlural(n, ['работа ждёт', 'работы ждут', 'работ ждут'])} вашего действия`,
     unknownClipped: 'неизвестно — список обрезан',
+    afterLead: ' (после ведущего)',
     nothing: 'ничего не нужно',
     now: (parts: string) => `Сейчас: ${parts}.`,
     idle: 'Сейчас ничего не выполняется.',
@@ -536,9 +578,37 @@ const ru = {
     plan: 'План',
     planClipped: 'список работ обрезан — показана только часть плана',
     after: (ids: string) => `после ${ids}`,
-    needsYou: (n: number) => `Нужен ваш ответ (${n})`,
-    noQuestions: 'Вопросов, которые ждут вас, нет.',
-    otherQuestions: 'Другие вопросы',
+    needsYou: (n: number) => (n ? `Нужно от вас (${n})` : 'Нужно от вас'),
+    noQuestions: 'Сейчас от вас ничего не нужно.',
+    otherQuestions: 'Другие вопросы — ответ уже есть или его даёт не вы',
+    kindQuestion: 'вопрос',
+    unlistedAnswers: (works: string) =>
+      `Ждут вашего ответа, но вопрос в этом представлении не показан: ${works}. Откройте работу или выполните harness input-show.`,
+    kindDecision: 'решение',
+    why: 'Почему:',
+    attempts: 'Попытки:',
+    leadFirst: (what: string) =>
+      `Сначала ведущий: ${what}. Потом — вы: до этого harness не начнёт новую попытку, и сброс ничего не изменит.`,
+    howAsk: 'Как: попросите ведущего или выполните сами:',
+    details: 'подробности',
+    recordSource: {
+      blocker: 'причина',
+      escalation: 'эскалация',
+      needs: 'этап ждёт',
+    } as Labels,
+    workIds: 'работы:',
+    others: (n: number) => (n ? `Остальные ожидания (${n})` : 'Остальные ожидания'),
+    noOthers: 'Никто, кроме вас, сейчас ничего не должен сделать.',
+    yoursAbove: (n: number) => `Ваши решения и вопросы (${n}) — в разделе «Нужно от вас» выше.`,
+    byLead: (n: number) => `Делает ведущий (${n})`,
+    leadNote:
+      'Это действие ведущего агента, а не ваше. Если долго ничего не меняется — напомните ему.',
+    byOther: (who: string, n: number) => `Делает ${who} (${n})`,
+    byDependency: (n: number) => `Ждут другой работы (${n})`,
+    waitsFor: 'ждёт',
+    nextThere: (who: string) => `по ней дальше действует: ${who}`,
+    then: ', затем ',
+    nobodyThere: 'по ней никто — просто ждёт очереди',
     now: (running: number, slots: number) => `Сейчас в работе (${running} из ${slots} мест)`,
     nothingRunning: 'Сейчас ничего не выполняется.',
     runningUnlisted: (n: number) =>
@@ -546,11 +616,11 @@ const ru = {
     attemptsShort: (used: number, max: number, left: number) =>
       `попытка ${used} из ${max}, осталось ${left}`,
     lastStopped: (plain: string) => `прошлая остановлена: ${plain}`,
-    decisions: (n: number) => `Ждут решения (${n})`,
-    noDecisions: 'Решений от вас и ведущего сейчас не ждут.',
     whoActs: (who: string, action: string) => `действует: ${who} — ${action}`,
-    waiting: 'Ждут очереди / Остановлены',
-    noWaiting: 'Ничто не ждёт и не остановлено.',
+    resetCommand: (id: string) =>
+      `harness retry --state <state> --work ${id} --reset --reason "<причина>"`,
+    waiting: 'Ждут очереди',
+    noWaiting: 'В очереди ничто не ждёт.',
     accepted: (n: number) => `Принятые (${n})`,
     acceptedUnlisted: (n: number, clipped: boolean) =>
       `У ${rp(n, 'принятой работы', 'принятых работ', 'принятых работ')} нет сведений о месте в этом представлении${clipped ? ' (предел представления)' : ''}.`,
@@ -1030,6 +1100,24 @@ const en: Dict = {
     unclassified: 'unclassified',
     input: 'an answer is needed',
   },
+  action: {
+    none: 'nothing is needed',
+    wait: 'wait',
+    'review-plan': 'approve the plan',
+    retry: 'retry the attempt',
+    'diagnose-failure': 'find out why it failed',
+    'reset-attempts': 'reset the attempts',
+    'raise-budget': 'raise the budget',
+    'replan-dependents': 'replan the dependent work orders',
+    'recovery-decision': 'decide how to recover the work order',
+    'user-decision': 'take a decision',
+    'resume-queue': 'resume the queue',
+    'fix-environment': 'fix the environment',
+    'fix-access': 'fix the access',
+    'answer-input': 'answer the question',
+    'apply-input': 'apply the answer',
+    answer: 'answer the question',
+  },
   header: {
     paused: 'the queue is paused',
     running: (n: number) => `${n} working`,
@@ -1041,6 +1129,7 @@ const en: Dict = {
     maybeMore: ' and possibly more (the list is clipped)',
     waiting: (n: number) => `${n} work order${n === 1 ? ' waits' : 's wait'} for your action`,
     unknownClipped: 'unknown — the list is clipped',
+    afterLead: ' (after the lead agent)',
     nothing: 'nothing is needed',
     now: (parts: string) => `Now: ${parts}.`,
     idle: 'Nothing is running now.',
@@ -1104,9 +1193,37 @@ const en: Dict = {
     plan: 'Plan',
     planClipped: 'the work list is clipped — only part of the plan is shown',
     after: (ids: string) => `after ${ids}`,
-    needsYou: (n: number) => `Needs your answer (${n})`,
-    noQuestions: 'No questions are waiting for you.',
-    otherQuestions: 'Other questions',
+    needsYou: (n: number) => (n ? `Needed from you (${n})` : 'Needed from you'),
+    noQuestions: 'Nothing is needed from you now.',
+    otherQuestions: 'Other questions — already answered, or not yours to answer',
+    kindQuestion: 'question',
+    unlistedAnswers: (works: string) =>
+      `Waiting for your answer, but the question is not in this view: ${works}. Open the work order or run harness input-show.`,
+    kindDecision: 'decision',
+    why: 'Why:',
+    attempts: 'Attempts:',
+    leadFirst: (what: string) =>
+      `First the lead agent: ${what}. Then you: until then the harness starts no new attempt, and a reset changes nothing.`,
+    howAsk: 'How: ask the lead agent, or run it yourself:',
+    details: 'details',
+    recordSource: {
+      blocker: 'reason',
+      escalation: 'escalation',
+      needs: 'the stage waits for',
+    },
+    workIds: 'work orders:',
+    others: (n: number) => (n ? `Other waits (${n})` : 'Other waits'),
+    noOthers: 'Nobody but you has anything to do now.',
+    yoursAbove: (n: number) =>
+      `Your decisions and questions (${n}) are under “Needed from you” above.`,
+    byLead: (n: number) => `The lead agent acts (${n})`,
+    leadNote: 'This is for the lead agent, not for you. If nothing changes for long, remind it.',
+    byOther: (who: string, n: number) => `The ${who} acts (${n})`,
+    byDependency: (n: number) => `Waiting for another work order (${n})`,
+    waitsFor: 'waits for',
+    nextThere: (who: string) => `on that one, acts: ${who}`,
+    then: ', then ',
+    nobodyThere: 'on that one, nobody — it just waits its turn',
     now: (running: number, slots: number) => `Working now (${running} of ${slots} slots)`,
     nothingRunning: 'Nothing is running.',
     runningUnlisted: (n: number) =>
@@ -1114,11 +1231,11 @@ const en: Dict = {
     attemptsShort: (used: number, max: number, left: number) =>
       `attempt ${used} of ${max}, ${left} left`,
     lastStopped: (plain: string) => `the previous one stopped: ${plain}`,
-    decisions: (n: number) => `Waiting for a decision (${n})`,
-    noDecisions: 'No decision is waiting for you or the lead.',
     whoActs: (who: string, action: string) => `acts: ${who} — ${action}`,
-    waiting: 'Waiting / Stopped',
-    noWaiting: 'Nothing waits and nothing is stopped.',
+    resetCommand: (id: string) =>
+      `harness retry --state <state> --work ${id} --reset --reason "<reason>"`,
+    waiting: 'Waiting in the queue',
+    noWaiting: 'Nothing waits in the queue.',
     accepted: (n: number) => `Accepted (${n})`,
     acceptedUnlisted: (n: number, clipped: boolean) =>
       `${n} accepted work order${n === 1 ? ' has' : 's have'} no location in this view${clipped ? ' (view limit)' : ''}.`,
@@ -1487,3 +1604,7 @@ export const dict = (lang: Lang | undefined): Dict => (lang === 'en' ? en : ru);
 /** A label from a table; a code this build does not know is shown as is. */
 export const label = (table: Record<string, string>, code: string): string =>
   Object.hasOwn(table, code) ? table[code]! : String(code);
+
+/** A label from a table, or `undefined` for a code this build does not know (shown as code). */
+export const knownLabel = (table: Record<string, string>, code: string): string | undefined =>
+  Object.hasOwn(table, code) ? table[code]! : undefined;

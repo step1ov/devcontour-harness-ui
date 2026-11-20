@@ -33,8 +33,10 @@ export interface HeaderCounts {
   paused: boolean;
   /** Questions in `awaiting-answer`. */
   questions: number;
-  /** Escalations whose actor is the operator. */
+  /** Operator decisions: the «Нужно от вас» items that are not questions (`nextSteps().operator`). */
   decisions: number;
+  /** Every operator decision waits for the lead first: the sentence says «(после ведущего)». */
+  afterLead?: boolean;
   /** `progress.waitingOperator`: works waiting for the operator, over all works. */
   waitingOperator: number;
   /** The questions or escalations list was clipped (`truncated`), so the counts are a floor. */
@@ -51,7 +53,7 @@ export function headerSentence(c: HeaderCounts, lang: Lang): string {
   if (c.stopped) now.push(h.stopped(c.stopped));
   const asks: string[] = [];
   if (c.questions) asks.push(h.answer(c.questions));
-  if (c.decisions) asks.push(h.decide(c.decisions));
+  if (c.decisions) asks.push(h.decide(c.decisions) + (c.afterLead ? h.afterLead : ''));
   let from: string;
   if (asks.length) from = asks.join(h.and) + (c.incomplete ? h.maybeMore : '');
   else if (c.waitingOperator) from = h.waiting(c.waitingOperator);

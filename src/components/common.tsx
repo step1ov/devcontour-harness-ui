@@ -5,7 +5,8 @@
 // where and the who inside the same element (design §5.9).
 
 import type { ReactNode } from 'react';
-import { dict, label, type Dict, type GlossaryId, type Lang } from '../model/dict.ts';
+import { dict, knownLabel, label, type Dict, type GlossaryId, type Lang } from '../model/dict.ts';
+import { attemptsLineParts } from '../model/steps.ts';
 import { formatClock, remoteFreshness, targetSentence } from '../model/i18n.ts';
 import type { Actor, BlockerView, OperatorQuestion, WorkView } from '../model/view.ts';
 
@@ -285,4 +286,25 @@ export function AnswerBasisLine({
       </div>
     );
   return null;
+}
+
+/**
+ * The harness attempts line with its failure groups in plain words
+ * («incomplete 2» → «работа не доделана 2»); a group this build does not
+ * know stays as its key in a code tag.
+ */
+export function AttemptsText({ line, t }: { line: string; t: Dict }) {
+  return (
+    <>
+      {attemptsLineParts(line).map((p, i) => {
+        if ('text' in p) return <span key={i}>{p.text}</span>;
+        const known = knownLabel(t.bucket, p.bucket);
+        return (
+          <span key={i} data-bucket={p.bucket}>
+            {known ?? <code>{p.bucket}</code>} {p.count}
+          </span>
+        );
+      })}
+    </>
+  );
 }
