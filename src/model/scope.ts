@@ -95,8 +95,10 @@ export interface Overall {
   /** Scope tasks not handed to the harness yet; `undefined` = the view has no scope. */
   outside: number | undefined;
   /**
-   * Scope tasks clipped from the list that are not work orders either: the
-   * snapshot `total` beyond the works and the listed tasks outside.
+   * Scope tasks clipped from the list (`truncated.scope`, else `total`
+   * beyond the listed tasks). Their state is unknown — some may be work
+   * orders — so they are named as «not shown», never counted as outside or
+   * added to `total`.
    */
   outsideUnlisted: number;
 }
@@ -111,10 +113,16 @@ export function overallProgress(view: OperatorView): Overall {
   const waiting = Math.max(0, p.total - p.done - p.running - cancelled);
   const scope = scopeOf(view);
   const outside = scope ? outsideHarness(scope).length : undefined;
-  const outsideUnlisted =
-    scope?.total !== undefined ? Math.max(0, scope.total - p.total - (outside ?? 0)) : 0;
+  const clipped = view.truncated?.scope;
+  const outsideUnlisted = scope
+    ? Number.isSafeInteger(clipped) && clipped! > 0
+      ? clipped!
+      : scope.total !== undefined
+        ? Math.max(0, scope.total - scope.tasks.length)
+        : 0
+    : 0;
   return {
-    total: p.total + (outside ?? 0) + outsideUnlisted,
+    total: p.total + (outside ?? 0),
     done: p.done,
     running: p.running,
     waiting,

@@ -45,7 +45,7 @@ import {
   scopeOf,
   taskName,
 } from '../model/scope.ts';
-import { leadStopOf, splitQuestions } from '../model/tasks.ts';
+import { HARNESS_STAGES, leadStopOf, splitQuestions } from '../model/tasks.ts';
 import { ForecastRings } from './Forecast.tsx';
 import { Badge, type Tone } from './ui/badge.tsx';
 import { Card, CardContent } from './ui/card.tsx';
@@ -127,7 +127,10 @@ export function Overview({
   const otherActors = [...new Set(steps.other.map((s) => s.actor))];
   const count = (stage: string) =>
     Object.hasOwn(progress.byStage, stage) ? Number(progress.byStage[stage]) || 0 : 0;
-  const clipped = Boolean(view.truncated?.questions || view.truncated?.escalations);
+  // A tracker question list that was clipped or dropped (revision 4) makes the count a floor too.
+  const clipped = Boolean(
+    view.truncated?.questions || view.truncated?.escalations || view.truncated?.sourceQuestions,
+  );
   const oddState = view.questions.some((q) => !KNOWN_QUESTION_STATES.has(String(q.state)));
   const leadOnlyWorks = new Set(
     leadAsking
@@ -167,7 +170,7 @@ export function Overview({
   const unfinished = overall.total - overall.done - overall.cancelled;
   // Harness works only: tasks outside the harness are the lead's to hand over, not the queue's.
   const harnessLeft = progress.total - progress.done - overall.cancelled;
-  const outsideLeft = (overall.outside ?? 0) + overall.outsideUnlisted;
+  const outsideLeft = overall.outside ?? 0;
   // Who moves the queue. Revision 4 says it (`queue.runner`); before it the
   // panel read it from the controller and the running count (F-X).
   const runner = progress.queue.runner;
@@ -200,7 +203,7 @@ export function Overview({
       aria-label={o.label}
       lang={lang}
     >
-      {view.forecast ? <ForecastRings forecast={view.forecast} lang={lang} /> : null}
+      {view.forecast ? <ForecastRings forecast={view.forecast} lang={lang} now={clock} /> : null}
       <Card data-testid="hero" className="hui-hero">
         <CardContent className="hui:gap-2 hui:pt-4">
           <h2 className="hui:text-xl hui:leading-snug hui:font-semibold" data-testid="story">
@@ -257,6 +260,11 @@ export function Overview({
                 )}
               </span>
             ) : null}
+            {standingLine && !standing ? (
+              <span className="hui:text-sm" data-testid="queue-line">
+                {standingLine}
+              </span>
+            ) : null}
             <span className="hui:text-sm hui:text-muted-foreground">
               {o.acceptedOf(progress.done, progress.total)}
             </span>
@@ -266,13 +274,15 @@ export function Overview({
 
       <Block t={t} title={o.scopeTitle} testid="scope" term="stage">
         <p className="hui:text-sm" data-testid="scope-counts">
-          {o.scopeCounts(overall.done, overall.total, overall.running, overall.waiting)}
+          {view.forecast
+            ? t.r4.harnessCounts(progress.done, progress.total, overall.running, overall.waiting)
+            : o.scopeCounts(overall.done, overall.total, overall.running, overall.waiting)}
           {overall.cancelled ? ' ' + o.scopeCancelled(overall.cancelled) : ''}
           {outsideLeft ? ' ' + o.scopeOutside(outsideLeft) : ''}
         </p>
         {view.forecast ? null : (
           <p className="hui:text-xs hui:text-muted-foreground" data-testid="forecast-missing">
-            {t.forecast.fallback}
+            {view.viewRevision >= 4 ? t.forecast.none : t.forecast.fallback}
           </p>
         )}
         {view.forecast ? null : (
@@ -309,7 +319,7 @@ export function Overview({
                   {o.legendCancelled}
                 </li>
               ) : null}
-              {overall.outside || overall.outsideUnlisted ? (
+              {overall.outside ? (
                 <li className="hui:flex hui:items-center hui:gap-1.5">
                   <span className="hui:inline-block hui:size-2.5 hui:rounded-full hui:bg-track" />
                   {o.legendOutside}
@@ -371,32 +381,38 @@ export function Overview({
         {view.truncated?.works ? <p className="hui-muted">{o.planClipped}</p> : null}
         {scope ? (
           outside.length || overall.outsideUnlisted ? (
-            <div data-testid="outside">
-              <h4 className="hui:text-sm hui:font-semibold">
-                {o.outsideTitle(outside.length + overall.outsideUnlisted)}
-              </h4>
-              <ul className="hui:mt-1 hui:grid hui:list-none hui:gap-1">
-                {outside.map((task) => (
-                  <li
-                    key={task.id}
-                    className="hui:flex hui:flex-wrap hui:items-center hui:gap-2 hui:text-sm"
-                  >
-                    <strong>{taskName(task)}</strong>
-                    <Badge tone="outline">{label(o.outsideState, task.state)}</Badge>
-                    {task.plain ? (
-                      <span className="hui:text-muted-foreground">{task.plain}</span>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-              {overall.outsideUnlisted ? (
-                <p className="hui-muted">{t.listClipped(overall.outsideUnlisted)}</p>
+            <>
+              {outside.length ? (
+                <div data-testid="outside">
+                  <h4 className="hui:text-sm hui:font-semibold">
+                    {o.outsideTitle(outside.length)}
+                  </h4>
+                  <ul className="hui:mt-1 hui:grid hui:list-none hui:gap-1">
+                    {outside.map((task) => (
+                      <li
+                        key={task.id}
+                        className="hui:flex hui:flex-wrap hui:items-center hui:gap-2 hui:text-sm"
+                      >
+                        <strong>{taskName(task)}</strong>
+                        <Badge tone="outline">{label(o.outsideState, task.state)}</Badge>
+                        {task.plain ? (
+                          <span className="hui:text-muted-foreground">{task.plain}</span>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               ) : null}
-            </div>
+              {overall.outsideUnlisted ? (
+                <p className="hui-muted" data-testid="scope-clipped">
+                  {t.r4.scopeClipped(overall.outsideUnlisted)}
+                </p>
+              ) : null}
+            </>
           ) : null
         ) : (
           <p className="hui:text-xs hui:text-muted-foreground" data-testid="scope-missing">
-            {o.scopeMissing}
+            {view.truncated?.scope ? t.r4.scopeDropped(view.truncated.scope) : o.scopeMissing}
           </p>
         )}
       </Block>
@@ -414,7 +430,15 @@ export function Overview({
           ) : (
             <ul className="hui-list">
               {asking.map((q) => (
-                <QuestionItem key={q.requestId} q={q} view={view} t={t} lang={lang} links={links} />
+                <QuestionItem
+                  key={q.requestId}
+                  q={q}
+                  view={view}
+                  t={t}
+                  lang={lang}
+                  links={links}
+                  after={steps.questionAfter[q.workId]}
+                />
               ))}
               {sourceQuestions.map((q) => (
                 <SourceQuestionItem
@@ -922,6 +946,9 @@ function storySentence({
     );
   if (view.progress.running > 0) return s.runningUnlisted(view.progress.running);
   if (view.progress.queue.paused) return s.paused;
+  // Revision 4: a plan review in a live run is the harness's move, not a wait.
+  const reviewing = view.works.filter((w) => HARNESS_STAGES.has(w.stage.name));
+  if (reviewing.length) return t.r4.planReview(reviewing.map((w) => workName(view, w.id)));
   if (yours) return s.waitsYou;
   if (standing) return s.standing;
   return s.waitsOthers;
@@ -965,7 +992,7 @@ function problemsOf(
   for (const w of view.works) {
     if (w.stage.name === 'done' || w.target !== undefined || w.stage.name === 'cancelled') continue;
     const f = w.attempts.lastFailure;
-    const lead = leadStopOf(w);
+    const lead = leadStopOf(w, view.viewRevision);
     if (f && lead)
       out.push({
         kind: label(t.bucket, f.bucket),
@@ -1041,6 +1068,7 @@ export function QuestionItem({
   lang,
   links,
   byLead,
+  after,
 }: {
   q: OperatorQuestion;
   view: Pick<OperatorView, 'works'>;
@@ -1049,6 +1077,8 @@ export function QuestionItem({
   links: Links;
   /** The lead answers it by the policy (F-W). */
   byLead?: boolean;
+  /** Steps the harness orders before this answer (revision 4, `blockers[].step`). */
+  after?: Step[] | undefined;
 }) {
   return (
     <li className="hui-item hui-question" data-kind="question">
@@ -1066,6 +1096,15 @@ export function QuestionItem({
         </p>
       ) : null}
       <QuestionExtras q={q} t={t} />
+      {after?.length ? (
+        <p data-testid="question-after">
+          <strong>
+            {t.r4.leadFirstOrdered(
+              after.map((f) => t.r4.actorDoes(actorLabel(t, f.actor), stepWhat(f, t))).join('; '),
+            )}
+          </strong>
+        </p>
+      ) : null}
       <p className="hui-muted">{byLead ? t.question.leadAnswers : questionStatus(q, lang).text}</p>
       <Codes t={t} codes={[q.requestId, t.question.version(q.version)]} />
     </li>

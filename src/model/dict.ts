@@ -904,12 +904,21 @@ const ru = {
       'Круг «Время»: закрашена прошедшая часть от «прошло + осталось» по верхней границе; светлая дуга — насколько больше она по нижней границе.',
     releaseText: (line: string) => `До релиза: ${line}`,
     timeText: (line: string) => `Время: ${line}`,
+    none: 'Прогноза нет: harness не даёт его для этого объёма (работ нет или все отменены).',
     fallback:
       'Круговые индикаторы «До релиза» и «Время» показываются с devcontour-harness 0.1.0-alpha.60: эта версия harness не сообщает прогноз (поле forecast). Ниже — прежняя полоса и грубая оценка панели.',
   },
   // Revision 4 additions to the existing screens.
   r4: {
     queueBy: (who: string) => `запускает: ${who}`,
+    scopeClipped: (n: number) =>
+      `Ещё ${rp(n, 'задача', 'задачи', 'задач')} среза прогона не показано (предел представления); их состояние здесь неизвестно.`,
+    harnessCounts: (done: number, total: number, running: number, waiting: number) =>
+      `В harness: принято ${done} из ${total} · в работе ${running} · ждут ${waiting}`,
+    scopeDropped: (n: number) =>
+      `Срез прогона (${rp(n, 'задача', 'задачи', 'задач')}) не поместился в представление: показаны только работы harness.`,
+    planReview: (works: string[]) =>
+      `Сейчас harness проводит ревью плана: ${works.join(', ')}; от ведущего для него ничего не нужно.`,
     leadFirstOrdered: (steps: string) => `Сначала ${steps}. Затем — вы.`,
     actorDoes: (who: string, what: string) => `${who}: ${what}`,
     leadStop: (attempt: number) =>
@@ -1833,11 +1842,20 @@ const en: Dict = {
       'The «Time» ring: the filled part is elapsed out of «elapsed + left» at the upper end; the light arc is how much more it is at the lower end.',
     releaseText: (line: string) => `To release: ${line}`,
     timeText: (line: string) => `Time: ${line}`,
+    none: 'No forecast: the harness gives none for this scope (no works, or all cancelled).',
     fallback:
       "The «To release» and «Time» rings come with devcontour-harness 0.1.0-alpha.60: this harness version sends no forecast. Below are the earlier bar and the panel's rough estimate.",
   },
   r4: {
     queueBy: (who: string) => `starts it: ${who}`,
+    scopeClipped: (n: number) =>
+      `${ep(n, 'more task', 'more tasks')} of the run slice not shown (view limit); their state is unknown here.`,
+    harnessCounts: (done: number, total: number, running: number, waiting: number) =>
+      `In harness: accepted ${done} of ${total} · in progress ${running} · waiting ${waiting}`,
+    scopeDropped: (n: number) =>
+      `The run slice (${ep(n, 'task', 'tasks')}) did not fit into the view: only harness works are shown.`,
+    planReview: (works: string[]) =>
+      `The harness is reviewing the plan: ${works.join(', ')}; nothing is needed from the lead for it.`,
     leadFirstOrdered: (steps: string) => `First ${steps}. Then you.`,
     actorDoes: (who: string, what: string) => `${who}: ${what}`,
     leadStop: (attempt: number) =>

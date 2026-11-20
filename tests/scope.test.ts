@@ -73,16 +73,22 @@ test('overall progress: harness counts, never the clipped list; scope tasks outs
   } as OperatorView;
   const s = scopeOf(withScope)!;
   assert.equal(s.tasks.length, 3);
-  // Two tasks outside the harness are listed; of 8 in the snapshot, 4 are works: 2 more are clipped.
+  // Two tasks outside the harness are listed; of 8 in the snapshot, 3 are listed: 5 are
+  // clipped, of unknown state — named as not shown, never counted as outside or in the total.
   assert.deepEqual(overallProgress(withScope), {
-    total: 8,
+    total: 6,
     done: 1,
     running: 1,
     waiting: 2,
     cancelled: 0,
     outside: 2,
-    outsideUnlisted: 2,
+    outsideUnlisted: 5,
   });
+  // `truncated.scope` (revision 4) is the clipped count when present.
+  assert.equal(
+    overallProgress({ ...withScope, truncated: { scope: 7 } } as OperatorView).outsideUnlisted,
+    7,
+  );
   // A scope section without a valid task reads as absent, not as "nothing outside".
   assert.equal(
     scopeOf({ ...view, scope: { tasks: [{ id: 1 }] } } as unknown as OperatorView),

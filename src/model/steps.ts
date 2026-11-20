@@ -103,6 +103,11 @@ export interface QueueWait {
 
 export interface NextSteps {
   questions: OperatorQuestion[];
+  /**
+   * Revision 4: steps of others that the harness orders before your answer
+   * on a work (`blockers[].step` lower than the answer's), by work id.
+   */
+  questionAfter: Record<string, Step[]>;
   /** Works that wait for the operator's answer while the view lists no question of theirs. */
   unlistedAnswers: string[];
   operator: Step[];
@@ -302,6 +307,7 @@ function mergeSame(steps: Step[], graphOf: (id: string) => string | undefined): 
 /** Sort the view's reasons into who acts next (see the file comment). */
 export function nextSteps(view: OperatorView): NextSteps {
   const questions = view.questions.filter((q) => questionStatus(q).needsAnswer);
+  const questionAfter: Record<string, Step[]> = {};
   const answerOnly = new Set<string>();
   const asking = new Set(questions.map((q) => q.workId));
   const operator: Step[] = [];
@@ -341,6 +347,7 @@ export function nextSteps(view: OperatorView): NextSteps {
       : undefined;
     const own: Step[] = [];
     const nobody: BlockerView[] = [];
+    let answerStep: number | undefined;
     for (const e of entries) {
       // The work waits for its dependency: whoever the record names acts on
       // that other work (or on this one only once it is done).
@@ -364,6 +371,7 @@ export function nextSteps(view: OperatorView): NextSteps {
         (e.action !== undefined && ANSWER_ACTIONS.has(e.action));
       if (answer && e.actor === 'operator') {
         answerOnly.add(id);
+        if (e.step !== undefined) answerStep = Math.min(answerStep ?? e.step, e.step);
         continue;
       }
       if (answer && asking.has(id)) continue;
@@ -375,17 +383,20 @@ export function nextSteps(view: OperatorView): NextSteps {
       (s) => s.actor === 'lead' && s.code !== undefined && LEAD_FIRST_CODES.has(s.code),
     );
     // Revision 4: the harness numbers the order of removal; the panel's code list is not used then.
-    const stepped = own.some((s) => s.step !== undefined);
+    const stepped = own.some((s) => s.step !== undefined) || answerStep !== undefined;
+    const before = (k: number) =>
+      own
+        .filter((o) => o.actor !== 'operator' && o.step !== undefined && o.step < k)
+        .sort((a, b) => a.step! - b.step!);
+    if (answerStep !== undefined) {
+      const first = before(answerStep);
+      if (first.length) questionAfter[id] = first;
+    }
     for (const s of own) {
       if (s.actor === 'operator') {
         if (stepped) {
           s.ordered = true;
-          s.after =
-            s.step === undefined
-              ? []
-              : own
-                  .filter((o) => o.actor !== 'operator' && o.step !== undefined && o.step < s.step!)
-                  .sort((a, b) => a.step! - b.step!);
+          s.after = s.step === undefined ? [] : before(s.step);
         } else s.after = leadFirst;
         operator.push(s);
       } else if (s.actor === 'lead') lead.push(s);
@@ -421,6 +432,7 @@ export function nextSteps(view: OperatorView): NextSteps {
   }
   return {
     questions,
+    questionAfter,
     unlistedAnswers: [...answerOnly].filter((id) => !view.questions.some((q) => q.workId === id)),
     operator,
     lead: mergeSame(lead, graphOf),
@@ -450,6 +462,7 @@ export function actorsOn(
   };
   const mine = (s: Step) => s.workIds.includes(workId);
   for (const s of steps.operator.filter(mine)) for (const f of s.after) add(f.actor);
+  for (const f of steps.questionAfter[workId] ?? []) add(f.actor);
   const asking = steps.questions.filter((q) => q.workId === workId);
   const byLead =
     view !== undefined && asking.length > 0 && asking.every((q) => leadAnswers(view, q));

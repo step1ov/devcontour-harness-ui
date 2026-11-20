@@ -303,10 +303,12 @@ const WRITER_BLOCKED = [
 ];
 
 /**
- * A stop that waits for the lead and did not use an attempt: `env` when the
- * writer's environment closed a step it must run (writer-environment), else
- * another lead stop (a preflight stop, an empty result). `summary` — the
- * technical detail for «подробности».
+ * A stop that waits for the lead and did not use an attempt. `env`: the
+ * writer's environment closed a step it must run (writer-environment) —
+ * said only where the document proves it (the alpha.59 signs below);
+ * revision 4 has no field that tells it from a preflight stop, so there it
+ * is `false` and the harness's own sentence says what happened. `summary`
+ * — the technical detail for «подробности».
  */
 export interface LeadStop {
   env: boolean;
@@ -314,28 +316,24 @@ export interface LeadStop {
 }
 
 /**
- * A stopped work whose last attempt waits for the lead and was not counted.
+ * A stopped work that waits for the lead now (`stage.needs`: the lead) and
+ * whose last attempt was not counted.
  *
  * Revision 4 (harness alpha.60) says it with facts: `lastFailure.kind`
- * `needs-lead` and `counted: false`; the environment flavour is the failure
- * group `environment`. The panel reads no phrase then.
+ * `needs-lead` and `counted: false`; the panel reads no phrase then, and a
+ * revision 4 document without those fields says nothing (unknown).
  *
- * Before revision 4 (no `kind`, harness alpha.59) the view has no cause
- * field (proposal P13): the stop is recognised only by all of what that
- * harness emits for it — a stopped work whose stage asks the lead to
- * diagnose, and a last failure of group `environment` whose detail is the
- * harness's fixed phrase. Anything else is not this stop.
+ * Revisions 0–3 have no cause field (proposal P13): the stop is recognised
+ * only by all of what harness alpha.59 emits for a writer-environment stop
+ * — the lead diagnoses, the failure group is `environment` and the detail
+ * is the harness's fixed phrase. Anything else is not this stop.
  */
-export function leadStopOf(w: WorkView): LeadStop | undefined {
+export function leadStopOf(w: WorkView, viewRevision = 4): LeadStop | undefined {
   const f = w.attempts.lastFailure;
-  if (!f || w.stage.name !== 'stopped') return undefined;
-  if (f.kind !== undefined) {
-    if (f.kind !== 'needs-lead' || f.counted !== false) return undefined;
-    return { env: f.bucket === 'environment' };
-  }
-  if (f.bucket !== 'environment') return undefined;
-  if (w.stage.needs?.actor !== 'lead' || w.stage.needs.action !== 'diagnose-failure')
-    return undefined;
+  if (!f || w.stage.name !== 'stopped' || w.stage.needs?.actor !== 'lead') return undefined;
+  if (f.kind !== undefined || f.counted !== undefined || viewRevision >= 4)
+    return f.kind === 'needs-lead' && f.counted === false ? { env: false } : undefined;
+  if (f.bucket !== 'environment' || w.stage.needs.action !== 'diagnose-failure') return undefined;
   const cut = f.plain.indexOf(' — ');
   const detail = (cut >= 0 ? f.plain.slice(cut + 3) : f.plain).trim();
   const phrase = WRITER_BLOCKED.find((p) => detail.startsWith(p));
@@ -349,8 +347,11 @@ export function leadStopOf(w: WorkView): LeadStop | undefined {
  * The writer-environment stop only (alpha.4 API): `leadStopOf` with `env`.
  * @deprecated use `leadStopOf`.
  */
-export function writerEnvironmentStop(w: WorkView): { summary?: string } | undefined {
-  const s = leadStopOf(w);
+export function writerEnvironmentStop(
+  w: WorkView,
+  viewRevision = 3,
+): { summary?: string } | undefined {
+  const s = leadStopOf(w, viewRevision);
   if (!s?.env) return undefined;
   return s.summary ? { summary: s.summary } : {};
 }

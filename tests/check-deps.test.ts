@@ -91,3 +91,76 @@ test('this repository matches its package-lock.json', () => {
   const r = run(repoRoot);
   assert.equal(r.status, 0, r.stderr);
 });
+
+/** A package whose lock and install are given by path (`node_modules/a/node_modules/b`). */
+const withTree = (
+  lock: Record<string, { version: string; optional?: boolean }>,
+  installed: Record<string, string>,
+  check: (root: string) => void,
+  declared: Record<string, string> = { left: '1.0.0' },
+) => {
+  const root = mkdtempSync(join(tmpdir(), 'hui-deps-'));
+  try {
+    const json = (file: string, value: unknown) =>
+      writeFileSync(join(root, file), JSON.stringify(value, null, 2));
+    json('package.json', { name: 'fixture', version: '0.0.0', devDependencies: declared });
+    json('package-lock.json', {
+      name: 'fixture',
+      lockfileVersion: 3,
+      requires: true,
+      packages: { '': { name: 'fixture', version: '0.0.0', devDependencies: declared }, ...lock },
+    });
+    for (const [path, version] of Object.entries(installed)) {
+      mkdirSync(join(root, path), { recursive: true });
+      json(join(path, 'package.json'), { name: path.split('node_modules/').pop(), version });
+    }
+    check(root);
+  } finally {
+    if (root.startsWith(join(tmpdir(), 'hui-deps-')))
+      rmSync(root, { recursive: true, force: true });
+  }
+};
+
+test('transitive and nested packages are checked against the lock too', () => {
+  const lock = {
+    'node_modules/left': { version: '1.0.0' },
+    'node_modules/compiler': { version: '2.0.0' },
+    'node_modules/left/node_modules/inner': { version: '3.0.0' },
+  };
+  const good = {
+    'node_modules/left': '1.0.0',
+    'node_modules/compiler': '2.0.0',
+    'node_modules/left/node_modules/inner': '3.0.0',
+  };
+  withTree(lock, good, (root) => assert.equal(run(root).status, 0, run(root).stderr));
+  withTree(lock, { ...good, 'node_modules/compiler': '2.1.0' }, (root) =>
+    assertMismatch(run(root), /compiler: installed 2\.1\.0, lock 2\.0\.0/),
+  );
+  withTree(lock, { ...good, 'node_modules/left/node_modules/inner': '3.0.1' }, (root) =>
+    assertMismatch(
+      run(root),
+      /node_modules\/left\/node_modules\/inner: installed 3\.0\.1, lock 3\.0\.0/,
+    ),
+  );
+  const { ['node_modules/compiler']: _gone, ...missing } = good;
+  withTree(lock, missing, (root) =>
+    assertMismatch(run(root), /compiler: not installed, lock 2\.0\.0/),
+  );
+});
+
+test('a required direct dependency missing from the lock fails; an absent optional package passes', () => {
+  withTree({}, {}, (root) =>
+    assertMismatch(
+      run(root),
+      /left: in devDependencies of package\.json, not resolved in the lock/,
+    ),
+  );
+  withTree(
+    {
+      'node_modules/left': { version: '1.0.0' },
+      'node_modules/@esbuild/other-os': { version: '0.1.0', optional: true },
+    },
+    { 'node_modules/left': '1.0.0' },
+    (root) => assert.equal(run(root).status, 0, run(root).stderr),
+  );
+});

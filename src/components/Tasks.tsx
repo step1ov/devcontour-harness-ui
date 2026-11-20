@@ -97,26 +97,30 @@ export function Tasks({ view, lang = 'ru', now, onOpenWork, workHref, timeZone }
       {view.truncated?.works ? <p className="hui-muted">{t.overview.planClipped}</p> : null}
       {scope ? (
         outside.length || unlisted ? (
-          <Block t={t} title={k.outside(outside.length + unlisted)} testid="tasks-outside">
-            <ul className="hui:grid hui:list-none hui:gap-2">
-              {outside.map((task) => (
-                <li
-                  key={task.id}
-                  className="hui:flex hui:flex-wrap hui:items-center hui:gap-2"
-                  data-testid="outside-task"
-                >
-                  <strong>{taskName(task)}</strong>
-                  <Badge tone="outline">{label(t.overview.outsideState, task.state)}</Badge>
-                  {task.plain ? <span className="hui-muted">{task.plain}</span> : null}
-                </li>
-              ))}
-            </ul>
-            {unlisted ? <p className="hui-muted">{t.listClipped(unlisted)}</p> : null}
+          <Block t={t} title={k.outside(outside.length)} testid="tasks-outside">
+            {outside.length ? (
+              <ul className="hui:grid hui:list-none hui:gap-2">
+                {outside.map((task) => (
+                  <li
+                    key={task.id}
+                    className="hui:flex hui:flex-wrap hui:items-center hui:gap-2"
+                    data-testid="outside-task"
+                  >
+                    <strong>{taskName(task)}</strong>
+                    <Badge tone="outline">{label(t.overview.outsideState, task.state)}</Badge>
+                    {task.plain ? <span className="hui-muted">{task.plain}</span> : null}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            {unlisted ? <p className="hui-muted">{t.r4.scopeClipped(unlisted)}</p> : null}
           </Block>
         ) : null
       ) : (
         <p className="hui:text-xs hui:text-muted-foreground" data-testid="scope-missing">
-          {t.overview.scopeMissing}
+          {view.truncated?.scope
+            ? t.r4.scopeDropped(view.truncated.scope)
+            : t.overview.scopeMissing}
         </p>
       )}
       {other.length ? (
@@ -163,7 +167,7 @@ function TaskCardView({
   const rounds = code.reduce((n, r) => n + r.rounds.used, 0);
   const cap = code.length === 1 ? code[0]!.rounds.max : null;
   const firstBlocker = w.blockers.find((b) => b.actor !== null) ?? w.blockers[0];
-  const blockedEnv = leadStopOf(w);
+  const blockedEnv = leadStopOf(w, view.viewRevision);
   const nowText = blockedEnv
     ? blockedEnv.env
       ? k.nowWriterEnv
@@ -276,6 +280,12 @@ function TaskCardView({
         >
           <span className="hui-who">{next}</span>
         </p>
+        {w.question?.line?.trim() &&
+        !c.questions.some((q) => q.requestId === w.question!.requestId) ? (
+          <p className="hui-muted" data-testid="task-question-line">
+            {w.question.line}
+          </p>
+        ) : null}
         {c.questions.length ? (
           <div data-testid="task-questions">
             <h4 className="hui:text-sm hui:font-semibold">{k.questions(c.questions.length)}</h4>

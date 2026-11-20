@@ -48,18 +48,37 @@ if (pkg && lock?.packages?.['']) {
         );
     }
   }
-  // Every direct dependency the lock resolved must be installed at that version.
-  const names = new Set();
-  for (const field of FIELDS)
-    for (const name of Object.keys(lockRoot[field] ?? {})) names.add(name);
-  for (const name of [...names].sort()) {
-    const entry = lock.packages[`node_modules/${name}`];
-    // An optional peer the lock does not resolve is not installed on purpose.
-    if (!entry) continue;
-    const installed = readJson(join('node_modules', name, 'package.json'));
-    if (!installed) mismatches.push(`${name}: not installed, lock ${entry.version}`);
-    else if (installed.version !== entry.version)
-      mismatches.push(`${name}: installed ${installed.version}, lock ${entry.version}`);
+  // A required direct dependency must be resolved by the lock at all.
+  const optionalPeers = new Set(
+    Object.entries(pkg.peerDependenciesMeta ?? {})
+      .filter(([, m]) => m?.optional)
+      .map(([n]) => n),
+  );
+  for (const field of ['dependencies', 'devDependencies'])
+    for (const name of Object.keys(pkg[field] ?? {}).sort())
+      if (!lock.packages[`node_modules/${name}`])
+        mismatches.push(`${name}: in ${field} of package.json, not resolved in the lock`);
+  for (const name of Object.keys(pkg.peerDependencies ?? {}).sort())
+    if (!optionalPeers.has(name) && !lock.packages[`node_modules/${name}`])
+      mismatches.push(`${name}: required peer, not resolved in the lock`);
+  // Every package the lock resolved — direct, transitive and nested — must be
+  // installed at that version. An optional package (`optional`, `devOptional`,
+  // `peer`) may be absent: npm leaves out what does not fit this platform.
+  for (const [path, entry] of Object.entries(lock.packages).sort(([a], [b]) =>
+    a.localeCompare(b),
+  )) {
+    if (!path.startsWith('node_modules/') || entry.link) continue;
+    const name = path.slice(path.lastIndexOf('node_modules/') + 'node_modules/'.length);
+    const installed = readJson(join(path, 'package.json'));
+    if (!installed) {
+      if (!(entry.optional || entry.devOptional || entry.peer))
+        mismatches.push(
+          `${path === `node_modules/${name}` ? name : path}: not installed, lock ${entry.version}`,
+        );
+    } else if (entry.version !== undefined && installed.version !== entry.version)
+      mismatches.push(
+        `${path === `node_modules/${name}` ? name : path}: installed ${installed.version}, lock ${entry.version}`,
+      );
   }
 }
 

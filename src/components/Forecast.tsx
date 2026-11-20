@@ -11,6 +11,7 @@ import { useId, type ReactNode } from 'react';
 import type { ForecastView } from '../model/view.ts';
 import { dict, type Dict, type Lang } from '../model/dict.ts';
 import { formatRough } from '../model/format.ts';
+import { instantMs } from '../model/compat.ts';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card.tsx';
 
 const SIZE = 120;
@@ -104,10 +105,29 @@ export function remainingWords(r: { loMs: number; hiMs: number }, lang: Lang): s
   return lo === hi ? `~${hi}` : `~${t.between(lo, hi)}`;
 }
 
-/** What the time ring says, from the forecast fields only. */
-export function timeState(f: ForecastView, lang: Lang) {
+/**
+ * A duration that goes on with the clock: the harness puts its start
+ * (`startedAt`, `humanWait.since`) into the content token and leaves the
+ * duration out of it, so a live page that keeps an unchanged document reads
+ * the time since that start on its own clock. Never less than the
+ * harness's own figure; without a start, the figure as is.
+ */
+export function sinceMs(
+  ms: number | undefined,
+  since: string | undefined,
+  now: number | undefined,
+) {
+  if (since === undefined || now === undefined || !Number.isFinite(now)) return ms;
+  const live = now - instantMs(since);
+  if (!Number.isFinite(live)) return ms;
+  return Math.max(ms ?? 0, Math.max(0, live));
+}
+
+/** What the time ring says, from the forecast fields (and the clock for elapsed). */
+export function timeState(f: ForecastView, lang: Lang, now?: number) {
   const t = dict(lang).forecast;
-  const { elapsedMs, remaining } = f.time;
+  const { remaining } = f.time;
+  const elapsedMs = sinceMs(f.time.elapsedMs, f.time.startedAt, now);
   const elapsed = elapsedMs === undefined ? t.notStarted : t.elapsed(spanWords(elapsedMs, lang));
   if (f.progress.left === 0)
     return {
@@ -194,12 +214,22 @@ function Tile({
   );
 }
 
-export function ForecastRings({ forecast, lang = 'ru' }: { forecast: ForecastView; lang?: Lang }) {
+export function ForecastRings({
+  forecast,
+  lang = 'ru',
+  now,
+}: {
+  forecast: ForecastView;
+  lang?: Lang;
+  /** The viewer's clock (ms); elapsed and the wait go on from the harness's start points. */
+  now?: number | undefined;
+}) {
   const t: Dict = dict(lang);
   const f = t.forecast;
   const p = forecast.progress;
-  const time = timeState(forecast, lang);
+  const time = timeState(forecast, lang, now);
   const wait = forecast.time.humanWait;
+  const waitMs = wait.works ? (sinceMs(wait.ms, wait.since, now) ?? wait.ms) : 0;
   const r = forecast.time.remaining;
   const percent = Math.max(0, Math.min(100, Math.round(p.percent)));
   return (
@@ -260,7 +290,7 @@ export function ForecastRings({ forecast, lang = 'ru' }: { forecast: ForecastVie
           data-testid="human-wait"
           data-status={wait.works ? 'blocked' : undefined}
         >
-          {wait.works ? f.humanWait(wait.works, spanWords(wait.ms, lang)) : f.noHumanWait}
+          {wait.works ? f.humanWait(wait.works, spanWords(waitMs, lang)) : f.noHumanWait}
         </p>
         <details className="hui-term" data-testid="forecast-assumptions">
           <summary>{t.whatItMeans}</summary>

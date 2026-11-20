@@ -612,8 +612,10 @@ function App() {
         <Note bad>{t.app.notFound}</Note>
       );
     // Questions the lead answers by the policy are not announced as yours (F-W).
-    const waiting = splitQuestions(view, nextSteps(view)).yours.length;
-    const clipped = Boolean(view.truncated?.questions);
+    // Tracker questions to the owner (revision 4) are yours too.
+    const waiting =
+      splitQuestions(view, nextSteps(view)).yours.length + (view.sourceQuestions?.length ?? 0);
+    const clipped = Boolean(view.truncated?.questions || view.truncated?.sourceQuestions);
     body = (
       <>
         <Freshness generatedAt={view.generatedAt} live={live} />

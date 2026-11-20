@@ -19,6 +19,7 @@ import {
   checkView,
   checkWorkDetail,
   leadStopOf,
+  actorsOn,
   nextSteps,
   remainingWords,
   taskCard,
@@ -149,6 +150,12 @@ test('without a forecast (harness alpha.59) the alpha.4 bar stays and the panel 
   assert.match(m, /data-testid="eta"/);
   assert.match(m, /role="progressbar"/);
   assert.match(shown(overview(asAlpha59(en), 'en')), /this harness version sends no forecast/);
+  // Revision 4 without a forecast (no works or all cancelled): not blamed on the version.
+  const none = structuredClone(ru);
+  delete none.forecast;
+  const n = shown(overview(none));
+  assert.match(n, /Прогноза нет: harness не даёт его для этого объёма/);
+  assert.doesNotMatch(n, /эта версия harness не сообщает прогноз/);
 });
 
 test('English rings', () => {
@@ -174,9 +181,10 @@ test('the queue runner comes from the harness: its line and who restarts, no pan
     line: 'Очередь идёт: harness запущен.',
   };
   running.health.controller = { present: false };
-  const r = shown(overview(running));
-  assert.doesNotMatch(r, /Очередь стоит/);
-  assert.match(r, /Очередь идёт/);
+  const r = overview(running);
+  assert.doesNotMatch(shown(r), /Очередь стоит/);
+  // The harness line is shown whatever the state, not only when the queue stands.
+  assert.match(r, /data-testid="queue-line"[^>]*>Очередь идёт: harness запущен\.</);
   // And «not-running» stands even with a controller lease in the view.
   const idle = structuredClone(ru);
   idle.progress.queue = { paused: false, runner: 'not-running', restartBy: 'lead' };
@@ -241,20 +249,21 @@ const stoppedWork = (lastFailure: Json, needs = { actor: 'lead', action: 'diagno
 };
 
 test('lastFailure.kind and counted replace the phrase matching of the writer-environment stop', () => {
-  // Revision 4: needs-lead, not counted, environment group — without the harness phrase.
+  // Revision 4: needs-lead, not counted, the lead acts now — the harness sentence, no guessed subtype
+  // (a preflight stop has the same facts as a writer-environment one).
   const env = stoppedWork({
     bucket: 'environment',
     plain: 'окружение: исполнителю закрыт локальный сервер',
     kind: 'needs-lead',
     counted: false,
   });
-  const w = viewOf(env).works[0]!;
-  assert.deepEqual(leadStopOf(w), { env: true });
+  assert.deepEqual(leadStopOf(viewOf(env).works[0]!, 4), { env: false });
   const m = shown(overview(env));
   assert.match(
     m,
-    /попытка 2: ждёт ведущего — окружение не дало исполнителю выполнить нужный шаг; попытка не засчитана \(окружение: исполнителю закрыт локальный сервер\)/,
+    /попытка 2: ждёт ведущего — работа остановилась до результата; попытка не засчитана \(окружение: исполнителю закрыт локальный сервер\)/,
   );
+  assert.doesNotMatch(m, /окружение не дало исполнителю/);
   // The harness phrase with another class is not this stop in revision 4.
   const phrase = stoppedWork({
     bucket: 'environment',
@@ -262,14 +271,41 @@ test('lastFailure.kind and counted replace the phrase matching of the writer-env
     kind: 'environment',
     counted: true,
   });
-  assert.equal(leadStopOf(viewOf(phrase).works[0]!), undefined);
+  assert.equal(leadStopOf(viewOf(phrase).works[0]!, 4), undefined);
   assert.match(
     shown(overview(phrase)),
     /попытка 2 остановилась: окружение — окружение закрыло исполнителю обязательный шаг: listen EPERM; попытка засчитана/,
   );
-  // …while the same phrase without `kind` (alpha.59) still is (the old reading).
-  const old = viewOf(asAlpha59(phrase)).works[0]!;
-  assert.deepEqual(leadStopOf(old), { env: true, summary: 'listen EPERM' });
+  // A revision 4 document without the fields says nothing: the phrase is not read (unknown).
+  const bare = structuredClone(phrase);
+  delete bare.works[0].attempts.lastFailure.kind;
+  delete bare.works[0].attempts.lastFailure.counted;
+  assert.equal(leadStopOf(viewOf(bare).works[0]!, 4), undefined);
+  assert.doesNotMatch(shown(overview(bare)), /не засчитана/);
+  // A supplied `counted: true` is never overridden by the phrase, at any revision.
+  const countedOld = structuredClone(bare);
+  countedOld.works[0].attempts.lastFailure.counted = true;
+  assert.equal(leadStopOf(viewOf(countedOld).works[0]!, 3), undefined);
+  // …while the same phrase in an alpha.59 document still is the old reading.
+  const old = viewOf(asAlpha59(phrase));
+  assert.deepEqual(leadStopOf(old.works[0]!, old.viewRevision), {
+    env: true,
+    summary: 'listen EPERM',
+  });
+  // The stop is now; a later operator-owned need wins over the historical failure.
+  const later = stoppedWork(
+    {
+      bucket: 'incomplete',
+      plain: 'исполнитель не изменил ни файла',
+      kind: 'needs-lead',
+      counted: false,
+    },
+    { actor: 'operator', action: 'reset-attempts' },
+  );
+  assert.equal(leadStopOf(viewOf(later).works[0]!, 4), undefined);
+  const lt = shown(html(<Tasks view={viewOf(later)} lang="ru" />));
+  assert.doesNotMatch(lt, /Ждёт ведущего/);
+  assert.match(lt, /попытка 2 остановилась: исполнитель не изменил ни файла; попытка не засчитана/);
   // A lead stop outside the environment: its own words, still not counted.
   const empty = stoppedWork({
     bucket: 'incomplete',
@@ -277,7 +313,7 @@ test('lastFailure.kind and counted replace the phrase matching of the writer-env
     kind: 'needs-lead',
     counted: false,
   });
-  assert.deepEqual(leadStopOf(viewOf(empty).works[0]!), { env: false });
+  assert.deepEqual(leadStopOf(viewOf(empty).works[0]!, 4), { env: false });
   const tasks = shown(html(<Tasks view={viewOf(empty)} lang="ru" />));
   assert.match(tasks, /Ждёт ведущего: работа остановилась до результата\. Попытка не засчитана\./);
   assert.match(
@@ -291,7 +327,69 @@ test('lastFailure.kind and counted replace the phrase matching of the writer-env
     kind: 'needs-lead',
     counted: true,
   });
-  assert.equal(leadStopOf(viewOf(counted).works[0]!), undefined);
+  assert.equal(leadStopOf(viewOf(counted).works[0]!, 4), undefined);
+});
+
+test('the elapsed time and the wait go on with the clock from the harness start points', () => {
+  // The harness keeps durations out of its content token: an unchanged document stays on screen.
+  const later = Date.parse(ru.generatedAt) + 61_000;
+  const t = shown(html(<Overview view={viewOf(ru)} lang="ru" timeZone="UTC" now={later} />));
+  assert.match(t, /прошло 2 ч 51 мин/);
+  assert.match(t, /дольше всех — 21 мин/);
+  // Never below the harness figure (a viewer clock behind the producer).
+  const early = Date.parse(ru.generatedAt) - 600_000;
+  assert.match(
+    shown(html(<Overview view={viewOf(ru)} lang="ru" timeZone="UTC" now={early} />)),
+    /прошло 2 ч 50 мин/,
+  );
+});
+
+test('a question after a lead step: the harness order, in the item and in who acts', () => {
+  const d = structuredClone(ru);
+  const w = d.works.find((x: Json) => x.id === 'export-csv');
+  w.blockers = [
+    { code: 'APPROVAL_STALE', plain: 'нужно согласовать план заново', actor: 'lead', step: 1 },
+    { ...w.blockers[0], step: 2 },
+  ];
+  const v = viewOf(d);
+  const s = nextSteps(v);
+  assert.deepEqual(
+    s.questionAfter['export-csv']!.map((x) => [x.actor, x.code]),
+    [['lead', 'APPROVAL_STALE']],
+  );
+  assert.deepEqual(actorsOn(s, 'export-csv', v), ['lead', 'operator']);
+  const m = shown(overview(d));
+  assert.match(m, /Сначала ведущий: нужно согласовать план заново\. Затем — вы\./);
+  assert.match(shown(html(<Tasks view={v} lang="ru" />)), /Дальше действует: ведущий, затем вы/);
+  // Without steps there is no order for a question.
+  assert.deepEqual(nextSteps(viewOf(asAlpha59(d))).questionAfter, {});
+});
+
+test('a work question line shows on the card when the question list does not carry it', () => {
+  const d = structuredClone(ru);
+  const w = d.works.find((x: Json) => x.id === 'export-csv');
+  w.question.line =
+    'ответ был у попытки 1, она остановилась до передачи исполнителю — его получит следующая попытка';
+  d.questions = d.questions.filter((q: Json) => q.workId !== 'export-csv');
+  d.truncated = { questions: 1 };
+  const t = shown(html(<Tasks view={viewOf(d)} lang="ru" />));
+  assert.match(t, /его получит следующая попытка/);
+  // With the question listed, its own line is shown once.
+  const both = structuredClone(ru);
+  both.works.find((x: Json) => x.id === 'export-csv').question.line = 'строка работы';
+  assert.doesNotMatch(shown(html(<Tasks view={viewOf(both)} lang="ru" />)), /строка работы/);
+});
+
+test('a dropped tracker question list is never «nothing is needed»; a dropped scope is named', () => {
+  const d = structuredClone(ruStopped);
+  d.truncated = { sourceQuestions: 5, scope: 12 };
+  const m = shown(overview(d));
+  assert.doesNotMatch(m, /ничего не нужно/);
+  assert.match(m, /и, возможно, ещё \(список обрезан\)/);
+  assert.match(m, /ещё 5 вопросов из трекера не показано/);
+  assert.match(m, /Срез прогона \(12 задач\) не поместился в представление/);
+  const t = shown(html(<Tasks view={viewOf(d)} lang="ru" />));
+  assert.match(t, /Срез прогона \(12 задач\) не поместился в представление/);
 });
 
 test('the work detail says whether the last attempt counted', () => {
@@ -324,6 +422,8 @@ test('the plan-review stage: labelled, and the harness acts (not «контро�
   assert.deepEqual(card.next, { kind: 'harness', stage: 'plan-review' });
   const t = shown(html(<Tasks view={v} lang="ru" />));
   assert.match(t, /Дальше действует: harness \(этап «Ревью плана»\)/);
+  // The story says the harness reviews the plan, not that works wait for the lead.
+  assert.match(shown(overview(d)), /Сейчас harness проводит ревью плана: WEB-2/);
   assert.match(shown(html(<Tasks view={v} lang="en" />)), /Plan review/);
 });
 
@@ -381,7 +481,8 @@ test('owner questions from the tracker are in «Нужно от вас» with a 
 
 test('the run slice: tasks not handed to the harness in Tasks and the Overview, by key', () => {
   const o = shown(overview(ru));
-  assert.match(o, /Сделано 1 из 6 · в работе 1 · ждут 2 · ещё не переданы в harness: 2/);
+  // With a forecast the total of the release is the ring's; this line is the harness works only.
+  assert.match(o, /В harness: принято 1 из 4 · в работе 1 · ждут 2 · ещё не переданы в harness: 2/);
   assert.match(o, /Ещё не переданы в harness \(2\)/);
   assert.match(o, /DEMO-5: Импорт отчёта из CSV не передана в harness ещё не передана в harness/);
   assert.match(o, /DEMO-6: Печать отчёта ждёт готовности у задачи нет критериев приёмки/);
