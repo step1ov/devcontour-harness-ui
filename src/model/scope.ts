@@ -13,7 +13,7 @@ import type { OperatorView, WorkView } from './view.ts';
 
 /**
  * A task of the run snapshot (planned for harness 0.1.0-alpha.59/60, not in
- * the view schema yet; see docs/harness-proposals.md P7). A task with a
+ * the view schema yet; see docs/harness-proposals.md P10). A task with a
  * `workId` is a work order of this view; one without was not handed to the
  * harness yet.
  */

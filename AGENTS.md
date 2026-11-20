@@ -34,6 +34,8 @@ blocked with the command and the message.
 - **The harness owns the data.** Components render the operator view and
   derive no numbers. If a number is wrong or missing, the fix is a harness
   proposal (`docs/harness-proposals.md`), not a UI computation.
+  One owner-approved exception (alpha.4): the rough time ranges of design
+  §5.1, shown as ranges with their assumption, until harness proposal P11.
 - **No telemetry**, no CDN or font requests, and no update checks.
 
 ## Privacy

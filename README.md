@@ -70,9 +70,11 @@ npx harness view --state <state> --policy .harness/policy.json > view.json   # �
 npx devcontour-harness-ui --view view.json
 ```
 
-Разделы — hash-адреса: `#/` обзор, `#/work/<id>` детали работы,
-`#/reviews`, `#/decisions`, `#/activity`, `#/settings`, `#/history`,
-`#/health`.
+Верхнее меню: Обзор · Задачи · Решения · Журнал · Настройки. Разделы —
+hash-адреса: `#/` обзор, `#/tasks` задачи, `#/work/<id>` процесс одной
+задачи, `#/decisions`, `#/activity`, `#/history`, `#/health` (журнал),
+`#/settings`; старый `#/reviews` ведёт на `#/tasks`. Тёмная тема — по
+системе или выбором в «Настройках».
 
 Флаги CLI:
 
@@ -109,15 +111,18 @@ Skill [`skills/harness-ui/SKILL.md`](skills/harness-ui/SKILL.md) позволя�
 ## Встраивание
 
 ```tsx
-import { Overview, WorkDetail, Reviews, Settings, History, Health } from 'devcontour-harness-ui';
+import { Overview, Tasks, WorkDetail, Settings, History, Health } from 'devcontour-harness-ui';
 import 'devcontour-harness-ui/styles.css';
 
 <Overview view={view} lang="ru" onOpenWork={(id) => navigate(id)} />;
 <WorkDetail detail={detail} lang="ru" workHref={(id) => `?work=${id}`} />;
 ```
 
-Экраны: `Overview`, `WorkDetail` (документ `harness view --work <id>`),
-`Reviews`, `Decisions`, `Activity`, `Settings`, `History`, `Health`. У всех
+Экраны: `Overview`, `Tasks`, `WorkDetail` (документ `harness view --work <id>`),
+`Reviews`, `Decisions`, `Activity`, `Settings`, `History`, `Health`.
+Стили собраны заранее (Tailwind с префиксом `hui:`, без preflight, только
+внутри `.hui`), Radix и компоненты shadcn/ui — внутри пакета: хосту нужен
+только React. У всех
 `lang` (по умолчанию `ru`), `timeZone`, `now` и навигация `onOpenWork` или
 `workHref`.
 
