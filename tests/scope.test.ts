@@ -3,7 +3,10 @@
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { asAlpha57 } from './legacy.ts';
+import { asAlpha57, asAlpha59 } from './legacy.ts';
+
+// The revision 3 shape (harness alpha.59) of the fixtures: revision 4 is in revision4.test.tsx.
+
 import {
   attemptAverage,
   checkView,
@@ -30,8 +33,13 @@ const viewOf = (rel: string): OperatorView => {
   if (!c.ok) throw new Error(c.message);
   return c.view;
 };
-const view = viewOf('../fixtures/view.sample.json');
-const stopped = viewOf('../fixtures/view.stopped.json');
+const viewOf59 = (rel: string): OperatorView => {
+  const c = checkView(asAlpha59(read(rel)));
+  if (!c.ok) throw new Error(c.message);
+  return c.view;
+};
+const view = viewOf59('../fixtures/view.sample.json');
+const stopped = viewOf59('../fixtures/view.stopped.json');
 const running = (() => {
   const c = checkWorkDetail(read('../fixtures/work.sample.json'));
   if (!c.ok) throw new Error(c.message);
@@ -65,18 +73,27 @@ test('overall progress: harness counts, never the clipped list; scope tasks outs
   } as OperatorView;
   const s = scopeOf(withScope)!;
   assert.equal(s.tasks.length, 3);
-  // Two tasks outside the harness are listed; of 8 in the snapshot, 4 are works: 2 more are clipped.
+  // Two tasks outside the harness are listed; of 8 in the snapshot, 3 are listed: 5 are
+  // clipped, of unknown state — named as not shown, never counted as outside or in the total.
   assert.deepEqual(overallProgress(withScope), {
-    total: 8,
+    total: 6,
     done: 1,
     running: 1,
     waiting: 2,
     cancelled: 0,
     outside: 2,
-    outsideUnlisted: 2,
+    outsideUnlisted: 5,
   });
+  // `truncated.scope` (revision 4) is the clipped count when present.
+  assert.equal(
+    overallProgress({ ...withScope, truncated: { scope: 7 } } as OperatorView).outsideUnlisted,
+    7,
+  );
   // A scope section without a valid task reads as absent, not as "nothing outside".
-  assert.equal(scopeOf({ ...view, scope: { tasks: [{ id: 1 }] } } as OperatorView), undefined);
+  assert.equal(
+    scopeOf({ ...view, scope: { tasks: [{ id: 1 }] } } as unknown as OperatorView),
+    undefined,
+  );
   assert.equal(scopeOf({ ...view, scope: 'all' } as unknown as OperatorView), undefined);
 });
 

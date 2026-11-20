@@ -12,7 +12,7 @@ const screens: [string, string, RegExp][] = [
   [
     'overview',
     '#/',
-    /Сейчас harness работает над locale-format[\s\S]*Сделано 1 из 4 · в работе 1 · ждут 2[\s\S]*Какой разделитель использовать в CSV\?[\s\S]*Проблемы по ходу/,
+    /Сейчас harness работает над locale-format[\s\S]*В harness: принято 1 из 4 · в работе 1 · ждут 2[\s\S]*Какой разделитель использовать в CSV\?[\s\S]*Проблемы по ходу/,
   ],
   [
     'tasks',
@@ -58,6 +58,55 @@ for (const [name, hash, key] of screens) {
     }
   });
 }
+
+test('overview rings: two progressbars with values and text, light and dark, no scroll', async ({
+  page,
+}, info) => {
+  // At the demo's own time: «прошло» goes on with the clock from the harness start point.
+  await page.clock.setFixedTime(new Date('2026-11-19T12:00:00Z'));
+  const width = info.project.name === 'mobile' ? 390 : 1280;
+  for (const scheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    await open(page, '#/');
+    const forecast = page.getByTestId('forecast');
+    // The rings are the first thing on the Overview.
+    await expect(page.locator('main .hui-overview > *').first()).toHaveAttribute(
+      'data-testid',
+      'forecast',
+    );
+    const release = page.getByRole('progressbar', { name: 'До релиза' });
+    await expect(release).toHaveAttribute('aria-valuenow', '23');
+    await expect(release).toHaveAttribute('aria-valuetext', /готово ~23 %, осталось задач: 5 из 6/);
+    const time = page.getByRole('progressbar', { name: 'Время' });
+    await expect(time).toHaveAttribute(
+      'aria-valuetext',
+      'Время: прошло 2 ч 50 мин · осталось ~1,5–3 ч',
+    );
+    await expect(forecast.getByTestId('human-wait')).toContainText('В прогноз это не входит');
+    await expect(page.getByTestId('updates-banner')).toContainText(
+      'Доступна harness 0.1.0-alpha.61',
+    );
+    // Both rings side by side at 1280, one under the other at 390; each fully visible.
+    const a = (await release.boundingBox())!;
+    const b = (await time.boundingBox())!;
+    if (width === 1280) expect(Math.abs(a.y - b.y)).toBeLessThan(2);
+    else expect(b.y).toBeGreaterThan(a.y + a.height);
+    expect(a.width).toBeGreaterThanOrEqual(120);
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow, 'horizontal scroll').toBeLessThanOrEqual(0);
+    const axe = await axeOf(page).analyze();
+    const serious = axe.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical');
+    expect(serious.map((v) => `${v.id}: ${v.nodes.map((n) => n.target).join(' ')}`)).toEqual([]);
+    if (shots && (scheme === 'light' || width === 1280)) {
+      mkdirSync(shots, { recursive: true });
+      const name = `ru-overview-${width}${scheme === 'dark' ? '-dark' : ''}`;
+      await page.screenshot({ path: join(shots, `${name}.png`), fullPage: true });
+      await forecast.screenshot({ path: join(shots, `${name}-rings.png`) });
+    }
+  }
+});
 
 test('English labels come from ?lang=en, and the harness texts are asked in it', async ({
   page,

@@ -12,13 +12,16 @@ import { SLOT_STAGES } from './format.ts';
 import type { OperatorView, WorkView } from './view.ts';
 
 /**
- * A task of the run snapshot (planned for harness 0.1.0-alpha.59/60, not in
- * the view schema yet; see docs/harness-proposals.md P10). A task with a
- * `workId` is a work order of this view; one without was not handed to the
- * harness yet.
+ * A task of the run slice (`scope.tasks[]`, revision 4, harness
+ * 0.1.0-alpha.60; proposal P10). A task with a `workId` is a work order of
+ * this view; one without was not handed to the harness yet.
  */
 export interface ScopeTask {
   id: string;
+  /** Connector of the task source; absent only in a hand-made document. */
+  connector?: string;
+  /** Task key in the source («WEB-7»). */
+  key?: string;
   title?: string;
   /** The work order of this task, once the harness has it. */
   workId?: string;
@@ -55,6 +58,8 @@ export function scopeOf(view: object): ScopeView | undefined {
     tasks.push({
       id: t.id,
       state: t.state,
+      ...(typeof t.connector === 'string' ? { connector: t.connector } : {}),
+      ...(typeof t.key === 'string' ? { key: t.key } : {}),
       ...(typeof t.title === 'string' ? { title: t.title } : {}),
       ...(typeof t.workId === 'string' ? { workId: t.workId } : {}),
       ...(typeof t.plain === 'string' ? { plain: t.plain } : {}),
@@ -66,6 +71,13 @@ export function scopeOf(view: object): ScopeView | undefined {
       ? raw.total
       : undefined;
   return { tasks, ...(total !== undefined ? { total } : {}) };
+}
+
+/** A readable name of a scope task: its key and title, else the title, the key or the id. */
+export function taskName(task: Pick<ScopeTask, 'id' | 'key' | 'title'>): string {
+  const title = task.title?.trim();
+  if (task.key && title) return title.startsWith(task.key) ? title : `${task.key}: ${title}`;
+  return title || task.key || task.id;
 }
 
 /** Tasks of the scope that are not work orders of this view. */
@@ -83,8 +95,10 @@ export interface Overall {
   /** Scope tasks not handed to the harness yet; `undefined` = the view has no scope. */
   outside: number | undefined;
   /**
-   * Scope tasks clipped from the list that are not work orders either: the
-   * snapshot `total` beyond the works and the listed tasks outside.
+   * Scope tasks clipped from the list (`truncated.scope`, else `total`
+   * beyond the listed tasks). Their state is unknown — some may be work
+   * orders — so they are named as «not shown», never counted as outside or
+   * added to `total`.
    */
   outsideUnlisted: number;
 }
@@ -99,10 +113,16 @@ export function overallProgress(view: OperatorView): Overall {
   const waiting = Math.max(0, p.total - p.done - p.running - cancelled);
   const scope = scopeOf(view);
   const outside = scope ? outsideHarness(scope).length : undefined;
-  const outsideUnlisted =
-    scope?.total !== undefined ? Math.max(0, scope.total - p.total - (outside ?? 0)) : 0;
+  const clipped = view.truncated?.scope;
+  const outsideUnlisted = scope
+    ? Number.isSafeInteger(clipped) && clipped! > 0
+      ? clipped!
+      : scope.total !== undefined
+        ? Math.max(0, scope.total - scope.tasks.length)
+        : 0
+    : 0;
   return {
-    total: p.total + (outside ?? 0) + outsideUnlisted,
+    total: p.total + (outside ?? 0),
     done: p.done,
     running: p.running,
     waiting,

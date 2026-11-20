@@ -1,15 +1,16 @@
 // Contract with devcontour-harness: the view schema is owned by the harness.
 // tests/contract/harness/*.schema.json are verbatim copies of the harness
 // schemas (schemas/operator-view.schema.json, schemas/work-detail-view.schema.json
-// of 0.1.0-alpha.59, view revision 3); empty-state.view.json is a real
+// of 0.1.0-alpha.60, view revision 4); empty-state.view.json is a real
 // `harness view --lang en` envelope of that version for a state that does not
-// exist yet (examples/two-vendors policy). tests/contract/harness-0.1.0-alpha.57/
-// (revision 2, also alpha.58), harness-0.1.0-alpha.56/ and harness-0.1.0-alpha.55/
-// keep the same files of 0.1.0-alpha.57, .56 (revision 1) and .55 (revision 0): the panel
-// still supports those harnesses (peer >=0.1.0-alpha.55), so 55- and
-// 56-shaped documents must pass their own and every newer schema and the
-// gate. With DEVCONTOUR_HARNESS_DIR pointing at a harness checkout the copies
-// are compared byte for byte and a live smoke runs that checkout's
+// exist yet (examples/two-vendors policy). tests/contract/harness-0.1.0-alpha.59/
+// (revision 3), harness-0.1.0-alpha.57/ (revision 2, also alpha.58),
+// harness-0.1.0-alpha.56/ and harness-0.1.0-alpha.55/ keep the same files of
+// 0.1.0-alpha.59, .57, .56 (revision 1) and .55 (revision 0): the panel
+// still supports those harnesses (peer >=0.1.0-alpha.55), so older-shaped
+// documents must pass their own and every newer schema and the gate. With
+// DEVCONTOUR_HARNESS_DIR pointing at a harness checkout the copies are
+// compared byte for byte and a live smoke runs that checkout's
 // `capabilities` and `view`.
 
 import { strict as assert } from 'node:assert';
@@ -28,6 +29,12 @@ import {
   type DriftView,
   type Escalation,
   type FindingView,
+  type ForecastView,
+  type QuestionOption,
+  type ScopeTaskView,
+  type SourceHealth,
+  type SourceQuestion,
+  type UpdatesView,
   type HistoryTotals,
   type OperatorQuestion,
   type OperatorView,
@@ -44,7 +51,7 @@ import {
   type WorkView,
 } from '../src/model/index.ts';
 import { validate } from './contract/json-schema.ts';
-import { asAlpha55, asAlpha56, asAlpha57 } from './legacy.ts';
+import { asAlpha55, asAlpha56, asAlpha57, asAlpha59 } from './legacy.ts';
 import { instantMs } from '../src/model/compat.ts';
 
 type Json = Record<string, any>;
@@ -62,6 +69,9 @@ const harnessEmpty56 = read('./contract/harness-0.1.0-alpha.56/empty-state.view.
 const overviewSchema57 = read('./contract/harness-0.1.0-alpha.57/operator-view.schema.json');
 const detailSchema57 = read('./contract/harness-0.1.0-alpha.57/work-detail-view.schema.json');
 const harnessEmpty57 = read('./contract/harness-0.1.0-alpha.57/empty-state.view.json');
+const overviewSchema59 = read('./contract/harness-0.1.0-alpha.59/operator-view.schema.json');
+const detailSchema59 = read('./contract/harness-0.1.0-alpha.59/work-detail-view.schema.json');
+const harnessEmpty59 = read('./contract/harness-0.1.0-alpha.59/empty-state.view.json');
 const overviewSchema55 = read('./contract/harness-0.1.0-alpha.55/operator-view.schema.json');
 const detailSchema55 = read('./contract/harness-0.1.0-alpha.55/work-detail-view.schema.json');
 const harnessEmpty55 = read('./contract/harness-0.1.0-alpha.55/empty-state.view.json');
@@ -84,8 +94,11 @@ test('both fixtures and a real harness document are valid under the harness sche
   for (const f of ['work.sample.json', 'work.accepted.sample.json'])
     assert.deepEqual(validate(detailSchema, read('../fixtures/ru/' + f)), [], f);
   assert.equal(harnessEmpty.ok, true);
-  assert.equal(harnessEmpty.data.viewRevision, 3);
-  assert.equal(harnessEmpty.data.source.producerVersion, '0.1.0-alpha.59');
+  assert.equal(harnessEmpty.data.viewRevision, 4);
+  assert.equal(harnessEmpty.data.source.producerVersion, '0.1.0-alpha.60');
+  // No state: no connector slice, no tracker questions, no forecast, no updates check.
+  for (const k of ['scope', 'sourceQuestions', 'forecast', 'updates'])
+    assert.equal(Object.hasOwn(harnessEmpty.data, k), false, k);
   assert.deepEqual(validate(overviewSchema, harnessEmpty.data), []);
   // A state that does not exist yet has a feed with nothing in it: `[]`, not a missing field.
   assert.deepEqual(harnessEmpty.data.activity, []);
@@ -147,10 +160,50 @@ test('alpha.57/58 documents (revision 2) stay valid under the alpha.59 schemas a
   }
 });
 
+test('alpha.59 documents (revision 3) stay valid under the alpha.60 schemas and pass the gate', () => {
+  assert.equal(harnessEmpty59.data.viewRevision, 3);
+  assert.deepEqual(validate(overviewSchema59, harnessEmpty59.data), []);
+  assert.deepEqual(validate(overviewSchema, harnessEmpty59.data), []);
+  const real = checkView(harnessEmpty59.data);
+  assert.equal(real.ok && real.newerRevision, false);
+  for (const [name, doc, schema] of fixtures()) {
+    const old = asAlpha59(doc);
+    const old59 = schema === overviewSchema ? overviewSchema59 : detailSchema59;
+    assert.deepEqual(validate(old59, old), [], name);
+    assert.deepEqual(validate(schema, old), [], name);
+    const c = schema === overviewSchema ? checkView(old) : checkWorkDetail(old);
+    assert.equal(c.ok, true, `${name}: ${c.ok ? '' : c.message}`);
+    assert.equal(c.ok && c.newerRevision, false, name);
+  }
+});
+
+test('the 60-shaped fixtures really carry the revision 4 fields (the alpha.59 schema refuses them)', () => {
+  const stopped = read('../fixtures/view.stopped.json');
+  for (const doc of [viewFixture, read('../fixtures/ru/view.sample.json'), stopped]) {
+    assert.equal(doc.viewRevision, 4);
+    assert.deepEqual(validate(overviewSchema, doc), []);
+    const errors = validate(overviewSchema59, doc).join();
+    for (const k of ['forecast', 'runner'])
+      assert.match(errors, new RegExp(`unknown field ${k}`), k);
+    const c = checkView(doc);
+    assert.equal(c.ok && c.newerRevision, false);
+  }
+  for (const k of ['scope', 'sourceQuestions', 'updates'])
+    assert.match(
+      validate(overviewSchema59, viewFixture).join(),
+      new RegExp(`unknown field ${k}`),
+      k,
+    );
+  // One known forecast (a range) and one unknown (no `remaining`): both shapes exist.
+  assert.ok(viewFixture.forecast.time.remaining);
+  assert.equal(stopped.forecast.time.remaining, undefined);
+  assert.ok(stopped.works.some((w: Json) => w.blockers.some((b: Json) => b.step === 2)));
+});
+
 test('the 59-shaped detail fixtures carry an unused stage (the alpha.57 schema refuses it)', () => {
   for (const f of ['work.sample.json', 'ru/work.sample.json']) {
     const d = read('../fixtures/' + f);
-    assert.equal(d.viewRevision, 3, f);
+    assert.equal(d.viewRevision, 4, f);
     assert.ok(
       d.attempts[0].stages.some((s: Json) => s.unused === true),
       f,
@@ -162,7 +215,7 @@ test('the 59-shaped detail fixtures carry an unused stage (the alpha.57 schema r
 test('the 57-shaped fixtures really carry the revision 2 fields (the alpha.56 schema refuses them)', () => {
   let targets = 0;
   for (const [name, doc, schema] of fixtures()) {
-    assert.equal(doc.viewRevision, 3, name);
+    assert.equal(doc.viewRevision, 4, name);
     const works: Json[] = schema === overviewSchema ? doc.works : [doc.work];
     const remotes = works.filter((w) => w.target).map((w) => w.target.remote);
     if (schema === overviewSchema) assert.ok(doc.activity.length > 0, `${name}: a feed`);
@@ -577,6 +630,10 @@ const shapes: [string, Json, Record<string, string>][] = [
       health: 'req:o',
       activity: 'opt:a<o>',
       decisions: 'opt:a<o>',
+      scope: 'opt:o',
+      sourceQuestions: 'opt:a<o>',
+      forecast: 'opt:o',
+      updates: 'opt:o',
       truncated: 'opt:o',
     }),
   ],
@@ -746,12 +803,14 @@ const shapes: [string, Json, Record<string, string>][] = [
       bucket: 'req:s',
       plain: 'req:s',
       at: 'opt:s',
+      kind: 'opt:s',
+      counted: 'opt:b',
     }),
   ],
   [
     'works[].blockers[]',
     overviewSchema[ov].works.items[ov].blockers.items,
-    shape<BlockerView>({ code: 'req:s', plain: 'opt:s', actor: 'req:s|null' }),
+    shape<BlockerView>({ code: 'req:s', plain: 'opt:s', actor: 'req:s|null', step: 'opt:n' }),
   ],
   [
     'works[].target',
@@ -781,6 +840,7 @@ const shapes: [string, Json, Record<string, string>][] = [
       requestId: 'req:s',
       state: 'req:s',
       severity: 'req:n',
+      line: 'opt:s',
     }),
   ],
   [
@@ -844,7 +904,15 @@ const shapes: [string, Json, Record<string, string>][] = [
       answerBasis: 'opt:o',
       title: 'opt:s',
       createdAt: 'req:s',
+      options: 'opt:a<o>',
+      rationale: 'opt:s',
+      line: 'opt:s',
     }),
+  ],
+  [
+    'questions[].options[]',
+    overviewSchema[ov].questions.items[ov].options.items,
+    shape<QuestionOption>({ id: 'req:s', label: 'req:s', recommended: 'opt:b' }),
   ],
   [
     'questions[].answerBasis',
@@ -906,6 +974,9 @@ const shapes: [string, Json, Record<string, string>][] = [
       detail: 'opt:s',
       actor: 'opt:s',
       action: 'opt:s',
+      runner: 'opt:s',
+      restartBy: 'opt:s',
+      line: 'opt:s',
     }),
   ],
   [
@@ -973,7 +1044,121 @@ const shapes: [string, Json, Record<string, string>][] = [
       spentTotalUsd: 'req:o',
       drift: 'req:o',
       warnings: 'req:a<o>',
+      sources: 'opt:a<o>',
     }),
+  ],
+  [
+    'health.sources[]',
+    overviewSchema[ov].health[ov].sources.items,
+    shape<SourceHealth>({
+      connector: 'req:s',
+      provider: 'req:s',
+      level: 'opt:s',
+      taskContext: 'opt:b',
+      contractVersion: 'opt:n',
+      line: 'opt:s',
+      checkedAt: 'req:s',
+    }),
+  ],
+  [
+    'scope',
+    overviewSchema[ov].scope,
+    shape<NonNullable<OperatorView['scope']>>({ total: 'opt:n', tasks: 'req:a<o>' }),
+  ],
+  [
+    'scope.tasks[]',
+    overviewSchema[ov].scope[ov].tasks.items,
+    shape<ScopeTaskView>({
+      id: 'req:s',
+      connector: 'req:s',
+      key: 'opt:s',
+      title: 'opt:s',
+      workId: 'opt:s',
+      state: 'req:s',
+      plain: 'opt:s',
+    }),
+  ],
+  [
+    'sourceQuestions[]',
+    overviewSchema[ov].sourceQuestions.items,
+    shape<SourceQuestion>({
+      connector: 'req:s',
+      provider: 'req:s',
+      id: 'req:s',
+      ref: 'req:s',
+      title: 'opt:s',
+      question: 'opt:s',
+      options: 'opt:a<s>',
+      recommendation: 'opt:s',
+      provisional: 'opt:s',
+      tasks: 'opt:a<s>',
+      url: 'opt:s',
+      readAt: 'req:s',
+    }),
+  ],
+  [
+    'forecast',
+    overviewSchema[ov].forecast,
+    shape<ForecastView>({ progress: 'req:o', time: 'req:o', assumptions: 'req:a<s>' }),
+  ],
+  [
+    'forecast.progress',
+    overviewSchema[ov].forecast[ov].progress,
+    shape<ForecastView['progress']>({
+      percent: 'req:n',
+      weighted: 'req:n',
+      total: 'req:n',
+      done: 'req:n',
+      inWork: 'req:n',
+      left: 'req:n',
+      basis: 'req:s',
+      line: 'req:s',
+    }),
+  ],
+  [
+    'forecast.time',
+    overviewSchema[ov].forecast[ov].time,
+    shape<ForecastView['time']>({
+      startedAt: 'opt:s',
+      elapsedMs: 'opt:n',
+      remaining: 'opt:o',
+      humanWait: 'req:o',
+      line: 'req:s',
+    }),
+  ],
+  [
+    'forecast.time.remaining',
+    overviewSchema[ov].forecast[ov].time[ov].remaining,
+    shape<NonNullable<ForecastView['time']['remaining']>>({
+      loMs: 'req:n',
+      hiMs: 'req:n',
+      samples: 'req:n',
+      attemptsPerTask: 'req:n',
+    }),
+  ],
+  [
+    'forecast.time.humanWait',
+    overviewSchema[ov].forecast[ov].time[ov].humanWait,
+    shape<ForecastView['time']['humanWait']>({ works: 'req:n', ms: 'req:n', since: 'opt:s' }),
+  ],
+  [
+    'updates',
+    overviewSchema[ov].updates,
+    shape<UpdatesView>({
+      state: 'req:s',
+      mode: 'req:s',
+      current: 'req:o',
+      available: 'opt:o',
+      checkedAt: 'opt:s',
+      line: 'req:s',
+      whatsNew: 'opt:a<s>',
+      command: 'opt:s',
+    }),
+  ],
+  [
+    'updates.current',
+    overviewSchema[ov].updates[ov].current,
+    shape<UpdatesView['current']>({ harness: 'req:s', ui: 'opt:s' }),
   ],
   [
     'health.budgets[]',
@@ -1042,6 +1227,8 @@ const shapes: [string, Json, Record<string, string>][] = [
       alternates: 'opt:n',
       activity: 'opt:n',
       decisions: 'opt:n',
+      scope: 'opt:n',
+      sourceQuestions: 'opt:n',
     }),
   ],
   [
@@ -1271,6 +1458,37 @@ const vocabularies: [string, Json, string[]][] = [
     'detail verification[].kind',
     detailSchema[ov].verification.items[ov].kind,
     vocab<VerificationRow['kind']>()(['gate', 'review']),
+  ],
+  [
+    'progress.queue.runner',
+    overviewSchema[ov].progress[ov].queue[ov].runner,
+    vocab<NonNullable<ViewProgress['queue']['runner']>>()(['running', 'not-running']),
+  ],
+  [
+    'scope.tasks[].state',
+    overviewSchema[ov].scope[ov].tasks.items[ov].state,
+    vocab<ScopeTaskView['state']>()(['in-harness', 'not-handed-over', 'not-ready']),
+  ],
+  [
+    'forecast.progress.basis',
+    overviewSchema[ov].forecast[ov].progress[ov].basis,
+    vocab<ForecastView['progress']['basis']>()(['scope', 'works']),
+  ],
+  [
+    'updates.state',
+    overviewSchema[ov].updates[ov].state,
+    vocab<UpdatesView['state']>()([
+      'up-to-date',
+      'available',
+      'needs-decision',
+      'unavailable',
+      'not-checked',
+    ]),
+  ],
+  [
+    'updates.mode',
+    overviewSchema[ov].updates[ov].mode,
+    vocab<UpdatesView['mode']>()(['auto', 'notify', 'off']),
   ],
   [
     'detail verification[].phase',

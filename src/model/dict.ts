@@ -467,6 +467,7 @@ const ru = {
     stopped: 'Остановлено',
     done: 'Принято локально',
     cancelled: 'Отменено',
+    'plan-review': 'Ревью плана',
   } as Labels,
   actor: {
     operator: 'вы',
@@ -870,6 +871,112 @@ const ru = {
     command: 'команда:',
     unknownAction: 'Действие, которое панель не знает',
     otherSubject: 'не про одну работу (см. «подробности»)',
+  },
+  // Release forecast rings (revision 4, harness `forecast`).
+  forecast: {
+    label: 'Прогноз выпуска',
+    release: 'До релиза',
+    time: 'Время',
+    percent: (p: number) => `~${p} %`,
+    doneWord: 'готово',
+    leftWord: 'осталось',
+    unknownMark: '?',
+    unknownWord: 'неизвестно',
+    basisScope: 'Считается по всем задачам прогона, включая ещё не переданные в harness.',
+    basisWorks: 'Считается только по работам harness: срез прогона из трекера задач неизвестен.',
+    basisOther: (b: string) => `Основа подсчёта: ${b}.`,
+    span: (h: number, m: number) => (h ? `${h} ч${m ? ` ${m} мин` : ''}` : `${m} мин`),
+    elapsed: (d: string) => `прошло ${d}`,
+    notStarted: 'ещё не начиналось',
+    left: (r: string) => `осталось ${r}`,
+    nothingLeft: 'осталось: ничего',
+    leftUnknown: 'сколько осталось — неизвестно',
+    elapsedUnknown: 'сколько прошло — неизвестно',
+    elapsedUnknownWhy:
+      'Сколько прошло, harness не сообщил, поэтому круг не закрашен; остаток — по его наблюдениям.',
+    leftUnknownWhy:
+      'Почему неизвестно: закончившихся попыток пока слишком мало, чтобы оценить их обычную длину. Нулём это не показывается.',
+    basis: (samples: number, perTask: string) =>
+      `По ${rp(samples, 'закончившейся попытке', 'закончившимся попыткам', 'закончившимся попыткам')}; попыток на принятую задачу — ${perTask}.`,
+    humanWait: (n: number, d: string) =>
+      `Ждут людей или ведущего сейчас: ${rp(n, 'работа', 'работы', 'работ')}, дольше всех — ${d}. В прогноз это не входит.`,
+    noHumanWait: 'Сейчас никто не ждёт людей или ведущего.',
+    harnessSays: 'Так же это пишет harness status:',
+    notPromise: 'Это наблюдение по уже прошедшим попыткам, а не обещание.',
+    timeRing:
+      'Круг «Время»: закрашена прошедшая часть от «прошло + осталось» по верхней границе; светлая дуга — насколько больше она по нижней границе.',
+    releaseText: (line: string) => `До релиза: ${line}`,
+    timeText: (line: string) => `Время: ${line}`,
+    none: 'В этом представлении harness нет прогноза; ниже — прежняя оценка панели.',
+    fallback:
+      'Круговые индикаторы «До релиза» и «Время» показываются с devcontour-harness 0.1.0-alpha.60: эта версия harness не сообщает прогноз (поле forecast). Ниже — прежняя полоса и грубая оценка панели.',
+  },
+  // Revision 4 additions to the existing screens.
+  r4: {
+    queueBy: (who: string) => `запускает: ${who}`,
+    scopeClipped: (n: number) =>
+      `Ещё ${rp(n, 'задача', 'задачи', 'задач')} среза прогона не показано (предел представления); их состояние здесь неизвестно.`,
+    harnessCounts: (done: number, total: number, running: number, waiting: number) =>
+      `В harness: принято ${done} из ${total} · в работе ${running} · ждут ${waiting}`,
+    scopeDropped: (n: number) =>
+      `Срез прогона (${rp(n, 'задача', 'задачи', 'задач')}) не поместился в представление: показаны только работы harness.`,
+    planReview: (works: string[]) =>
+      `Сейчас harness проводит ревью плана: ${works.join(', ')}; от ведущего для него ничего не нужно.`,
+    leadFirstOrdered: (steps: string) => `Сначала ${steps}. Затем — вы.`,
+    actorDoes: (who: string, what: string) => `${who}: ${what}`,
+    leadStop: (attempt: number) =>
+      `попытка ${attempt}: ждёт ведущего — работа остановилась до результата; попытка не засчитана`,
+    nowLeadStop: 'Ждёт ведущего: работа остановилась до результата. Попытка не засчитана.',
+    counted: 'попытка засчитана',
+    notCounted: 'попытка не засчитана',
+    options: 'Варианты ответа:',
+    recommended: 'рекомендуется',
+    rationale: 'Обоснование исполнителя:',
+    kindSource: 'вопрос в трекере',
+    sourceAnswerThere: 'Отвечают в трекере задач, панель только показывает вопрос.',
+    sourceOpen: (ref: string) => `Открыть ${ref} в трекере`,
+    sourceRef: (ref: string) => `документ ${ref} в трекере`,
+    sourceRecommendation: 'Рекомендация:',
+    sourceProvisional: 'Пока ответа нет, работа идёт с временным ответом:',
+    sourceTasks: (keys: string) => `Задачи: ${keys}`,
+    sourceReadAt: (when: string) => `Прочитано из трекера ${when}; это не живое чтение.`,
+    sourceClipped: (n: number) =>
+      `ещё ${rp(n, 'вопрос', 'вопроса', 'вопросов')} из трекера не показано (предел представления)`,
+    sourcesTitle: 'Источники задач',
+    sourceLevel: {
+      recommended: 'версия трекера рекомендуемая',
+      'below-recommended': 'версия трекера ниже рекомендуемой',
+    } as Labels,
+    sourceContext: (yes: boolean): string =>
+      yes ? 'трекер объявляет контекст задачи' : 'трекер не объявляет контекст задачи',
+    sourceContract: (n: number) => `договор REST ${n}`,
+    sourceChecked: (when: string) => `проверено ${when}`,
+    updatesTitle: 'Обновления',
+    whatsNew: 'что нового',
+    howToUpdate: 'как обновить',
+    updateNote: 'Ставит ведущий или вы в терминале проекта; панель ничего не устанавливает.',
+    updatesMode: 'Режим',
+    updatesModeNote:
+      'Режим задаётся в .harness/updates.json (команда harness update); здесь он только показан.',
+    mode: {
+      auto: 'ставить само в безопасных пределах',
+      notify: 'только сообщать',
+      off: 'не проверять',
+    } as Labels,
+    updatesState: 'Последняя проверка',
+    state: {
+      'up-to-date': 'стоит последняя версия',
+      available: 'доступна новая версия',
+      'needs-decision': 'доступна версия со сменой форматов — нужно решение владельца',
+      unavailable: 'реестр не ответил',
+      'not-checked': 'ещё не проверялось',
+    } as Labels,
+    current: (h: string, ui: string | undefined) =>
+      `Стоит: devcontour-harness ${h}${ui ? `, панель ${ui}` : ''}`,
+    available: (h: string, ui: string | undefined) =>
+      `Доступно: devcontour-harness ${h}${ui ? `, панель ${ui}` : ''}`,
+    checkedAt: (when: string) => `проверено ${when}`,
+    notCheckedYet: 'когда проверялось — неизвестно',
   },
   budgetScope: { total: 'общий', group: 'группа', work: 'работа' } as Labels,
   budgetState: {
@@ -1318,6 +1425,7 @@ const en: Dict = {
     stopped: 'Stopped',
     done: 'Accepted locally',
     cancelled: 'Cancelled',
+    'plan-review': 'Plan review',
   },
   actor: {
     operator: 'you',
@@ -1705,6 +1813,111 @@ const en: Dict = {
     command: 'command:',
     unknownAction: 'An action this panel does not know',
     otherSubject: 'not about one work order (see “details”)',
+  },
+  forecast: {
+    label: 'Release forecast',
+    release: 'To release',
+    time: 'Time',
+    percent: (p: number) => `~${p} %`,
+    doneWord: 'done',
+    leftWord: 'left',
+    unknownMark: '?',
+    unknownWord: 'unknown',
+    basisScope: 'Counted over every task of the run, including ones not handed to the harness yet.',
+    basisWorks: 'Counted over harness works only: the run slice of the task tracker is unknown.',
+    basisOther: (b: string) => `Counted over: ${b}.`,
+    span: (h: number, m: number) => (h ? `${h} h${m ? ` ${m} min` : ''}` : `${m} min`),
+    elapsed: (d: string) => `elapsed ${d}`,
+    notStarted: 'not started yet',
+    left: (r: string) => `left ${r}`,
+    nothingLeft: 'nothing left',
+    leftUnknown: 'time left unknown',
+    elapsedUnknown: 'time elapsed unknown',
+    elapsedUnknownWhy:
+      'The harness did not say how much time has passed, so the ring is not filled; the time left is from its observations.',
+    leftUnknownWhy:
+      'Why unknown: too few finished attempts yet to know their usual length. It is never shown as zero.',
+    basis: (samples: number, perTask: string) =>
+      `From ${ep(samples, 'finished attempt', 'finished attempts')}; attempts per accepted task: ${perTask}.`,
+    humanWait: (n: number, d: string) =>
+      `Waiting for people or the lead now: ${ep(n, 'work', 'works')}, the longest for ${d}. Not in the forecast.`,
+    noHumanWait: 'Nobody waits for people or the lead now.',
+    harnessSays: 'harness status says the same:',
+    notPromise: 'An observation of past attempts, not a promise.',
+    timeRing:
+      'The «Time» ring: the filled part is elapsed out of «elapsed + left» at the upper end; the light arc is how much more it is at the lower end.',
+    releaseText: (line: string) => `To release: ${line}`,
+    timeText: (line: string) => `Time: ${line}`,
+    none: "This harness view has no forecast; below is the panel's earlier estimate.",
+    fallback:
+      "The «To release» and «Time» rings come with devcontour-harness 0.1.0-alpha.60: this harness version sends no forecast. Below are the earlier bar and the panel's rough estimate.",
+  },
+  r4: {
+    queueBy: (who: string) => `starts it: ${who}`,
+    scopeClipped: (n: number) =>
+      `${ep(n, 'more task', 'more tasks')} of the run slice not shown (view limit); their state is unknown here.`,
+    harnessCounts: (done: number, total: number, running: number, waiting: number) =>
+      `In harness: accepted ${done} of ${total} · in progress ${running} · waiting ${waiting}`,
+    scopeDropped: (n: number) =>
+      `The run slice (${ep(n, 'task', 'tasks')}) did not fit into the view: only harness works are shown.`,
+    planReview: (works: string[]) =>
+      `The harness is reviewing the plan: ${works.join(', ')}; nothing is needed from the lead for it.`,
+    leadFirstOrdered: (steps: string) => `First ${steps}. Then you.`,
+    actorDoes: (who: string, what: string) => `${who}: ${what}`,
+    leadStop: (attempt: number) =>
+      `attempt ${attempt}: waits for the lead — the work stopped before a result; the attempt is not counted`,
+    nowLeadStop:
+      'Waits for the lead: the work stopped before a result. The attempt is not counted.',
+    counted: 'the attempt is counted',
+    notCounted: 'the attempt is not counted',
+    options: 'Answer options:',
+    recommended: 'recommended',
+    rationale: "The writer's rationale:",
+    kindSource: 'tracker question',
+    sourceAnswerThere: 'Answered in the task tracker; the panel only shows the question.',
+    sourceOpen: (ref: string) => `Open ${ref} in the tracker`,
+    sourceRef: (ref: string) => `document ${ref} in the tracker`,
+    sourceRecommendation: 'Recommendation:',
+    sourceProvisional: 'Until it is answered, the work goes on with a provisional answer:',
+    sourceTasks: (keys: string) => `Tasks: ${keys}`,
+    sourceReadAt: (when: string) => `Read from the tracker ${when}; not a live read.`,
+    sourceClipped: (n: number) =>
+      `${ep(n, 'tracker question', 'tracker questions')} more not shown (view limit)`,
+    sourcesTitle: 'Task sources',
+    sourceLevel: {
+      recommended: 'tracker version is the recommended one',
+      'below-recommended': 'tracker version is below the recommended one',
+    },
+    sourceContext: (yes: boolean) =>
+      yes ? 'the tracker declares the task context' : 'the tracker declares no task context',
+    sourceContract: (n: number) => `REST contract ${n}`,
+    sourceChecked: (when: string) => `checked ${when}`,
+    updatesTitle: 'Updates',
+    whatsNew: "what's new",
+    howToUpdate: 'how to update',
+    updateNote: 'The lead or you install it in the project terminal; the panel installs nothing.',
+    updatesMode: 'Mode',
+    updatesModeNote:
+      'The mode is set in .harness/updates.json (harness update); it is only shown here.',
+    mode: {
+      auto: 'install by itself within safe limits',
+      notify: 'only notify',
+      off: 'do not check',
+    },
+    updatesState: 'Last check',
+    state: {
+      'up-to-date': 'the latest version is installed',
+      available: 'a new version is available',
+      'needs-decision': 'a version that changes formats is available — the owner decides',
+      unavailable: 'the registry did not answer',
+      'not-checked': 'not checked yet',
+    },
+    current: (h: string, ui: string | undefined) =>
+      `Installed: devcontour-harness ${h}${ui ? `, panel ${ui}` : ''}`,
+    available: (h: string, ui: string | undefined) =>
+      `Available: devcontour-harness ${h}${ui ? `, panel ${ui}` : ''}`,
+    checkedAt: (when: string) => `checked ${when}`,
+    notCheckedYet: 'when it was checked is unknown',
   },
   budgetScope: { total: 'total', group: 'group', work: 'work' },
   budgetState: { within: 'within', exceeded: 'exceeded', undetermined: 'undetermined' },

@@ -10,9 +10,12 @@ import { Settings } from '../src/components/Settings.tsx';
 import { Tasks } from '../src/components/Tasks.tsx';
 import { WorkDetail } from '../src/components/WorkDetail.tsx';
 import { checkView, checkWorkDetail, type OperatorView } from '../src/model/index.ts';
+import { asAlpha59 } from './legacy.ts';
+
+// The revision 3 shape (harness alpha.59) of the fixtures: revision 4 is in revision4.test.tsx.
 
 const viewOf = (rel: string): OperatorView => {
-  const c = checkView(JSON.parse(readFileSync(new URL(rel, import.meta.url), 'utf8')));
+  const c = checkView(asAlpha59(JSON.parse(readFileSync(new URL(rel, import.meta.url), 'utf8'))));
   if (!c.ok) throw new Error(c.message);
   return c.view;
 };

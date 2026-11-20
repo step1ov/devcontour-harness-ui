@@ -1,9 +1,43 @@
 // The same document as an older harness sends it, for the compatibility
 // tests: tests/contract.test.ts validates these shapes against the copied
-// alpha.55, alpha.56 and alpha.57 schemas, so the screen and live tests that use them
+// alpha.55, alpha.56, alpha.57 and alpha.59 schemas, so the screen and live tests that use them
 // really feed the panel an old document, not a new one with a lower number.
 
 type Json = Record<string, any>;
+
+/**
+ * Harness alpha.59 (revision 3): none of the revision 4 sections and fields —
+ * no run slice, tracker questions, forecast or updates, no tracker health,
+ * no queue runner, blocker order, failure class, answer location, question
+ * options or rationale.
+ */
+export function asAlpha59<T>(doc: T): T {
+  const d = structuredClone(doc) as Json;
+  d.viewRevision = 3;
+  for (const k of ['scope', 'sourceQuestions', 'forecast', 'updates']) delete d[k];
+  if (d.truncated) {
+    delete d.truncated.scope;
+    delete d.truncated.sourceQuestions;
+    if (!Object.keys(d.truncated).length) delete d.truncated;
+  }
+  if (d.health) delete d.health.sources;
+  if (d.progress?.queue)
+    for (const k of ['runner', 'restartBy', 'line']) delete d.progress.queue[k];
+  for (const w of [...(d.works ?? []), ...(d.work ? [d.work] : [])]) {
+    for (const b of w.blockers ?? []) delete b.step;
+    if (w.attempts?.lastFailure) {
+      delete w.attempts.lastFailure.kind;
+      delete w.attempts.lastFailure.counted;
+    }
+    if (w.question) delete w.question.line;
+  }
+  for (const q of d.questions ?? []) {
+    delete q.options;
+    delete q.rationale;
+    delete q.line;
+  }
+  return d as T;
+}
 
 /**
  * Harness alpha.57/58 (revision 2): no `unused` stages, and no prepare
@@ -11,7 +45,7 @@ type Json = Record<string, any>;
  * added there) and inside the integration step.
  */
 export function asAlpha57<T>(doc: T): T {
-  const d = structuredClone(doc) as Json;
+  const d = asAlpha59(doc) as Json;
   d.viewRevision = 2;
   for (const a of d.attempts ?? []) {
     const stages: Json[] = a.stages ?? [];

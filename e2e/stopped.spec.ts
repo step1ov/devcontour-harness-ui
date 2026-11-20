@@ -39,12 +39,20 @@ test('stopped run: one decision for you after the lead, the waits say whose turn
 }) => {
   await page.goto(url.replace(/\/?$/, '/') + '?lang=ru#/');
   const main = page.locator('main');
-  // No controller and nothing running: the queue stands, it does not «go» (F-X).
+  // The harness says nobody runs the queue (revision 4 `queue.runner`): it stands, it does not «go».
   await expect(main.getByTestId('queue-state')).toHaveText('Очередь стоит');
+  await expect(main.getByTestId('queue-who')).toContainText(
+    'никто не запущен: после ответа или решения нужен новый запуск (ведущий: harness run). — запускает: ведущий',
+  );
+  // The forecast cannot say the time left yet: the ring is unknown, not zero.
+  const time = main.getByTestId('ring-time').getByRole('progressbar');
+  await expect(time).toHaveAttribute('data-state', 'unknown');
+  await expect(time).not.toHaveAttribute('aria-valuenow');
+  await expect(main.getByTestId('ring-time')).toContainText('сколько осталось — неизвестно');
   await expect(main.getByTestId('story')).toHaveText(
     'Сейчас ничего не выполняется: работа ждёт вашего ответа или решения.',
   );
-  await expect(main.getByTestId('problems')).toContainText('очередь стоит: harness не запущен');
+  await expect(main.getByTestId('problems')).toContainText('Очередь стоит — никто не запущен');
   await expect(main.getByTestId('sentence')).toHaveText(
     'Сейчас: остановлено 1. От вас: принять 1 решение (после ведущего).',
   );

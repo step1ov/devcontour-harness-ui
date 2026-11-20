@@ -1,6 +1,6 @@
 {
   "viewVersion": 1,
-  "viewRevision": 3,
+  "viewRevision": 4,
   "generatedAt": "2026-11-19T12:00:00.000Z",
   "source": {
     "producer": "fixture",
@@ -170,7 +170,9 @@
           "attempt": 1,
           "bucket": "defect",
           "plain": "проверка не прошла: lint нашёл лишний импорт",
-          "at": "2026-11-19T11:40:30.000Z"
+          "at": "2026-11-19T11:40:30.000Z",
+          "kind": "gate",
+          "counted": true
         }
       },
       "liveness": "active",
@@ -330,7 +332,19 @@
       "title": "Какой разделитель использовать в CSV?",
       "createdAt": "2026-11-19T11:40:00.000Z",
       "impact": "user-visible",
-      "plain": "Меняет, как выгруженный файл открывается в табличных программах."
+      "plain": "Меняет, как выгруженный файл открывается в табличных программах.",
+      "options": [
+        {
+          "id": "comma",
+          "label": "запятая (,)"
+        },
+        {
+          "id": "semicolon",
+          "label": "точка с запятой (;)",
+          "recommended": true
+        }
+      ],
+      "rationale": "табличные программы с русской локалью открывают файл с «;» без настройки"
     },
     {
       "requestId": "q-12",
@@ -351,7 +365,8 @@
         "line": "ответил ведущий (технический вопрос): хватает встроенного Intl.DateTimeFormat, без новой зависимости"
       },
       "title": "Какую библиотеку дат использовать для форматирования?",
-      "createdAt": "2026-11-19T11:25:00.000Z"
+      "createdAt": "2026-11-19T11:25:00.000Z",
+      "line": "ответ передан попытке 2"
     }
   ],
   "escalations": [],
@@ -378,7 +393,9 @@
     "done": 1,
     "waitingOperator": 1,
     "queue": {
-      "paused": false
+      "paused": false,
+      "runner": "running",
+      "line": "Очередь идёт: harness запущен."
     }
   },
   "history": {
@@ -463,7 +480,18 @@
       "drifted": 1,
       "unavailable": 0
     },
-    "warnings": []
+    "warnings": [],
+    "sources": [
+      {
+        "connector": "relay-main",
+        "provider": "relay",
+        "level": "below-recommended",
+        "taskContext": false,
+        "contractVersion": 1,
+        "line": "Relay без контекста задачи: исполнитель не получит описание функции и сценария; нужна Relay ≥ 0.14.0",
+        "checkedAt": "2026-11-19T11:55:00.000Z"
+      }
+    ]
   },
   "activity": [
     {
@@ -616,5 +644,126 @@
       "title": "Заметка F2 к плану принята пока",
       "reason": "заметка о формулировке в плане; для пользователя ничего не меняется"
     }
-  ]
+  ],
+  "scope": {
+    "tasks": [
+      {
+        "id": "rt-demo-1",
+        "connector": "relay-main",
+        "key": "DEMO-1",
+        "title": "Добавить greet(name)",
+        "workId": "add-greeting",
+        "state": "in-harness"
+      },
+      {
+        "id": "rt-demo-2",
+        "connector": "relay-main",
+        "key": "DEMO-2",
+        "title": "Форматировать даты по локали",
+        "workId": "locale-format",
+        "state": "in-harness"
+      },
+      {
+        "id": "rt-demo-3",
+        "connector": "relay-main",
+        "key": "DEMO-3",
+        "title": "Выгрузить отчёт в CSV",
+        "workId": "export-csv",
+        "state": "in-harness"
+      },
+      {
+        "id": "rt-demo-4",
+        "connector": "relay-main",
+        "key": "DEMO-4",
+        "title": "Описать выгрузку",
+        "workId": "docs-page",
+        "state": "in-harness"
+      },
+      {
+        "id": "rt-demo-5",
+        "connector": "relay-main",
+        "key": "DEMO-5",
+        "title": "Импорт отчёта из CSV",
+        "state": "not-handed-over",
+        "plain": "ещё не передана в harness"
+      },
+      {
+        "id": "rt-demo-6",
+        "connector": "relay-main",
+        "key": "DEMO-6",
+        "title": "Печать отчёта",
+        "state": "not-ready",
+        "plain": "у задачи нет критериев приёмки"
+      }
+    ]
+  },
+  "sourceQuestions": [
+    {
+      "connector": "relay-main",
+      "provider": "relay",
+      "id": "rq-41",
+      "ref": "Q-41",
+      "title": "Вопрос: нужна ли выгрузка в Excel?",
+      "question": "Делать ли вместе с CSV выгрузку в .xlsx?",
+      "options": ["только CSV", "CSV и .xlsx"],
+      "recommendation": "в этом выпуске только CSV; .xlsx — отдельной задачей",
+      "provisional": "работа идёт только с CSV",
+      "tasks": ["DEMO-3"],
+      "url": "https://relay.example.test/docs/Q-41",
+      "readAt": "2026-11-19T11:55:00.000Z"
+    }
+  ],
+  "forecast": {
+    "progress": {
+      "percent": 23,
+      "weighted": 1.4,
+      "total": 6,
+      "done": 1,
+      "inWork": 1,
+      "left": 5,
+      "basis": "scope",
+      "line": "готово ~23 %, осталось задач: 5 из 6, в работе: 1"
+    },
+    "time": {
+      "startedAt": "2026-11-19T09:10:00.000Z",
+      "elapsedMs": 10200000,
+      "remaining": {
+        "loMs": 5400000,
+        "hiMs": 10800000,
+        "samples": 6,
+        "attemptsPerTask": 1.2
+      },
+      "humanWait": {
+        "works": 1,
+        "ms": 1200000,
+        "since": "2026-11-19T11:40:00.000Z"
+      },
+      "line": "прошло 2 ч 50 мин · осталось ~1 ч 30 мин – 3 ч; ждут людей сейчас: 1, до 20 мин — в прогноз не входит"
+    },
+    "assumptions": [
+      "объём: все задачи среза прогона, в том числе не переданные в harness (вес 0); закрытая в источнике без harness — 100 %, отменённая — вне объёма",
+      "принято — 100 %; работа в попытке — доля этапов до текущего (подготовка, написание, проверки, ревью, интеграция); между попытками (ожидание, очередь) — 0",
+      "осталось: незавершённая доля × длительность попытки p50–p90 × попыток на принятую задачу; нижняя граница — параллельно по concurrency, верхняя — последовательно",
+      "ожидание людей и ведущего в прогноз не входит"
+    ]
+  },
+  "updates": {
+    "state": "available",
+    "mode": "notify",
+    "current": {
+      "harness": "0.1.0-alpha.60",
+      "ui": "0.1.0-alpha.5"
+    },
+    "available": {
+      "harness": "0.1.0-alpha.61",
+      "ui": "0.1.0-alpha.6"
+    },
+    "checkedAt": "2026-11-19T08:00:00.000Z",
+    "line": "Доступна harness 0.1.0-alpha.61 + панель 0.1.0-alpha.6 (сейчас harness 0.1.0-alpha.60 + панель 0.1.0-alpha.5). Что нового — harness update --check; обновить — harness update --apply --state .harness/state",
+    "whatsNew": [
+      "harness 0.1.0-alpha.61: прогноз выпуска учитывает перерывы между попытками",
+      "панель 0.1.0-alpha.6: история прогноза на вкладке «История»"
+    ],
+    "command": "harness update --apply --state .harness/state"
+  }
 }

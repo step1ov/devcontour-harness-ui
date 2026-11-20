@@ -1,6 +1,6 @@
 {
   "viewVersion": 1,
-  "viewRevision": 3,
+  "viewRevision": 4,
   "generatedAt": "2026-11-20T09:24:39.569Z",
   "source": {
     "producer": "devcontour-harness",
@@ -115,19 +115,23 @@
           "attempt": 3,
           "bucket": "time-limit",
           "plain": "время — превышен предел времени",
-          "at": "2026-11-20T09:20:24.198Z"
+          "at": "2026-11-20T09:20:24.198Z",
+          "kind": "timeout",
+          "counted": true
         }
       },
       "blockers": [
         {
           "code": "APPROVAL_STALE",
           "plain": "политика изменилась после согласования — нужно согласовать план заново",
-          "actor": "lead"
+          "actor": "lead",
+          "step": 1
         },
         {
           "code": "ATTEMPTS_EXHAUSTED",
           "plain": "попытки исчерпаны (3 из 3) — нужен ваш сброс попыток",
-          "actor": "operator"
+          "actor": "operator",
+          "step": 2
         }
       ],
       "question": {
@@ -174,12 +178,14 @@
         {
           "code": "APPROVAL_STALE",
           "plain": "политика изменилась после согласования — нужно согласовать план заново",
-          "actor": "lead"
+          "actor": "lead",
+          "step": 1
         },
         {
           "code": "NOT_READY",
           "plain": "ждёт зависимости tw1a2b3c4d5e6f7a8b9c0 — она остановлена, дальше: сбросить попытки",
-          "actor": "operator"
+          "actor": "operator",
+          "step": 2
         }
       ],
       "dependsOn": ["tw1a2b3c4d5e6f7a8b9c0"],
@@ -280,7 +286,10 @@
     "done": 0,
     "waitingOperator": 1,
     "queue": {
-      "paused": false
+      "paused": false,
+      "runner": "not-running",
+      "restartBy": "lead",
+      "line": "Очередь стоит — никто не запущен: после ответа или решения нужен новый запуск (ведущий: harness run)."
     }
   },
   "history": {
@@ -385,5 +394,33 @@
       }
     ]
   },
-  "activity": []
+  "activity": [],
+  "forecast": {
+    "progress": {
+      "percent": 0,
+      "weighted": 0,
+      "total": 2,
+      "done": 0,
+      "inWork": 0,
+      "left": 2,
+      "basis": "works",
+      "line": "готово ~0 %, осталось задач: 2 из 2"
+    },
+    "time": {
+      "startedAt": "2026-11-20T08:34:00.000Z",
+      "elapsedMs": 3039569,
+      "humanWait": {
+        "works": 1,
+        "ms": 255371,
+        "since": "2026-11-20T09:20:24.198Z"
+      },
+      "line": "прошло 50 мин · сколько осталось — неизвестно (закончившихся попыток меньше 5); ждут людей сейчас: 1, до 4 мин — в прогноз не входит"
+    },
+    "assumptions": [
+      "объём: только работы harness (среза связки нет)",
+      "принято — 100 %; работа в попытке — доля этапов до текущего (подготовка, написание, проверки, ревью, интеграция); между попытками (ожидание, очередь) — 0",
+      "осталось: незавершённая доля × длительность попытки p50–p90 × попыток на принятую задачу; нижняя граница — параллельно по concurrency, верхняя — последовательно",
+      "ожидание людей и ведущего в прогноз не входит"
+    ]
+  }
 }

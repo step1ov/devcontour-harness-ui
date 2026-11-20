@@ -19,6 +19,7 @@ import {
   AcceptedLine,
   AttemptsText,
   AnswerBasisLine,
+  QuestionExtras,
   BlockerLine,
   Codes,
   Heading,
@@ -226,6 +227,12 @@ export function WorkDetail({
               <>
                 {w.lastFailure(a.lastFailure.attempt, a.lastFailure.plain)}{' '}
                 {w.failureGroup(label(t.bucket, a.lastFailure.bucket))}
+                {a.lastFailure.counted === undefined ? null : (
+                  <span data-testid="failure-counted">
+                    {' '}
+                    {a.lastFailure.counted ? t.r4.counted : t.r4.notCounted}.
+                  </span>
+                )}
               </>
             ) : a.failed > 0 ? (
               w.failureUnknown
@@ -351,6 +358,14 @@ export function WorkDetail({
         <Heading t={t} term="technical">
           {w.questions}
         </Heading>
+        {detail.work.question?.line?.trim() &&
+        !detail.questions.some(
+          (q) => q.requestId === detail.work.question!.requestId && q.line?.trim(),
+        ) ? (
+          <p className="hui-muted" data-testid="work-question-line">
+            {detail.work.question.line}
+          </p>
+        ) : null}
         {detail.questions.length === 0 ? (
           <p className="hui-muted">{w.noQuestions}</p>
         ) : (
@@ -367,6 +382,7 @@ export function WorkDetail({
                 ) : null}
                 <div className="hui-muted">{questionStatus(q, lang).text}</div>
                 <AnswerBasisLine q={q} t={t} timeZone={timeZone} now={clock} />
+                <QuestionExtras q={q} t={t} />
               </li>
             ))}
           </ul>

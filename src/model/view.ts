@@ -1,10 +1,10 @@
 // Operator view: the read-only document the panel renders. The schema is
 // owned by devcontour-harness (`operatorViewSchema` in its
 // src/contracts/operator-view.ts, JSON Schema schemas/operator-view.schema.json
-// and schemas/work-detail-view.schema.json, harness 0.1.0-alpha.59, view
-// version 1, revision 3; every revision 1–3 field is optional, so alpha.55
-// (revision 0), alpha.56 (1) and alpha.57/58 (2) documents have the same
-// type). These types mirror it field by field; tests/contract.test.ts
+// and schemas/work-detail-view.schema.json, harness 0.1.0-alpha.60, view
+// version 1, revision 4; every revision 1–4 field is optional, so alpha.55
+// (revision 0), alpha.56 (1), alpha.57/58 (2) and alpha.59 (3) documents have
+// the same type). These types mirror it field by field; tests/contract.test.ts
 // validates the fixtures against copies of the harness JSON Schemas. A host
 // adapter that builds a view from its own store follows the same schema.
 // Pure types: no node:*, no React.
@@ -183,6 +183,23 @@ export interface OperatorQuestion {
   /** Clipped and masked by the projection. */
   title?: string;
   createdAt: string;
+  /** Answer options of the writer, at most 10, one may be recommended (revision 4). */
+  options?: QuestionOption[];
+  /** The writer's rationale (revision 4). Masked, clipped (200); absent with `--no-titles`. */
+  rationale?: string;
+  /**
+   * Where the applied answer is (revision 4): with the running attempt
+   * («ждать нечего») or with a finished one that did not pass it on («его
+   * получит следующая попытка»).
+   */
+  line?: string;
+}
+
+/** One answer option of a writer question (revision 4, harness alpha.60). */
+export interface QuestionOption {
+  id: string;
+  label: string;
+  recommended?: true;
 }
 
 /** Grounds of the last answer to a question (revision 1, harness alpha.56). */
@@ -229,6 +246,11 @@ export interface BlockerView {
   plain?: string;
   /** Who has to act; `null` = nobody, the work just waits its turn. */
   actor: Actor | null;
+  /**
+   * Order of removal when different people remove the blockers (revision 4,
+   * harness alpha.60): 1 goes first (a plan approval before an attempt reset).
+   */
+  step?: number;
 }
 
 /** Observed duration of a stage in this state (P2); a range, never a promise. */
@@ -302,6 +324,13 @@ export interface WorkView {
       /** Plain sentence, e.g. "environment: the port is busy". Masked and clipped (160). */
       plain: string;
       at?: string;
+      /**
+       * Engine failure class (`failureKind`: `environment`, `needs-input`,
+       * `needs-lead`, `timeout`…), revision 4 (harness alpha.60). Absent = unknown.
+       */
+      kind?: string;
+      /** Whether the attempt counts against the limit (revision 4). Absent = unknown. */
+      counted?: boolean;
     };
   };
   liveness?: 'active' | 'quiet' | 'stalled';
@@ -313,7 +342,8 @@ export interface WorkView {
   dependsOn?: string[];
   /** Accepted locally and, as far as the local tracking ref knows, on the remote (P2). */
   target?: TargetView;
-  question?: Pick<OperatorQuestion, 'requestId' | 'state' | 'severity'>;
+  /** `line` (revision 4): where the applied answer is, in the view language. */
+  question?: Pick<OperatorQuestion, 'requestId' | 'state' | 'severity' | 'line'>;
   spend: { calls: number; usd: Bounded; durationMs: number };
   resultSha?: string;
 }
@@ -332,6 +362,17 @@ export interface ViewProgress {
     detail?: string;
     actor?: Actor;
     action?: string;
+    /**
+     * Who moves the queue (revision 4, harness alpha.60): `running` — a live
+     * controller, a running attempt or a plan review in a live run;
+     * `not-running` — nobody runs, only a new start moves the open works.
+     * Absent = an older harness.
+     */
+    runner?: 'running' | 'not-running';
+    /** Who starts the run again when nobody runs (`lead`: `harness run`). */
+    restartBy?: Actor;
+    /** The same as a plain line («очередь стоит — никто не запущен; …»). */
+    line?: string;
   };
 }
 
@@ -404,6 +445,101 @@ export interface ViewHealth {
   drift: { checked: number; drifted: number; unavailable: number };
   /** Plain `message` in the requested language (`--lang`); codes are stable. */
   warnings: { code: ViewWarningCode; message: string }[];
+  /** Compatibility with each task source by its last observation (revision 4). */
+  sources?: SourceHealth[];
+}
+
+/** One task source in health (revision 4, harness alpha.60). */
+export interface SourceHealth {
+  connector: string;
+  provider: string;
+  /** `recommended`, `below-recommended`; unknown values are shown as is. */
+  level?: string;
+  /** Whether the source declared the task context. */
+  taskContext?: boolean;
+  contractVersion?: number;
+  /** Plain line in the view language. */
+  line?: string;
+  checkedAt: string;
+}
+
+/**
+ * A task of the run slice (revision 4, harness alpha.60): every task of the
+ * last snapshot of each connector, ready or not. `in-harness` has a
+ * `workId`; `not-ready` has the first snapshot reason in `plain`;
+ * `not-handed-over` has a snapshot and no work yet.
+ */
+export interface ScopeTaskView {
+  id: string;
+  connector: string;
+  key?: string;
+  title?: string;
+  workId?: string;
+  state: 'in-harness' | 'not-handed-over' | 'not-ready';
+  plain?: string;
+}
+
+/** An owner question the lead wrote in the task source (revision 4). Read-only: answered there. */
+export interface SourceQuestion {
+  connector: string;
+  provider: string;
+  id: string;
+  /** Document key in the source. */
+  ref: string;
+  title?: string;
+  question?: string;
+  options?: string[];
+  recommendation?: string;
+  /** Provisional answer the work goes on with meanwhile. */
+  provisional?: string;
+  /** Task keys it is about. */
+  tasks?: string[];
+  /** Page of the document in the source's web UI. */
+  url?: string;
+  /** When the connector last read it (not a live read). */
+  readAt: string;
+}
+
+/** Release forecast (revision 4, harness alpha.60, proposal P11): an observation, not a promise. */
+export interface ForecastView {
+  progress: {
+    /** Rounded share of the weighted scope; never 100 while tasks are left. */
+    percent: number;
+    weighted: number;
+    total: number;
+    done: number;
+    inWork: number;
+    left: number;
+    /** `scope`: the run slice of the connector; `works`: harness works only. */
+    basis: 'scope' | 'works';
+    line: string;
+  };
+  time: {
+    startedAt?: string;
+    /** From the start of the first attempt of the scope; absent = not started. */
+    elapsedMs?: number;
+    /** Absent below the sample minimum: unknown, never zero. */
+    remaining?: { loMs: number; hiMs: number; samples: number; attemptsPerTask: number };
+    /** Works waiting for a person or the lead now, and the longest wait; not in the forecast. */
+    humanWait: { works: number; ms: number; since?: string };
+    line: string;
+  };
+  /** The assumptions in words, in the view language. */
+  assumptions: string[];
+}
+
+/** Updates of the harness and the panel by the last `harness update --check` (revision 4). */
+export interface UpdatesView {
+  state: 'up-to-date' | 'available' | 'needs-decision' | 'unavailable' | 'not-checked';
+  mode: 'auto' | 'notify' | 'off';
+  current: { harness: string; ui?: string };
+  available?: { harness: string; ui?: string };
+  checkedAt?: string;
+  /** «Доступна … — что нового · как обновить». */
+  line: string;
+  whatsNew?: string[];
+  /** The harness command that installs it. */
+  command?: string;
 }
 
 /**
@@ -518,6 +654,14 @@ export interface OperatorView {
   activity?: ActivityEntry[];
   /** At most 50 (P2). Absent = the producer reports no decisions. */
   decisions?: DecisionView[];
+  /** The whole run slice, at most 200 tasks (revision 4). Absent = no connector. */
+  scope?: { total?: number; tasks: ScopeTaskView[] };
+  /** Open owner questions from the task source, at most 50 (revision 4). */
+  sourceQuestions?: SourceQuestion[];
+  /** Release forecast (revision 4). Absent = an older harness or an empty scope. */
+  forecast?: ForecastView;
+  /** Updates (revision 4). Absent = no updates config and no check. */
+  updates?: UpdatesView;
   /** Entries omitted by the projection's per-list limits, by list. */
   truncated?: Partial<
     Record<
@@ -535,7 +679,9 @@ export interface OperatorView {
       | 'dependsOn'
       | 'alternates'
       | 'activity'
-      | 'decisions',
+      | 'decisions'
+      | 'scope'
+      | 'sourceQuestions',
       number
     >
   >;

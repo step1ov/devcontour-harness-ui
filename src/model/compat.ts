@@ -20,7 +20,7 @@ export type ViewCheck =
     };
 
 /** Highest `viewRevision` this build knows how to render in full. */
-export const KNOWN_VIEW_REVISION = 3;
+export const KNOWN_VIEW_REVISION = 4;
 
 type Obj = Record<string, unknown>;
 const isObject = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -179,12 +179,14 @@ const work = obj({
     rechecks: C,
     neutral: obj({ used: C, max: C }),
     line: opt(S),
-    lastFailure: opt(obj({ attempt: C, bucket: S, plain: S, at: opt(I) })),
+    lastFailure: opt(
+      obj({ attempt: C, bucket: S, plain: S, at: opt(I), kind: opt(S), counted: opt(B) }),
+    ),
   }),
   liveness: opt(S),
   runtime: opt(S),
   model: opt(S),
-  blockers: arr(obj({ code: S, plain: opt(S), actor: nul(S) }), 10),
+  blockers: arr(obj({ code: S, plain: opt(S), actor: nul(S), step: opt(C) }), 10),
   dependsOn: opt(arr(S, 50)),
   target: opt(
     obj({
@@ -200,7 +202,7 @@ const work = obj({
       }),
     }),
   ),
-  question: opt(obj({ requestId: S, state: S, severity: N })),
+  question: opt(obj({ requestId: S, state: S, severity: N, line: opt(S) })),
   spend: obj({ calls: N, usd: bounded, durationMs: N }),
   resultSha: opt(S),
 });
@@ -239,6 +241,9 @@ const question: Check = (v, path, out) => {
     answerBasis: opt(obj({ by: S, rule: opt(S), reason: opt(S), impact: S, at: I, line: S })),
     title: opt(S),
     createdAt: I,
+    options: opt(arr(obj({ id: S, label: S, recommended: opt(B) }), 10)),
+    rationale: opt(S),
+    line: opt(S),
   })(v, path, out);
   if (!isObject(v)) return;
   // Paths kept from the first gate: ids and counts are reported together.
@@ -278,7 +283,16 @@ const overview = obj({
     running: C,
     done: C,
     waitingOperator: C,
-    queue: obj({ paused: B, reason: opt(S), detail: opt(S), actor: opt(S), action: opt(S) }),
+    queue: obj({
+      paused: B,
+      reason: opt(S),
+      detail: opt(S),
+      actor: opt(S),
+      action: opt(S),
+      runner: opt(S),
+      restartBy: opt(S),
+      line: opt(S),
+    }),
   }),
   history: obj({
     from: I,
@@ -331,6 +345,20 @@ const overview = obj({
     spentTotalUsd: bounded,
     drift: obj({ checked: C, drifted: C, unavailable: C }),
     warnings: arr(obj({ code: S, message: S }), 20),
+    sources: opt(
+      arr(
+        obj({
+          connector: S,
+          provider: S,
+          level: opt(S),
+          taskContext: opt(B),
+          contractVersion: opt(N),
+          line: opt(S),
+          checkedAt: I,
+        }),
+        10,
+      ),
+    ),
   }),
   activity: opt(
     arr(obj({ at: I, actor: S, action: S, workId: opt(S), subject: opt(S), plain: S }), 50),
@@ -353,6 +381,76 @@ const overview = obj({
       }),
       50,
     ),
+  ),
+  scope: opt(
+    obj({
+      total: opt(C),
+      tasks: arr(
+        obj({
+          id: S,
+          connector: S,
+          key: opt(S),
+          title: opt(S),
+          workId: opt(S),
+          state: S,
+          plain: opt(S),
+        }),
+        200,
+      ),
+    }),
+  ),
+  sourceQuestions: opt(
+    arr(
+      obj({
+        connector: S,
+        provider: S,
+        id: S,
+        ref: S,
+        title: opt(S),
+        question: opt(S),
+        options: opt(arr(S, 10)),
+        recommendation: opt(S),
+        provisional: opt(S),
+        tasks: opt(arr(S, 20)),
+        url: opt(S),
+        readAt: I,
+      }),
+      50,
+    ),
+  ),
+  forecast: opt(
+    obj({
+      progress: obj({
+        percent: N,
+        weighted: N,
+        total: C,
+        done: C,
+        inWork: C,
+        left: C,
+        basis: S,
+        line: S,
+      }),
+      time: obj({
+        startedAt: opt(I),
+        elapsedMs: opt(C),
+        remaining: opt(obj({ loMs: C, hiMs: C, samples: C, attemptsPerTask: N })),
+        humanWait: obj({ works: C, ms: C, since: opt(I) }),
+        line: S,
+      }),
+      assumptions: arr(S, 10),
+    }),
+  ),
+  updates: opt(
+    obj({
+      state: S,
+      mode: S,
+      current: obj({ harness: S, ui: opt(S) }),
+      available: opt(obj({ harness: S, ui: opt(S) })),
+      checkedAt: opt(I),
+      line: S,
+      whatsNew: opt(arr(S, 10)),
+      command: opt(S),
+    }),
   ),
   truncated: opt(rec(C)),
 });

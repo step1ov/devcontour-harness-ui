@@ -65,11 +65,14 @@ export function taskCard(view: OperatorView, steps: NextSteps, w: WorkView): Tas
   } else if (w.stage.name === 'cancelled') {
     phase = 'cancelled';
     next = { kind: 'nobody' };
-  } else if (SLOT_STAGES.has(w.stage.name)) {
+  } else if (SLOT_STAGES.has(w.stage.name) || HARNESS_STAGES.has(w.stage.name)) {
     // A running work is never "waiting" (F-J): the harness acts, unless the
     // view names someone else for it (the same people as on the Overview).
     phase = 'running';
-    const actors = actorsOn(steps, w.id, view);
+    // In a plan review the controller is the harness itself (its `review-plan` step).
+    const actors = actorsOn(steps, w.id, view).filter(
+      (x) => !(HARNESS_STAGES.has(w.stage.name) && x === 'controller'),
+    );
     next = actors.length ? { kind: 'actors', actors } : { kind: 'harness', stage: w.stage.name };
   } else {
     // Questions the lead answers by the policy name the lead, not you (F-W).
@@ -89,6 +92,13 @@ export function taskCard(view: OperatorView, steps: NextSteps, w: WorkView): Tas
   }
   return { work: w, phase, next, questions, reviews, waitsOn: dep?.on ?? [] };
 }
+
+/**
+ * Stages where the harness itself acts without holding a worker slot:
+ * `plan-review` (revision 4, harness alpha.60) — a plan review running in a
+ * live `harness run`, the harness's move, not the lead's.
+ */
+export const HARNESS_STAGES: ReadonlySet<string> = new Set(['plan-review']);
 
 /** Order of the task list: what moves now, what waits for people, the rest, the finished. */
 const ORDER: TaskPhase[] = [
@@ -293,26 +303,55 @@ const WRITER_BLOCKED = [
 ];
 
 /**
- * A writer that stopped on its environment (revision 3, harness alpha.59:
- * cause `writer-environment`): the sandbox closed a step the writer must
- * run, the lead decides, and the attempt is not counted. The view has no
- * cause field (proposal P13); the panel recognises the stop only by all of
- * what the harness emits for it — a stopped work whose stage asks the lead
- * to diagnose, and a last failure of group `environment` whose detail is
- * the harness's fixed phrase for this stop. Anything else (a busy port, a
- * stale approval, a preflight stop) is not this stop. The harness never
- * counts such an attempt, so «не засчитана» is said only here.
+ * A stop that waits for the lead and did not use an attempt. `env`: the
+ * writer's environment closed a step it must run (writer-environment) —
+ * said only where the document proves it (the alpha.59 signs below);
+ * revision 4 has no field that tells it from a preflight stop, so there it
+ * is `false` and the harness's own sentence says what happened. `summary`
+ * — the technical detail for «подробности».
  */
-export function writerEnvironmentStop(w: WorkView): { summary?: string } | undefined {
+export interface LeadStop {
+  env: boolean;
+  summary?: string;
+}
+
+/**
+ * A stopped work that waits for the lead now (`stage.needs`: the lead) and
+ * whose last attempt was not counted.
+ *
+ * Revision 4 (harness alpha.60) says it with facts: `lastFailure.kind`
+ * `needs-lead` and `counted: false`; the panel reads no phrase then, and a
+ * revision 4 document without those fields says nothing (unknown).
+ *
+ * Revisions 0–3 have no cause field (proposal P13): the stop is recognised
+ * only by all of what harness alpha.59 emits for a writer-environment stop
+ * — the lead diagnoses, the failure group is `environment` and the detail
+ * is the harness's fixed phrase. Anything else is not this stop.
+ */
+export function leadStopOf(w: WorkView, viewRevision = 4): LeadStop | undefined {
   const f = w.attempts.lastFailure;
-  if (!f || f.bucket !== 'environment' || w.stage.name !== 'stopped') return undefined;
-  if (w.stage.needs?.actor !== 'lead' || w.stage.needs.action !== 'diagnose-failure')
-    return undefined;
+  if (!f || w.stage.name !== 'stopped' || w.stage.needs?.actor !== 'lead') return undefined;
+  if (f.kind !== undefined || f.counted !== undefined || viewRevision >= 4)
+    return f.kind === 'needs-lead' && f.counted === false ? { env: false } : undefined;
+  if (f.bucket !== 'environment' || w.stage.needs.action !== 'diagnose-failure') return undefined;
   const cut = f.plain.indexOf(' — ');
   const detail = (cut >= 0 ? f.plain.slice(cut + 3) : f.plain).trim();
   const phrase = WRITER_BLOCKED.find((p) => detail.startsWith(p));
   if (!phrase) return undefined;
   // The writer's own words («listen EPERM …») — technical: for «подробности» only.
   const summary = detail.slice(phrase.length).replace(/^:\s*/, '').trim();
-  return summary ? { summary } : {};
+  return summary ? { env: true, summary } : { env: true };
+}
+
+/**
+ * The writer-environment stop only (alpha.4 API): `leadStopOf` with `env`.
+ * @deprecated use `leadStopOf`.
+ */
+export function writerEnvironmentStop(
+  w: WorkView,
+  viewRevision = 3,
+): { summary?: string } | undefined {
+  const s = leadStopOf(w, viewRevision);
+  if (!s?.env) return undefined;
+  return s.summary ? { summary: s.summary } : {};
 }

@@ -7,7 +7,10 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import type { ReactElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { asAlpha55, asAlpha56 } from './legacy.ts';
+import { asAlpha55, asAlpha56, asAlpha59 } from './legacy.ts';
+
+// The revision 3 shape (harness alpha.59) of the fixtures: revision 4 is in revision4.test.tsx.
+
 import {
   Activity,
   Decisions,
@@ -31,7 +34,7 @@ import {
 } from '../src/index.ts';
 
 const read = (rel: string) => JSON.parse(readFileSync(new URL(rel, import.meta.url), 'utf8'));
-const vc = checkView(read('../fixtures/view.sample.json'));
+const vc = checkView(asAlpha59(read('../fixtures/view.sample.json')));
 if (!vc.ok) throw new Error(vc.message);
 const view: OperatorView = vc.view;
 const detailOf = (rel: string): WorkDetailView => {
@@ -42,7 +45,7 @@ const detailOf = (rel: string): WorkDetailView => {
 const running = detailOf('../fixtures/work.sample.json');
 const accepted = detailOf('../fixtures/work.accepted.sample.json');
 const ruView = (() => {
-  const c = checkView(read('../fixtures/ru/view.sample.json'));
+  const c = checkView(asAlpha59(read('../fixtures/ru/view.sample.json')));
   if (!c.ok) throw new Error(c.message);
   return c.view;
 })();

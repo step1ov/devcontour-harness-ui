@@ -15,7 +15,7 @@
 данные harness, а не пересказ агента: что ждёт вашего ответа, что идёт
 сейчас, как именно проверена работа и где лежит принятый результат.
 
-> Статус: `0.1.0-alpha.4`. Все экраны только для чтения: обзор, детали
+> Статус: `0.1.0-alpha.5`. Все экраны только для чтения: обзор, детали
 > работы, ревью, решения, кто что делал, настройки, история и здоровье, на
 > русском и английском. Данные — файл представления или живой
 > `harness view` (`--state`, harness `0.1.0-alpha.55` и новее). Схемой
@@ -28,7 +28,7 @@
 > зависимостей отдельным шагом со временем и неиспользуемое хранилище
 > зависимостей. С alpha.55–.58 всё прочее работает, как раньше.
 > [Дизайн](docs/design.md) описывает схему, экраны, безопасность и этапы;
-> изменения — в заметках к выпускам [0.1.0-alpha.4](docs/release-notes/0.1.0-alpha.4.md), [0.1.0-alpha.3](docs/release-notes/0.1.0-alpha.3.md), [0.1.0-alpha.2](docs/release-notes/0.1.0-alpha.2.md)
+> изменения — в заметках к выпускам [0.1.0-alpha.5](docs/release-notes/0.1.0-alpha.5.md), [0.1.0-alpha.4](docs/release-notes/0.1.0-alpha.4.md), [0.1.0-alpha.3](docs/release-notes/0.1.0-alpha.3.md), [0.1.0-alpha.2](docs/release-notes/0.1.0-alpha.2.md)
 > и [0.1.0-alpha.1](docs/release-notes/0.1.0-alpha.1.md).
 
 ## Язык
@@ -46,7 +46,7 @@
 версия, как и у harness):
 
 ```sh
-npm install --save-dev --save-exact devcontour-harness@0.1.0-alpha.59 devcontour-harness-ui@0.1.0-alpha.4
+npm install --save-dev --save-exact devcontour-harness@0.1.0-alpha.60 devcontour-harness-ui@0.1.0-alpha.5
 npx devcontour-harness-ui --demo --lang ru      # демонстрационные данные
 # → {"ok":true,"url":"http://127.0.0.1:4790/","port":4790,"readOnly":true,...}
 ```
@@ -145,6 +145,20 @@ import 'devcontour-harness-ui/styles.css';
 
 Представление не содержит промптов, логов, токенов и абсолютных путей; см.
 дизайн, §9.
+
+## Публикация
+
+Владелец публикует из актуального checkout:
+
+```sh
+git pull && npm ci && npm publish --tag alpha
+```
+
+`prepack` сначала сверяет `node_modules` и `package-lock.json` с
+`package.json` (`scripts/check-deps.mjs`) и при расхождении останавливает
+публикацию до сборки с сообщением «Зависимости не совпадают с
+package-lock.json — выполните npm ci и повторите npm publish» (English: “Dependencies do not match
+package-lock.json — run npm ci and repeat npm publish”) и списком расхождений.
 
 ## Лицензия
 

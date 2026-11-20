@@ -7,12 +7,18 @@
 import { instantMs } from '../model/compat.ts';
 import { dict, knownLabel, label, type Dict, type Lang } from '../model/dict.ts';
 import { formatElapsed, questionStatus, stageLabel } from '../model/format.ts';
-import { attemptAverage, outsideHarness, overallProgress, scopeOf } from '../model/scope.ts';
+import {
+  attemptAverage,
+  outsideHarness,
+  overallProgress,
+  scopeOf,
+  taskName,
+} from '../model/scope.ts';
 import { nextSteps, workName, withWorkNames, type NextSteps } from '../model/steps.ts';
 import {
   leadAnswers,
   taskCards,
-  writerEnvironmentStop,
+  leadStopOf,
   type TaskCard as Card_,
   type TaskPhase,
 } from '../model/tasks.ts';
@@ -23,6 +29,7 @@ import {
   AttemptsText,
   Block,
   Codes,
+  QuestionExtras,
   WorkEta,
   WorkRef,
   actorLabel,
@@ -89,27 +96,36 @@ export function Tasks({ view, lang = 'ru', now, onOpenWork, workHref, timeZone }
       </ul>
       {view.truncated?.works ? <p className="hui-muted">{t.overview.planClipped}</p> : null}
       {scope ? (
-        outside.length || unlisted ? (
-          <Block t={t} title={k.outside(outside.length + unlisted)} testid="tasks-outside">
-            <ul className="hui:grid hui:list-none hui:gap-2">
-              {outside.map((task) => (
-                <li
-                  key={task.id}
-                  className="hui:flex hui:flex-wrap hui:items-center hui:gap-2"
-                  data-testid="outside-task"
-                >
-                  <strong>{task.title ?? task.id}</strong>
-                  <Badge tone="outline">{label(t.overview.outsideState, task.state)}</Badge>
-                  {task.plain ? <span className="hui-muted">{task.plain}</span> : null}
-                </li>
-              ))}
-            </ul>
-            {unlisted ? <p className="hui-muted">{t.listClipped(unlisted)}</p> : null}
+        outside.length ? (
+          <Block t={t} title={k.outside(outside.length)} testid="tasks-outside">
+            {outside.length ? (
+              <ul className="hui:grid hui:list-none hui:gap-2">
+                {outside.map((task) => (
+                  <li
+                    key={task.id}
+                    className="hui:flex hui:flex-wrap hui:items-center hui:gap-2"
+                    data-testid="outside-task"
+                  >
+                    <strong>{taskName(task)}</strong>
+                    <Badge tone="outline">{label(t.overview.outsideState, task.state)}</Badge>
+                    {task.plain ? <span className="hui-muted">{task.plain}</span> : null}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            {unlisted ? <p className="hui-muted">{t.r4.scopeClipped(unlisted)}</p> : null}
           </Block>
+        ) : unlisted ? (
+          // Every listed task has a work; the clipped ones have an unknown state: no «(0)».
+          <p className="hui-muted" data-testid="scope-clipped">
+            {t.r4.scopeClipped(unlisted)}
+          </p>
         ) : null
       ) : (
         <p className="hui:text-xs hui:text-muted-foreground" data-testid="scope-missing">
-          {t.overview.scopeMissing}
+          {view.truncated?.scope
+            ? t.r4.scopeDropped(view.truncated.scope)
+            : t.overview.scopeMissing}
         </p>
       )}
       {other.length ? (
@@ -156,9 +172,11 @@ function TaskCardView({
   const rounds = code.reduce((n, r) => n + r.rounds.used, 0);
   const cap = code.length === 1 ? code[0]!.rounds.max : null;
   const firstBlocker = w.blockers.find((b) => b.actor !== null) ?? w.blockers[0];
-  const blockedEnv = writerEnvironmentStop(w);
+  const blockedEnv = leadStopOf(w, view.viewRevision);
   const nowText = blockedEnv
-    ? k.nowWriterEnv
+    ? blockedEnv.env
+      ? k.nowWriterEnv
+      : t.r4.nowLeadStop
     : c.phase === 'accepted'
       ? k.nowAccepted
       : c.phase === 'cancelled'
@@ -208,7 +226,14 @@ function TaskCardView({
             {k.waitsOn(c.waitsOn.map((id) => workName(view, id)).join(', '))}
           </p>
         ) : null}
-        <WorkEta w={w} t={t} lang={lang} clock={clock} average={attemptAverage(view)} />
+        <WorkEta
+          w={w}
+          t={t}
+          lang={lang}
+          clock={clock}
+          average={attemptAverage(view)}
+          forecast={view.forecast !== undefined}
+        />
         {c.phase === 'accepted' ? (
           <AcceptedLine w={w} lang={lang} linkProps={links} timeZone={timeZone} now={clock} />
         ) : null}
@@ -225,12 +250,15 @@ function TaskCardView({
               <AttemptsText line={a.line} t={t} />
             </span>
           ) : null}
-          {a.lastFailure && c.phase !== 'accepted' && !blockedEnv ? (
-            <span className="hui-muted">
+          {a.lastFailure && c.phase !== 'accepted' && (!blockedEnv || a.lastFailure.kind) ? (
+            <span className="hui-muted" data-testid="task-last-failure">
               {t.problems.lastFailure(
                 a.lastFailure.attempt,
                 withWorkNames(view, a.lastFailure.plain),
               )}
+              {a.lastFailure.counted === undefined
+                ? ''
+                : `; ${a.lastFailure.counted ? t.r4.counted : t.r4.notCounted}`}
             </span>
           ) : null}
         </div>
@@ -257,6 +285,12 @@ function TaskCardView({
         >
           <span className="hui-who">{next}</span>
         </p>
+        {w.question?.line?.trim() &&
+        !c.questions.some((q) => q.requestId === w.question!.requestId && q.line?.trim()) ? (
+          <p className="hui-muted" data-testid="task-question-line">
+            {w.question.line}
+          </p>
+        ) : null}
         {c.questions.length ? (
           <div data-testid="task-questions">
             <h4 className="hui:text-sm hui:font-semibold">{k.questions(c.questions.length)}</h4>
@@ -286,6 +320,7 @@ function TaskCardView({
                         : questionStatus(q, lang).text}
                     </p>
                     <AnswerBasisLine q={q} t={t} timeZone={timeZone} now={clock} />
+                    <QuestionExtras q={q} t={t} />
                     <Codes t={t} codes={[q.requestId, t.question.version(q.version)]} />
                   </li>
                 );

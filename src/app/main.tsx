@@ -11,6 +11,7 @@ import { History } from '../components/History.tsx';
 import { Overview } from '../components/Overview.tsx';
 import { Settings, type ThemeChoice } from '../components/Settings.tsx';
 import { Tasks } from '../components/Tasks.tsx';
+import { UpdatesBanner } from '../components/Updates.tsx';
 import { Alert } from '../components/ui/alert.tsx';
 import { Button } from '../components/ui/button.tsx';
 import { cn } from '../components/ui/cn.ts';
@@ -611,12 +612,15 @@ function App() {
         <Note bad>{t.app.notFound}</Note>
       );
     // Questions the lead answers by the policy are not announced as yours (F-W).
-    const waiting = splitQuestions(view, nextSteps(view)).yours.length;
-    const clipped = Boolean(view.truncated?.questions);
+    // Tracker questions to the owner (revision 4) are yours too.
+    const waiting =
+      splitQuestions(view, nextSteps(view)).yours.length + (view.sourceQuestions?.length ?? 0);
+    const clipped = Boolean(view.truncated?.questions || view.truncated?.sourceQuestions);
     body = (
       <>
         <Freshness generatedAt={view.generatedAt} live={live} />
         {check.newerRevision ? <Note>{t.app.newerRevision}</Note> : null}
+        <UpdatesBanner updates={view.updates} lang={lang} />
         {isEmpty(view) ? (
           <Note>
             {t.app.empty} <code>harness run</code>

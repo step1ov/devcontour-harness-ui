@@ -5,6 +5,7 @@
 import { dict, label } from '../model/dict.ts';
 import { formatDuration, formatUsd, formatWindow, usd } from '../model/format.ts';
 import { instantMs } from '../model/compat.ts';
+import { formatWhen } from '../model/i18n.ts';
 import type { OperatorView } from '../model/view.ts';
 import { Clipped, Codes, Heading, WorkRef, clockOf, type ScreenProps } from './common.tsx';
 import { DriftLine } from './WorkDetail.tsx';
@@ -135,6 +136,40 @@ export function Health({
         )}
         <Clipped n={view.truncated?.warnings} t={t} />
       </div>
+
+      {h.sources?.length ? (
+        <div className="hui-panel" data-testid="health-sources">
+          <h3 className="hui-subtitle">{t.r4.sourcesTitle}</h3>
+          <ul className="hui-list">
+            {h.sources.map((s) => (
+              <li
+                key={s.connector}
+                data-status={s.level === 'below-recommended' ? 'blocked' : undefined}
+              >
+                <strong>{s.connector}</strong> ({s.provider}):{' '}
+                {s.line?.trim()
+                  ? s.line
+                  : [
+                      s.level !== undefined ? label(t.r4.sourceLevel, s.level) : undefined,
+                      s.taskContext !== undefined ? t.r4.sourceContext(s.taskContext) : undefined,
+                    ]
+                      .filter(Boolean)
+                      .join('; ') || t.unknown}
+                <div className="hui-muted">
+                  {[
+                    s.contractVersion !== undefined
+                      ? t.r4.sourceContract(s.contractVersion)
+                      : undefined,
+                    t.r4.sourceChecked(formatWhen(s.checkedAt, lang, timeZone, now) ?? t.unknown),
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       <div className="hui-panel" data-testid="health-versions">
         <h3 className="hui-subtitle">{v.versions}</h3>
