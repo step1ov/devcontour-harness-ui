@@ -1,10 +1,8 @@
 // Contract with devcontour-harness: the view schema is owned by the harness.
 // tests/contract/harness/*.schema.json are verbatim copies of the harness
 // schemas (schemas/operator-view.schema.json, schemas/work-detail-view.schema.json
-// of the unreleased 0.1.0-alpha.62, view revision 4: the harness
-// fix/empty-state checkout, whose package still says 0.1.0-alpha.61 — refresh
-// from the published package on release); empty-state.view.json is a real
-// `harness view --lang en` envelope of that checkout for a state that does not
+// of 0.1.0-alpha.62, view revision 4); empty-state.view.json is a real
+// `harness view --lang en` envelope of that version for a state that does not
 // exist yet (examples/two-vendors policy). tests/contract/harness-0.1.0-alpha.60/
 // keeps the same files of 0.1.0-alpha.60 (revision 4 without
 // `progress.queue.neverRun` and `scopeReason`), harness-0.1.0-alpha.59/
@@ -102,8 +100,7 @@ test('both fixtures and a real harness document are valid under the harness sche
     assert.deepEqual(validate(detailSchema, read('../fixtures/ru/' + f)), [], f);
   assert.equal(harnessEmpty.ok, true);
   assert.equal(harnessEmpty.data.viewRevision, 4);
-  // The unreleased alpha.62 checkout: its package version is still alpha.61.
-  assert.equal(harnessEmpty.data.source.producerVersion, '0.1.0-alpha.61');
+  assert.equal(harnessEmpty.data.source.producerVersion, '0.1.0-alpha.62');
   // No state: no connector slice, no tracker questions, no forecast, no updates check.
   for (const k of ['scope', 'sourceQuestions', 'forecast', 'updates'])
     assert.equal(Object.hasOwn(harnessEmpty.data, k), false, k);
