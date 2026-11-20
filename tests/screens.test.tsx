@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import type { ReactElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { asAlpha55 } from './legacy.ts';
+import { asAlpha55, asAlpha56 } from './legacy.ts';
 import {
   Activity,
   Decisions,
@@ -559,8 +559,9 @@ test('who did what: [] is a quiet window, a missing feed is an older harness, cl
         ? /За окно \(24 ч\) ничего не происходило\./
         : /Nothing happened in the window \(24 h\)\./,
     );
-    const { activity: _a, ...old } = view;
-    const missing = html(<Activity view={old as OperatorView} lang={lang} />);
+    const missing = html(
+      <Activity view={asAlpha56({ ...view, truncated: { activity: 4 } })} lang={lang} />,
+    );
     assert.match(
       text(missing),
       lang === 'ru'
@@ -569,6 +570,7 @@ test('who did what: [] is a quiet window, a missing feed is an older harness, cl
     );
     assert.doesNotMatch(text(missing), /ничего не происходило|Nothing happened/);
     assert.match(missing, /data-testid="activity-missing"/);
+    assert.doesNotMatch(missing, /data-testid="activity-clipped"/);
   }
   // A 7-day window names itself.
   const week = {

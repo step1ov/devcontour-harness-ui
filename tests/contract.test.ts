@@ -88,6 +88,26 @@ test('both fixtures and a real harness document are valid under the harness sche
   assert.deepEqual(harnessEmpty.data.activity, []);
 });
 
+test('the old-harness transforms drop every revision 2 field (the old schemas allow activity)', () => {
+  const seeded = (doc: Json): Json => ({ ...structuredClone(doc), truncated: { activity: 3 } });
+  for (const [name, doc] of fixtures())
+    for (const old of [asAlpha56(seeded(doc)), asAlpha55(seeded(doc))]) {
+      assert.equal(Object.hasOwn(old, 'activity'), false, name);
+      assert.equal(Object.hasOwn(old.truncated ?? {}, 'activity'), false, name);
+      for (const w of [...(old.works ?? []), ...(old.work ? [old.work] : [])])
+        if (w.target) {
+          assert.equal(w.target.remote.state, 'unknown', name);
+          for (const k of ['line', 'checkedAt', 'trackingRef'])
+            assert.equal(Object.hasOwn(w.target.remote, k), false, `${name}: ${k}`);
+        }
+    }
+  // And the panel reads such a document as a harness that keeps no feed.
+  const c = checkView(asAlpha56(seeded(viewFixture)));
+  assert.equal(c.ok, true);
+  assert.equal(c.ok && c.view.activity, undefined);
+  assert.equal(c.ok && c.view.truncated?.activity, undefined);
+});
+
 test('alpha.56 documents (revision 1) stay valid under the alpha.57 schemas and pass the gate', () => {
   assert.equal(harnessEmpty56.data.viewRevision, 1);
   assert.equal(Object.hasOwn(harnessEmpty56.data, 'activity'), false, 'alpha.56 keeps no feed');
@@ -154,8 +174,10 @@ function feedHasEvidence(
     // A plan or contract review row names its subject; its event has no work or attempt.
     const ofSubject = r.kind === 'review' && r.gate !== workId && e.subject === r.gate;
     if (!ofSubject && e.workId !== workId) return false;
-    if (!ofSubject && attempt && !e.plain.includes(attempt)) return false;
+    // A whole attempt token: «attempt 1,» or «attempt 1)», never «attempt 10».
+    if (!ofSubject && attempt && !new RegExp(`${attempt}[,)]`).test(e.plain)) return false;
     if (r.kind === 'review') {
+      if (e.subject !== r.gate) return false;
       const action = r.result === 'passed' ? 'review.approved' : 'review.changes-requested';
       const read = ru ? 'читал diff, ничего не запускал' : 'read the diff, ran nothing';
       return (
@@ -290,6 +312,7 @@ test('fixture activity follows the harness feed: newest first, its actors and ev
     { ...good, action: 'gate.failed' },
     { ...good, actor: 'operator' },
     { ...good, plain: 'the controller ran check unit: passed (w, attempt 2, candidate)' },
+    { ...good, plain: 'the controller ran check unit: passed (w, attempt 10, candidate)' },
     { ...good, plain: 'the controller ran check unit: passed (w, attempt 1, integration)' },
     { ...good, plain: 'the controller ran check unitx: passed (w, attempt 1, candidate)' },
     { ...good, workId: 'v' },
@@ -307,6 +330,7 @@ test('fixture activity follows the harness feed: newest first, its actors and ev
   };
   const verdict: ActivityEntry = {
     ...good,
+    subject: 'w',
     actor: 'reviewer',
     action: 'review.approved',
     plain:
@@ -320,6 +344,9 @@ test('fixture activity follows the harness feed: newest first, its actors and ev
       ...verdict,
       plain: verdict.plain.replace('; read the diff, ran nothing', '; ran commands: 2'),
     },
+    { ...verdict, plain: verdict.plain.replace('attempt 1,', 'attempt 10,') },
+    { ...verdict, subject: 'other' },
+    { ...verdict, subject: undefined },
   ])
     assert.equal(feedHasEvidence([bad], 'w', review, 'en'), false, JSON.stringify(bad));
   // Both languages describe the same events.
