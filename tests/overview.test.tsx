@@ -4,15 +4,18 @@ import { test } from 'node:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { Overview } from '../src/components/Overview.tsx';
 import { checkView, type OperatorView } from '../src/model/index.ts';
+import { asAlpha59 } from './legacy.ts';
 
-const raw = JSON.parse(
-  readFileSync(new URL('../fixtures/view.sample.json', import.meta.url), 'utf8'),
+// The revision 3 shape (harness alpha.59) of the fixtures: revision 4 is in revision4.test.tsx.
+
+const raw = asAlpha59(
+  JSON.parse(readFileSync(new URL('../fixtures/view.sample.json', import.meta.url), 'utf8')),
 );
 const check = checkView(raw);
 if (!check.ok) throw new Error(check.message);
 const view: OperatorView = check.view;
 const check2 = (rel: string): OperatorView => {
-  const c = checkView(JSON.parse(readFileSync(new URL(rel, import.meta.url), 'utf8')));
+  const c = checkView(asAlpha59(JSON.parse(readFileSync(new URL(rel, import.meta.url), 'utf8'))));
   if (!c.ok) throw new Error(c.message);
   return c.view;
 };

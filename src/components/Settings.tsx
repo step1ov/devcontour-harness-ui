@@ -9,6 +9,8 @@ import { dict, label, type Dict } from '../model/dict.ts';
 import { formatDuration, usd } from '../model/format.ts';
 import type { Binding, OperatorView, ReviewRuleView, RoleBinding } from '../model/view.ts';
 import { Clipped, Heading, type ScreenProps } from './common.tsx';
+import { UpdatesSection } from './Updates.tsx';
+import { instantMs } from '../model/compat.ts';
 
 /** Theme choice of the viewer: follow the system, or light, or dark. */
 export type ThemeChoice = 'system' | 'light' | 'dark';
@@ -127,6 +129,13 @@ export function Settings({ view, lang = 'ru', theme = 'system', onThemeChange }:
             ]}
           />
           <p className="hui-muted">{t.theme.note}</p>
+        </div>
+      ) : null}
+
+      {view.updates ? (
+        <div className="hui-panel" data-testid="settings-updates">
+          <Heading t={t}>{t.r4.updatesTitle}</Heading>
+          <UpdatesSection updates={view.updates} lang={lang} now={instantMs(view.generatedAt)} />
         </div>
       ) : null}
 

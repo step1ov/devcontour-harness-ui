@@ -1,6 +1,6 @@
 {
   "viewVersion": 1,
-  "viewRevision": 3,
+  "viewRevision": 4,
   "generatedAt": "2026-11-19T12:00:00.000Z",
   "source": {
     "producer": "fixture",
@@ -40,7 +40,9 @@
         "attempt": 1,
         "bucket": "defect",
         "plain": "a check failed: lint found an unused import",
-        "at": "2026-11-19T11:40:30.000Z"
+        "at": "2026-11-19T11:40:30.000Z",
+        "kind": "gate",
+        "counted": true
       }
     },
     "liveness": "active",
@@ -190,7 +192,8 @@
         "line": "answered by the lead (technical question): the built-in Intl.DateTimeFormat is enough; no new dependency"
       },
       "title": "Which date library should the formatter use?",
-      "createdAt": "2026-11-19T11:25:00.000Z"
+      "createdAt": "2026-11-19T11:25:00.000Z",
+      "line": "the answer was passed to attempt 2"
     }
   ]
 }

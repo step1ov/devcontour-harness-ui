@@ -1,6 +1,7 @@
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
+import { asAlpha59 } from './legacy.ts';
 import {
   KNOWN_VIEW_REVISION,
   checkView,
@@ -29,14 +30,18 @@ test('a different major view version is refused with a reason', () => {
   assert.equal(check.ok ? '' : check.code, 'VIEW_VERSION_UNSUPPORTED');
 });
 
-test('revision 3 (harness alpha.59) is known; revisions 2, 1 and 0 (alpha.57, .56, .55) too; only later ones are newer', () => {
-  assert.equal(KNOWN_VIEW_REVISION, 3);
-  assert.equal(fixture.viewRevision, 3);
-  const c3now = checkView(fixture);
-  assert.equal(c3now.ok && c3now.newerRevision, false);
-  const c2 = checkView({ ...fixture, viewRevision: 2 });
+test('revision 4 (harness alpha.60) is known; revisions 3, 2, 1 and 0 (alpha.59, .57, .56, .55) too; only later ones are newer', () => {
+  assert.equal(KNOWN_VIEW_REVISION, 4);
+  assert.equal(fixture.viewRevision, 4);
+  const c4now = checkView(fixture);
+  assert.equal(c4now.ok && c4now.newerRevision, false);
+  const c3 = checkView(asAlpha59(fixture));
+  assert.equal(c3.ok, true, c3.ok ? '' : c3.message);
+  assert.equal(c3.ok && c3.newerRevision, false);
+  assert.equal(c3.ok && c3.view.forecast, undefined, 'no forecast stays absent');
+  const c2 = checkView({ ...asAlpha59(fixture), viewRevision: 2 });
   assert.equal(c2.ok && c2.newerRevision, false);
-  const r1 = structuredClone(fixture);
+  const r1 = asAlpha59(fixture);
   r1.viewRevision = 1;
   delete r1.activity;
   for (const w of r1.works) if (w.target) w.target.remote = { state: 'unknown', reason: 'x' };
@@ -51,8 +56,66 @@ test('revision 3 (harness alpha.59) is known; revisions 2, 1 and 0 (alpha.57, .5
   const c0 = checkView(old);
   assert.equal(c0.ok, true, c0.ok ? '' : c0.message);
   assert.equal(c0.ok && c0.newerRevision, false);
-  const c4 = checkView({ ...fixture, viewRevision: 4 });
-  assert.equal(c4.ok && c4.newerRevision, true);
+  const c5 = checkView({ ...fixture, viewRevision: 5 });
+  assert.equal(c5.ok && c5.newerRevision, true);
+});
+
+test('the gate checks the revision 4 fields the panel renders', () => {
+  const bad = (mutate: (d: any) => void) => {
+    const d = structuredClone(fixture);
+    mutate(d);
+    const c = checkView(d);
+    assert.equal(c.ok, false, JSON.stringify(c).slice(0, 200));
+    return c.ok ? '' : c.message;
+  };
+  assert.match(
+    bad((d) => (d.forecast.progress.percent = '23')),
+    /forecast\.progress\.percent/,
+  );
+  assert.match(
+    bad((d) => (d.forecast.time.remaining.loMs = -1)),
+    /forecast\.time\.remaining\.loMs/,
+  );
+  assert.match(
+    bad((d) => delete d.forecast.time.humanWait),
+    /forecast\.time\.humanWait/,
+  );
+  assert.match(
+    bad((d) => (d.forecast.assumptions = 'x')),
+    /forecast\.assumptions/,
+  );
+  assert.match(
+    bad((d) => (d.scope.tasks[0].connector = 1)),
+    /scope\.tasks\[0\]\.connector/,
+  );
+  assert.match(
+    bad((d) => (d.sourceQuestions[0].readAt = 'yesterday')),
+    /sourceQuestions\[0\]\.readAt/,
+  );
+  assert.match(
+    bad((d) => (d.updates.line = null)),
+    /updates\.line/,
+  );
+  assert.match(
+    bad((d) => (d.health.sources[0].checkedAt = '')),
+    /health\.sources\[0\]\.checkedAt/,
+  );
+  assert.match(
+    bad((d) => (d.progress.queue.runner = 1)),
+    /progress\.queue\.runner/,
+  );
+  assert.match(
+    bad((d) => (d.works[2].blockers[0].step = 1.5)),
+    /blockers\[0\]\.step/,
+  );
+  assert.match(
+    bad((d) => (d.works[1].attempts.lastFailure.counted = 'no')),
+    /lastFailure\.counted/,
+  );
+  assert.match(
+    bad((d) => (d.questions[0].options[0].label = 3)),
+    /options\[0\]\.label/,
+  );
 });
 
 test('the gate checks the revision 2 remote fields and the feed the panel renders', () => {

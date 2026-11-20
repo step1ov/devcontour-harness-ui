@@ -382,12 +382,18 @@ export function WorkEta({
   lang,
   clock,
   average,
+  forecast,
 }: {
   w: WorkView;
   t: Dict;
   lang: Lang;
   clock: number;
   average: { ms: number } | undefined;
+  /**
+   * The view has the harness forecast (revision 4): the panel's own attempt
+   * average (the alpha.4 exception until P11) is not shown for waiting works.
+   */
+  forecast?: boolean;
 }) {
   const e = t.eta;
   let text: string | undefined;
@@ -400,7 +406,8 @@ export function WorkEta({
         ? e.stageOver(formatRough(left.usualMaxMs, lang))
         : e.stageLeft(formatRange(left.range, lang))
       : e.stageUnknown;
-  } else text = average ? e.attempt(formatRough(average.ms, lang)) : e.unknown;
+  } else if (forecast) text = undefined;
+  else text = average ? e.attempt(formatRough(average.ms, lang)) : e.unknown;
   return text ? (
     <span className="hui:text-xs hui:text-muted-foreground" data-testid="work-eta">
       {text}
@@ -429,4 +436,61 @@ export function StageLeftLine({
         : t.eta.stageLeft(formatRange(left.range, lang))}
     </div>
   );
+}
+
+/**
+ * The rest of a writer question in revision 4 (harness alpha.60): its answer
+ * options with the recommended one, the writer's rationale, and where the
+ * applied answer is (`line`). Nothing for an older document.
+ */
+export function QuestionExtras({
+  q,
+  t,
+}: {
+  q: Pick<OperatorQuestion, 'options' | 'rationale' | 'line'>;
+  t: Dict;
+}) {
+  const r = t.r4;
+  return (
+    <>
+      {q.options?.length ? (
+        <div data-testid="question-options">
+          <p className="hui:mt-1">{r.options}</p>
+          <ul className="hui:mt-1 hui:grid hui:list-disc hui:gap-1 hui:ps-5">
+            {q.options.map((o) => (
+              <li key={o.id} data-recommended={o.recommended ? 'true' : undefined}>
+                {o.label.trim() || o.id}
+                {o.recommended ? (
+                  <span className="hui:ms-2 hui:rounded-full hui:bg-ok-soft hui:px-2 hui:text-xs hui:font-medium hui:text-ok">
+                    {r.recommended}
+                  </span>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      {q.rationale?.trim() ? (
+        <p className="hui:mt-1" data-testid="question-rationale">
+          {r.rationale} {q.rationale}
+        </p>
+      ) : null}
+      {q.line?.trim() ? (
+        <p className="hui-muted hui:mt-1" data-testid="question-line">
+          {q.line}
+        </p>
+      ) : null}
+    </>
+  );
+}
+
+/** A link only to an http(s) page of the task tracker; anything else is shown as text. */
+export function safeHttpUrl(url: string | undefined): string | undefined {
+  if (!url) return undefined;
+  try {
+    const u = new URL(url);
+    return u.protocol === 'https:' || u.protocol === 'http:' ? u.href : undefined;
+  } catch {
+    return undefined;
+  }
 }

@@ -56,11 +56,21 @@ export interface Step {
   /** Escalation time. */
   since?: string;
   /**
-   * Operator steps only: lead steps on the same work that have to happen
-   * first, because until then the harness refuses to start an attempt
-   * (`LEAD_FIRST_CODES`) — a reset before them would change nothing.
+   * Order of removal the harness gave the blocker (`blockers[].step`,
+   * revision 4): 1 goes first. Absent before revision 4 or when one person
+   * removes everything.
+   */
+  step?: number;
+  /**
+   * Operator steps only: steps of others on the same work that have to
+   * happen first. Revision 4: the steps with a lower `blockers[].step`, in
+   * the harness order. Before it: lead steps whose code stops the harness
+   * from starting an attempt (`LEAD_FIRST_CODES`) — a reset before them
+   * would change nothing.
    */
   after: Step[];
+  /** `after` comes from the harness order (`blockers[].step`), not from the panel's code list. */
+  ordered?: true;
   /** Raw records behind the line, for the «подробности» disclosure. */
   records: StepRecord[];
 }
@@ -156,6 +166,7 @@ const actorOf = (a: Actor | null | undefined): StepActor | null | undefined =>
 
 interface Entry {
   actor: StepActor | null | undefined;
+  step?: number;
   code?: string;
   action?: string;
   plain?: string;
@@ -183,13 +194,16 @@ function entriesOf(
     const actor = actorOf(b.actor);
     const record: StepRecord = { source: 'blocker', code: b.code, actor: b.actor };
     const same = find(actor, b.code);
+    const step = Number.isSafeInteger(b.step) && b.step! > 0 ? b.step : undefined;
     if (same) {
       same.records.push(record);
       if (!same.plain && b.plain?.trim()) same.plain = b.plain;
+      if (step !== undefined) same.step = Math.min(same.step ?? step, step);
     } else
       out.push({
         actor,
         code: b.code,
+        ...(step !== undefined ? { step } : {}),
         ...(b.plain?.trim() ? { plain: b.plain } : {}),
         records: [record],
       });
@@ -249,6 +263,7 @@ const stepOf = (e: Entry, workIds: string[], subject?: string): Step => ({
   ...(e.action !== undefined ? { action: e.action } : {}),
   ...(e.plain !== undefined ? { plain: e.plain } : {}),
   ...(e.since !== undefined ? { since: e.since } : {}),
+  ...(e.step !== undefined ? { step: e.step } : {}),
   after: [],
   records: e.records,
 });
@@ -359,9 +374,19 @@ export function nextSteps(view: OperatorView): NextSteps {
     const leadFirst = own.filter(
       (s) => s.actor === 'lead' && s.code !== undefined && LEAD_FIRST_CODES.has(s.code),
     );
+    // Revision 4: the harness numbers the order of removal; the panel's code list is not used then.
+    const stepped = own.some((s) => s.step !== undefined);
     for (const s of own) {
       if (s.actor === 'operator') {
-        s.after = leadFirst;
+        if (stepped) {
+          s.ordered = true;
+          s.after =
+            s.step === undefined
+              ? []
+              : own
+                  .filter((o) => o.actor !== 'operator' && o.step !== undefined && o.step < s.step!)
+                  .sort((a, b) => a.step! - b.step!);
+        } else s.after = leadFirst;
         operator.push(s);
       } else if (s.actor === 'lead') lead.push(s);
       else other.push(s);

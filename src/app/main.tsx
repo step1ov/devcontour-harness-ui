@@ -11,6 +11,7 @@ import { History } from '../components/History.tsx';
 import { Overview } from '../components/Overview.tsx';
 import { Settings, type ThemeChoice } from '../components/Settings.tsx';
 import { Tasks } from '../components/Tasks.tsx';
+import { UpdatesBanner } from '../components/Updates.tsx';
 import { Alert } from '../components/ui/alert.tsx';
 import { Button } from '../components/ui/button.tsx';
 import { cn } from '../components/ui/cn.ts';
@@ -617,6 +618,7 @@ function App() {
       <>
         <Freshness generatedAt={view.generatedAt} live={live} />
         {check.newerRevision ? <Note>{t.app.newerRevision}</Note> : null}
+        <UpdatesBanner updates={view.updates} lang={lang} />
         {isEmpty(view) ? (
           <Note>
             {t.app.empty} <code>harness run</code>

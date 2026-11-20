@@ -1,6 +1,6 @@
 {
   "viewVersion": 1,
-  "viewRevision": 3,
+  "viewRevision": 4,
   "generatedAt": "2026-11-19T12:00:00.000Z",
   "source": {
     "producer": "fixture",
@@ -170,7 +170,9 @@
           "attempt": 1,
           "bucket": "defect",
           "plain": "a check failed: lint found an unused import",
-          "at": "2026-11-19T11:40:30.000Z"
+          "at": "2026-11-19T11:40:30.000Z",
+          "kind": "gate",
+          "counted": true
         }
       },
       "liveness": "active",
@@ -330,7 +332,19 @@
       "title": "Which delimiter should the CSV use?",
       "createdAt": "2026-11-19T11:40:00.000Z",
       "impact": "user-visible",
-      "plain": "Changes how the exported file opens in spreadsheet programs."
+      "plain": "Changes how the exported file opens in spreadsheet programs.",
+      "options": [
+        {
+          "id": "comma",
+          "label": "comma (,)"
+        },
+        {
+          "id": "semicolon",
+          "label": "semicolon (;)",
+          "recommended": true
+        }
+      ],
+      "rationale": "spreadsheet programs with a Russian locale open a «;» file without settings"
     },
     {
       "requestId": "q-12",
@@ -351,7 +365,8 @@
         "line": "answered by the lead (technical question): the built-in Intl.DateTimeFormat is enough; no new dependency"
       },
       "title": "Which date library should the formatter use?",
-      "createdAt": "2026-11-19T11:25:00.000Z"
+      "createdAt": "2026-11-19T11:25:00.000Z",
+      "line": "the answer was passed to attempt 2"
     }
   ],
   "escalations": [],
@@ -378,7 +393,9 @@
     "done": 1,
     "waitingOperator": 1,
     "queue": {
-      "paused": false
+      "paused": false,
+      "runner": "running",
+      "line": "The queue is running: harness is up."
     }
   },
   "history": {
@@ -463,7 +480,18 @@
       "drifted": 1,
       "unavailable": 0
     },
-    "warnings": []
+    "warnings": [],
+    "sources": [
+      {
+        "connector": "relay-main",
+        "provider": "relay",
+        "level": "below-recommended",
+        "taskContext": false,
+        "contractVersion": 1,
+        "line": "Relay without the task context: the writer will not get the feature and scenario description; Relay ≥ 0.14.0 is needed",
+        "checkedAt": "2026-11-19T11:55:00.000Z"
+      }
+    ]
   },
   "activity": [
     {
@@ -616,5 +644,126 @@
       "title": "Plan note F2 accepted for now",
       "reason": "a wording note in the plan; no change for the user"
     }
-  ]
+  ],
+  "scope": {
+    "tasks": [
+      {
+        "id": "rt-demo-1",
+        "connector": "relay-main",
+        "key": "DEMO-1",
+        "title": "Add greet(name)",
+        "workId": "add-greeting",
+        "state": "in-harness"
+      },
+      {
+        "id": "rt-demo-2",
+        "connector": "relay-main",
+        "key": "DEMO-2",
+        "title": "Format dates by locale",
+        "workId": "locale-format",
+        "state": "in-harness"
+      },
+      {
+        "id": "rt-demo-3",
+        "connector": "relay-main",
+        "key": "DEMO-3",
+        "title": "Export report as CSV",
+        "workId": "export-csv",
+        "state": "in-harness"
+      },
+      {
+        "id": "rt-demo-4",
+        "connector": "relay-main",
+        "key": "DEMO-4",
+        "title": "Document the export",
+        "workId": "docs-page",
+        "state": "in-harness"
+      },
+      {
+        "id": "rt-demo-5",
+        "connector": "relay-main",
+        "key": "DEMO-5",
+        "title": "Import a report from CSV",
+        "state": "not-handed-over",
+        "plain": "not handed over to harness yet"
+      },
+      {
+        "id": "rt-demo-6",
+        "connector": "relay-main",
+        "key": "DEMO-6",
+        "title": "Print the report",
+        "state": "not-ready",
+        "plain": "the task has no acceptance criteria"
+      }
+    ]
+  },
+  "sourceQuestions": [
+    {
+      "connector": "relay-main",
+      "provider": "relay",
+      "id": "rq-41",
+      "ref": "Q-41",
+      "title": "Question: is an Excel export needed?",
+      "question": "Should the export also write .xlsx next to CSV?",
+      "options": ["CSV only", "CSV and .xlsx"],
+      "recommendation": "CSV only in this release; .xlsx as a separate task",
+      "provisional": "the work goes on with CSV only",
+      "tasks": ["DEMO-3"],
+      "url": "https://relay.example.test/docs/Q-41",
+      "readAt": "2026-11-19T11:55:00.000Z"
+    }
+  ],
+  "forecast": {
+    "progress": {
+      "percent": 23,
+      "weighted": 1.4,
+      "total": 6,
+      "done": 1,
+      "inWork": 1,
+      "left": 5,
+      "basis": "scope",
+      "line": "done ~23 %, 5 of 6 task(s) left, 1 in work"
+    },
+    "time": {
+      "startedAt": "2026-11-19T09:10:00.000Z",
+      "elapsedMs": 10200000,
+      "remaining": {
+        "loMs": 5400000,
+        "hiMs": 10800000,
+        "samples": 6,
+        "attemptsPerTask": 1.2
+      },
+      "humanWait": {
+        "works": 1,
+        "ms": 1200000,
+        "since": "2026-11-19T11:40:00.000Z"
+      },
+      "line": "elapsed 2 h 50 min · left ~1 h 30 min – 3 h; waiting for people now: 1 work(s), up to 20 min — not in the estimate"
+    },
+    "assumptions": [
+      "scope: all tasks of the run slice, including ones not handed over to harness (weight 0); done in the source without harness — 100 %, cancelled — out of scope",
+      "accepted = 100 %; a work in an attempt counts the stages before its current one (prepare, writer, gates, review, integration); between attempts (waiting, queued) it counts 0",
+      "time left: unfinished share × attempt duration p50–p90 × attempts per accepted task; low end in parallel on concurrency, high end sequential",
+      "waiting for people and the lead is not in the estimate"
+    ]
+  },
+  "updates": {
+    "state": "available",
+    "mode": "notify",
+    "current": {
+      "harness": "0.1.0-alpha.60",
+      "ui": "0.1.0-alpha.5"
+    },
+    "available": {
+      "harness": "0.1.0-alpha.61",
+      "ui": "0.1.0-alpha.6"
+    },
+    "checkedAt": "2026-11-19T08:00:00.000Z",
+    "line": "Available: harness 0.1.0-alpha.61 + panel 0.1.0-alpha.6 (now harness 0.1.0-alpha.60 + panel 0.1.0-alpha.5). What is new — harness update --check; update — harness update --apply --state .harness/state",
+    "whatsNew": [
+      "harness 0.1.0-alpha.61: the release forecast accounts for breaks between attempts",
+      "panel 0.1.0-alpha.6: forecast history on the History tab"
+    ],
+    "command": "harness update --apply --state .harness/state"
+  }
 }

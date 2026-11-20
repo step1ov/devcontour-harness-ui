@@ -3,7 +3,10 @@
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { asAlpha57 } from './legacy.ts';
+import { asAlpha57, asAlpha59 } from './legacy.ts';
+
+// The revision 3 shape (harness alpha.59) of the fixtures: revision 4 is in revision4.test.tsx.
+
 import {
   attemptAverage,
   checkView,
@@ -30,8 +33,13 @@ const viewOf = (rel: string): OperatorView => {
   if (!c.ok) throw new Error(c.message);
   return c.view;
 };
-const view = viewOf('../fixtures/view.sample.json');
-const stopped = viewOf('../fixtures/view.stopped.json');
+const viewOf59 = (rel: string): OperatorView => {
+  const c = checkView(asAlpha59(read(rel)));
+  if (!c.ok) throw new Error(c.message);
+  return c.view;
+};
+const view = viewOf59('../fixtures/view.sample.json');
+const stopped = viewOf59('../fixtures/view.stopped.json');
 const running = (() => {
   const c = checkWorkDetail(read('../fixtures/work.sample.json'));
   if (!c.ok) throw new Error(c.message);
@@ -76,7 +84,10 @@ test('overall progress: harness counts, never the clipped list; scope tasks outs
     outsideUnlisted: 2,
   });
   // A scope section without a valid task reads as absent, not as "nothing outside".
-  assert.equal(scopeOf({ ...view, scope: { tasks: [{ id: 1 }] } } as OperatorView), undefined);
+  assert.equal(
+    scopeOf({ ...view, scope: { tasks: [{ id: 1 }] } } as unknown as OperatorView),
+    undefined,
+  );
   assert.equal(scopeOf({ ...view, scope: 'all' } as unknown as OperatorView), undefined);
 });
 
