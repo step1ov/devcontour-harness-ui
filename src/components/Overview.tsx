@@ -812,15 +812,15 @@ function problemsOf(
   for (const w of view.works) {
     if (w.stage.name === 'done' || w.target !== undefined || w.stage.name === 'cancelled') continue;
     const f = w.attempts.lastFailure;
-    const env = writerEnvironmentStop(view, steps, w);
+    const env = writerEnvironmentStop(w);
     if (f && env)
       out.push({
         kind: label(t.bucket, f.bucket),
         tone: 'warn',
         workId: w.id,
-        text: p.writerEnv(f.attempt, withWorkNames(view, env.detail), env.notCounted),
+        text: p.writerEnv(f.attempt),
         who: t.blocker.whoActs(actorLabel(t, 'lead')),
-        codes: [f.bucket],
+        codes: [f.bucket, env.summary],
         blocked: true,
       });
     else if (f)

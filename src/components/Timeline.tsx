@@ -5,6 +5,7 @@
 import { dict, label, type Dict, type Lang } from '../model/dict.ts';
 import { formatDuration } from '../model/format.ts';
 import type { TimelineStep } from '../model/tasks.ts';
+import { Codes } from './common.tsx';
 import { cn } from './ui/cn.ts';
 
 const dot: Record<string, string> = {
@@ -22,18 +23,41 @@ const dot: Record<string, string> = {
  * A recorded harness stage in words: «хранилище зависимостей», «подготовка
  * зависимостей (prepare)», «проверка lint»; an unknown one as is.
  */
-export function partName(t: Dict, stage: string): string {
+export function partName(t: Dict, stage: string): string | undefined {
   const p = t.timeline.part;
   if (Object.hasOwn(p.fixed, stage)) return p.fixed[stage]!;
-  const m = /^(candidate|integration)-(test|recheck|consumer):(.+)$/.exec(stage);
-  if (m) return m[1] === 'integration' ? p.integrationCheck(m[3]!) : p.check(m[3]!);
-  if (/^integration-prepare:/.test(stage)) return p.fixed['integration-prepare']!;
-  return stage;
+  const at = (phase: string, text: string) =>
+    phase === 'integration' ? p.atIntegration(text) : text;
+  let m = /^(candidate|integration)-(test|recheck):(.+)$/.exec(stage);
+  if (m) return at(m[1]!, m[2] === 'recheck' ? p.recheck(m[3]!) : p.check(m[3]!));
+  m = /^(candidate|integration)-consumer:([^:]+):(.+)$/.exec(stage);
+  if (m) return at(m[1]!, p.consumerCheck(m[3]!, m[2]!));
+  m = /^(candidate|integration)-environment:(.+)$/.exec(stage);
+  if (m) return at(m[1]!, environmentStep(t, m[2]!));
+  m = /^integration-consumer-environment:([^:]+):(.+)$/.exec(stage);
+  if (m) return p.atIntegration(p.inRepo(environmentStep(t, m[2]!), m[1]!));
+  m = /^integration-prepare:(.+)$/.exec(stage);
+  if (m) return p.atIntegration(p.inRepo(p.fixed.prepare!, m[1]!));
+  m = /^(integration-)?generate:(.+)$/.exec(stage);
+  if (m) return m[1] ? p.atIntegration(p.generate(m[2]!)) : p.generate(m[2]!);
+  return undefined;
+}
+
+/** `setup`, `ready`, `cleanup`, `port-shared:3000` of an environment, in words. */
+function environmentStep(t: Dict, step: string): string {
+  const p = t.timeline.part;
+  const port = /^port-shared:(.+)$/.exec(step);
+  if (port) return p.port(port[1]!);
+  return Object.hasOwn(p.environment, step) ? p.environment[step]! : p.environmentOther;
 }
 
 /** The name of a timeline stage; a newer stage is shown as the stage label or as is. */
-export const stageName = (t: Dict, stage: string) =>
-  Object.hasOwn(t.timeline.stage, stage) ? t.timeline.stage[stage]! : label(t.stage, stage);
+export const stageName = (t: Dict, stage: string): string | undefined =>
+  Object.hasOwn(t.timeline.stage, stage)
+    ? t.timeline.stage[stage]!
+    : Object.hasOwn(t.stage, stage)
+      ? t.stage[stage]!
+      : partName(t, stage);
 
 export function Timeline({
   steps,
@@ -80,16 +104,14 @@ export function Timeline({
               )}
             />
             <span className="hui:grid hui:min-w-0">
-              <span className="hui:text-sm hui:font-medium">{stageName(t, s.stage)}</span>
+              <span className="hui:text-sm hui:font-medium">
+                {stageName(t, s.stage) ?? t.timeline.part.other}
+              </span>
+              {stageName(t, s.stage) === undefined ? <Codes t={t} codes={[s.stage]} /> : null}
               <span className="hui:text-xs hui:text-muted-foreground">
                 {state}
                 {duration ? `, ${duration}` : ''}
               </span>
-              {s.unused ? (
-                <span className="hui:text-xs hui:text-muted-foreground" data-testid="unused">
-                  {t.timeline.unused}
-                </span>
-              ) : null}
               {s.stage === 'review' && review ? (
                 <span className="hui:text-xs hui:text-muted-foreground">{review}</span>
               ) : null}
@@ -97,7 +119,7 @@ export function Timeline({
                 <ul className="hui:mt-1 hui:grid hui:list-none hui:gap-0.5 hui:text-xs hui:text-muted-foreground">
                   {s.parts.map((p, j) => (
                     <li key={j} data-part={p.stage}>
-                      {partName(t, p.stage)}
+                      {partName(t, p.stage) ?? t.timeline.part.other}
                       {': '}
                       {p.unused
                         ? t.timeline.unused
@@ -106,6 +128,9 @@ export function Timeline({
                             p.outcome ?? (s.state === 'current' ? 'current' : 'unknown'),
                           )}
                       {p.durationMs !== undefined ? `, ${formatDuration(p.durationMs, lang)}` : ''}
+                      {partName(t, p.stage) === undefined ? (
+                        <Codes t={t} codes={[p.stage]} />
+                      ) : null}
                     </li>
                   ))}
                 </ul>

@@ -100,7 +100,7 @@ test('work detail (RU): now, stages, why a retry, what was checked and how', () 
   const tl = text(ru.slice(ru.indexOf('data-testid="timeline"')));
   assert.match(
     tl,
-    /^[^]*?Подготовкапройдено, 20 схранилище зависимостей: не используется, 2 сподготовка зависимостей \(prepare\): пройдено, 18 сНаписание кодапройдено, 10 минПроверкиидёт сейчас, 30 спроверка lint: пройдено, 30 спроверка unit: идёт сейчасРевьювпередиИнтеграциявпередиПриёмкавпереди/,
+    /^[^]*?Подготовкапройдено, 20 схранилище зависимостей: не используется, 2 сподготовка зависимостей: пройдено, 18 сНаписание кодапройдено, 10 минПроверкиидёт сейчас, 30 спроверка lint: пройдено, 30 спроверка unit: идёт сейчасРевьювпередиИнтеграциявпередиПриёмкавпереди/,
   );
   // The unused dependency store is said in words (revision 3); no raw stage id is shown.
   assert.doesNotMatch(tl, /dependency-store|candidate-test/);

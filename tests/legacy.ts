@@ -6,13 +6,23 @@
 type Json = Record<string, any>;
 
 /**
- * Harness alpha.57/58 (revision 2): no `unused` stages; the prepare stages
- * keep their names (the alpha.57 schema allows any stage name).
+ * Harness alpha.57/58 (revision 2): no `unused` stages, and no prepare
+ * stages of their own — preparing ran inside `implementation` (its time is
+ * added there) and inside the integration step.
  */
 export function asAlpha57<T>(doc: T): T {
   const d = structuredClone(doc) as Json;
   d.viewRevision = 2;
-  for (const a of d.attempts ?? []) for (const s of a.stages ?? []) delete s.unused;
+  for (const a of d.attempts ?? []) {
+    const stages: Json[] = a.stages ?? [];
+    const prep = stages.filter((s) => s.stage === 'prepare');
+    const impl = stages.find((s) => s.stage === 'implementation');
+    if (impl && impl.durationMs !== undefined)
+      for (const p of prep) impl.durationMs += p.durationMs ?? 0;
+    a.stages = stages
+      .filter((s) => s.stage !== 'prepare' && !String(s.stage).startsWith('integration-prepare'))
+      .map(({ unused: _u, ...s }) => s);
+  }
   return d as T;
 }
 

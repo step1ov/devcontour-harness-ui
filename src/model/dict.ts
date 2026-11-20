@@ -617,8 +617,8 @@ const ru = {
       'очередь стоит: harness не запущен, и после ответа или сброса работа сама не продолжится',
     lastFailure: (attempt: number, plain: string) => `попытка ${attempt} остановилась: ${plain}`,
     stoppedNoReason: 'остановлена, причина не сообщена',
-    writerEnv: (attempt: number, detail: string, notCounted: boolean) =>
-      `попытка ${attempt}: ждёт ведущего — окружение не дало выполнить шаг (${detail})${notCounted ? '; попытка не засчитана' : ''}`,
+    writerEnv: (attempt: number) =>
+      `попытка ${attempt}: ждёт ведущего — окружение не дало исполнителю выполнить нужный шаг; попытка не засчитана`,
     stalled: (n: number) => `${rp(n, 'попытка зависла', 'попытки зависли', 'попыток зависло')}`,
     environment: (n: number) => `сбоев окружения: ${n}`,
     budgetExceeded: (spent: string, scope: string) =>
@@ -666,8 +666,8 @@ const ru = {
     nowWaits: (reason: string) => `Сейчас: ${reason}.`,
     nowQueued: 'Сейчас: ждёт своей очереди.',
     nowStage: (stage: string) => `Сейчас: этап «${stage}».`,
-    nowWriterEnv: (detail: string, notCounted: boolean) =>
-      `Ждёт ведущего: окружение не дало выполнить шаг — ${detail}.${notCounted ? ' Попытка не засчитана.' : ''}`,
+    nowWriterEnv:
+      'Ждёт ведущего: окружение не дало исполнителю выполнить нужный шаг. Попытка не засчитана.',
     attempts: (used: number, max: number, left: number) =>
       `Попытки: израсходовано ${used} из ${max}, осталось ${left}`,
     reviewRounds: (used: number, max: number | null) =>
@@ -717,8 +717,9 @@ const ru = {
     part: {
       fixed: {
         'dependency-store': 'хранилище зависимостей',
-        prepare: 'подготовка зависимостей (prepare)',
+        prepare: 'подготовка зависимостей',
         'integration-prepare': 'подготовка зависимостей при интеграции',
+        'writer-dependencies': 'зависимости исполнителя',
         implementation: 'исполнитель пишет код',
         'implementation-reuse': 'взят прежний код',
         'candidate-review': 'ревью кода',
@@ -726,7 +727,19 @@ const ru = {
         'integration-wait': 'ожидание интеграции',
       } as Labels,
       check: (gate: string) => `проверка ${gate}`,
-      integrationCheck: (gate: string) => `проверка ${gate} при интеграции`,
+      recheck: (gate: string) => `повторная проверка ${gate}`,
+      consumerCheck: (gate: string, repo: string) => `проверка ${gate} у ${repo}`,
+      generate: (id: string) => `генерация ${id}`,
+      port: (port: string) => `проверка порта ${port}`,
+      inRepo: (what: string, repo: string) => `${what} у ${repo}`,
+      atIntegration: (what: string) => `${what} при интеграции`,
+      environment: {
+        setup: 'запуск окружения',
+        ready: 'окружение готово',
+        cleanup: 'очистка окружения',
+      } as Labels,
+      environmentOther: 'шаг окружения',
+      other: 'другой шаг harness',
     },
     total: (d: string) => `всего ${d}`,
     label: (stage: string, state: string, duration: string) =>
@@ -1445,8 +1458,8 @@ const en: Dict = {
       'the queue stands: the harness is not running, and after an answer or a reset the work will not go on by itself',
     lastFailure: (attempt: number, plain: string) => `attempt ${attempt} stopped: ${plain}`,
     stoppedNoReason: 'stopped, no reason given',
-    writerEnv: (attempt: number, detail: string, notCounted: boolean) =>
-      `attempt ${attempt}: waits for the lead agent — the environment did not let the writer run a step (${detail})${notCounted ? '; the attempt is not counted' : ''}`,
+    writerEnv: (attempt: number) =>
+      `attempt ${attempt}: waits for the lead agent — the environment did not let the writer run a required step; the attempt is not counted`,
     stalled: (n: number) => `${ep(n, 'attempt is', 'attempts are')} stalled`,
     environment: (n: number) => `environment failures: ${n}`,
     budgetExceeded: (spent: string, scope: string) => `budget exceeded (${scope}): spent ${spent}`,
@@ -1491,8 +1504,8 @@ const en: Dict = {
     nowWaits: (reason: string) => `Now: ${reason}.`,
     nowQueued: 'Now: waits its turn.',
     nowStage: (stage: string) => `Now: stage “${stage}”.`,
-    nowWriterEnv: (detail: string, notCounted: boolean) =>
-      `Waits for the lead agent: the environment did not let the writer run a step — ${detail}.${notCounted ? ' The attempt is not counted.' : ''}`,
+    nowWriterEnv:
+      'Waits for the lead agent: the environment did not let the writer run a required step. The attempt is not counted.',
     attempts: (used: number, max: number, left: number) =>
       `Attempts: ${used} of ${max} used, ${left} left`,
     reviewRounds: (used: number, max: number | null) =>
@@ -1541,8 +1554,9 @@ const en: Dict = {
     part: {
       fixed: {
         'dependency-store': 'dependency store',
-        prepare: 'preparing the dependencies (prepare)',
+        prepare: 'preparing the dependencies',
         'integration-prepare': 'preparing the dependencies for integration',
+        'writer-dependencies': "the writer's dependencies",
         implementation: 'the writer writes the code',
         'implementation-reuse': 'earlier code reused',
         'candidate-review': 'code review',
@@ -1550,7 +1564,19 @@ const en: Dict = {
         'integration-wait': 'waiting for integration',
       } as Labels,
       check: (gate: string) => `check ${gate}`,
-      integrationCheck: (gate: string) => `check ${gate} at integration`,
+      recheck: (gate: string) => `recheck ${gate}`,
+      consumerCheck: (gate: string, repo: string) => `check ${gate} in ${repo}`,
+      generate: (id: string) => `generating ${id}`,
+      port: (port: string) => `port check ${port}`,
+      inRepo: (what: string, repo: string) => `${what} in ${repo}`,
+      atIntegration: (what: string) => `${what} at integration`,
+      environment: {
+        setup: 'starting the environment',
+        ready: 'environment ready',
+        cleanup: 'cleaning up the environment',
+      } as Labels,
+      environmentOther: 'environment step',
+      other: 'another harness step',
     },
     total: (d: string) => `${d} in total`,
     label: (stage: string, state: string, duration: string) =>

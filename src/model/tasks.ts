@@ -136,13 +136,32 @@ export interface TimelineStep {
  */
 export function processStageOf(stage: string): string {
   if (PROCESS.includes(stage)) return stage;
-  if (stage === 'dependency-store' || stage.startsWith('candidate-environment')) return 'prepare';
-  if (stage === 'implementation' || stage === 'implementation-reuse') return 'writer';
-  if (/^candidate-(test|consumer|recheck):/.test(stage)) return 'gates';
-  if (stage === 'candidate-review') return 'review';
-  if (stage.startsWith('integration')) return 'integration';
+  // The harness's own map (`stageOfStep`): the candidate environment's
+  // cleanup runs after the review and belongs to no step of its own.
+  const [family, sub] = stage.split(':');
+  if (family!.startsWith('integration')) return 'integration';
+  if (family === 'candidate-environment') return sub === 'cleanup' ? 'review' : 'prepare';
+  if (family === 'candidate-review') return 'review';
+  if (family === 'implementation' || family === 'implementation-reuse') return 'writer';
+  if (family === 'dependency-store' || family === 'writer-dependencies' || family === 'prepare')
+    return 'prepare';
+  if (/^candidate-(test|consumer|recheck)$/.test(family!) || family === 'generate') return 'gates';
   return stage;
 }
+
+/**
+ * Parts that neither make a step pass or fail nor count in its time: the
+ * environment cleanup after the review, and the wait for the integration
+ * queue (that is waiting, not work).
+ */
+const neutral = (stage: string) =>
+  stage === 'candidate-environment:cleanup' || stage === 'integration-wait';
+
+/** `candidate-recheck:lint` → `candidate-test:lint`: the run a passed recheck supersedes. */
+const recheckOf = (stage: string) => {
+  const m = /^(candidate|integration)-recheck:(.+)$/.exec(stage);
+  return m ? `${m[1]}-test:${m[2]}` : undefined;
+};
 
 /** The recorded stages of an attempt grouped by process step, in record order. */
 function groupsOf(row: AttemptRow | undefined) {
@@ -162,11 +181,17 @@ function groupsOf(row: AttemptRow | undefined) {
     out.set(key, g);
   }
   for (const g of out.values()) {
-    const known = g.parts.filter((p) => p.durationMs !== undefined);
+    const work = g.parts.filter((p) => !neutral(p.stage));
+    const known = work.filter((p) => p.durationMs !== undefined);
     if (known.length) g.durationMs = known.reduce((n, p) => n + p.durationMs!, 0);
-    if (g.parts.some((p) => p.outcome === 'failed')) g.outcome = 'failed';
-    else if (g.parts.every((p) => p.outcome === 'passed')) g.outcome = 'passed';
-    if (g.parts.every((p) => p.unused)) g.unused = true;
+    // A failed check that a later recheck of the same gate passed does not fail the step.
+    const superseded = new Set(
+      work.filter((p) => p.outcome === 'passed').flatMap((p) => recheckOf(p.stage) ?? []),
+    );
+    const decisive = work.filter((p) => !(p.outcome === 'failed' && superseded.has(p.stage)));
+    if (decisive.some((p) => p.outcome === 'failed')) g.outcome = 'failed';
+    else if (decisive.length && decisive.every((p) => p.outcome === 'passed')) g.outcome = 'passed';
+    if (work.length && work.every((p) => p.unused)) g.unused = true;
   }
   return out;
 }
@@ -204,16 +229,21 @@ export function timelineOf(
   const notReached: TimelineStep['state'] =
     latest && !terminal && work.attempts.left > 0 ? 'next' : 'skipped';
   const current = latest && !terminal ? order.indexOf(work.stage.name) : -1;
-  const lastSeen = Math.max(-1, ...order.map((x, i) => (seen.has(x) ? i : -1)));
+  // Steps this build does not know keep their place but do not move «last seen».
+  const lastSeen = Math.max(
+    -1,
+    ...order.map((x, i) => (seen.has(x) && PROCESS.includes(x) ? i : -1)),
+  );
   let failed = false;
   const out: TimelineStep[] = [];
   for (const [i, stage] of order.entries()) {
     const s = seen.get(stage);
     let state: TimelineStep['state'];
-    if (s?.outcome === 'passed') state = 'passed';
-    else if (s?.outcome === 'failed') state = 'failed';
-    // Only the work's own stage runs now, never two at once.
-    else if (i === current && SLOT_STAGES.has(stage)) state = 'current';
+    // The work's own stage runs now (even between two of its parts), never two at once.
+    if (i === current && SLOT_STAGES.has(stage) && s?.outcome !== 'failed') state = 'current';
+    else if (s?.outcome === 'passed') state = 'passed';
+    // A failure the attempt went past (a later step has a record) was recovered.
+    else if (s?.outcome === 'failed') state = i < lastSeen ? 'passed' : 'failed';
     // Seen without an outcome: passed when a later stage started, else unknown.
     else if (s) state = i < current || i < lastSeen ? 'passed' : 'unknown';
     // Not in the record: after a failure it was not reached; a missing record
@@ -256,28 +286,33 @@ export function timelines(detail: WorkDetailView) {
   }));
 }
 
+/** The fixed detail the harness writes for a writer-environment stop (`failure-plain.ts`). */
+const WRITER_BLOCKED = [
+  'окружение закрыло исполнителю обязательный шаг',
+  'the environment blocked a step the writer must run',
+];
+
 /**
  * A writer that stopped on its environment (revision 3, harness alpha.59:
  * cause `writer-environment`): the sandbox closed a step the writer must
  * run, the lead decides, and the attempt is not counted. The view has no
- * cause field; the panel reads it from what it does carry — a last failure
- * of group `environment` on a work that is not running, with the lead to
- * act — and says "not counted" only when the counters show it (the failed
- * attempt is past the counted ones, or an uncounted failure is recorded).
- * Proposal P13 asks the harness for the cause itself.
+ * cause field (proposal P13); the panel recognises the stop only by all of
+ * what the harness emits for it — a stopped work whose stage asks the lead
+ * to diagnose, and a last failure of group `environment` whose detail is
+ * the harness's fixed phrase for this stop. Anything else (a busy port, a
+ * stale approval, a preflight stop) is not this stop. The harness never
+ * counts such an attempt, so «не засчитана» is said only here.
  */
-export function writerEnvironmentStop(
-  view: OperatorView,
-  steps: NextSteps,
-  w: WorkView,
-): { detail: string; notCounted: boolean } | undefined {
+export function writerEnvironmentStop(w: WorkView): { summary?: string } | undefined {
   const f = w.attempts.lastFailure;
-  if (!f || f.bucket !== 'environment') return undefined;
-  if (SLOT_STAGES.has(w.stage.name) || accepted(w) || w.stage.name === 'cancelled')
+  if (!f || f.bucket !== 'environment' || w.stage.name !== 'stopped') return undefined;
+  if (w.stage.needs?.actor !== 'lead' || w.stage.needs.action !== 'diagnose-failure')
     return undefined;
-  if (!actorsOn(steps, w.id, view).includes('lead')) return undefined;
-  // «окружение — <detail>»: the group is said by the panel, the detail by the harness.
   const cut = f.plain.indexOf(' — ');
-  const detail = (cut >= 0 ? f.plain.slice(cut + 3) : f.plain).trim().replace(/[.\s]+$/, '');
-  return { detail, notCounted: f.attempt > w.attempts.used || w.attempts.neutral.used > 0 };
+  const detail = (cut >= 0 ? f.plain.slice(cut + 3) : f.plain).trim();
+  const phrase = WRITER_BLOCKED.find((p) => detail.startsWith(p));
+  if (!phrase) return undefined;
+  // The writer's own words («listen EPERM …») — technical: for «подробности» only.
+  const summary = detail.slice(phrase.length).replace(/^:\s*/, '').trim();
+  return summary ? { summary } : {};
 }

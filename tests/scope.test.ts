@@ -3,6 +3,7 @@
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
+import { asAlpha57 } from './legacy.ts';
 import {
   attemptAverage,
   checkView,
@@ -436,10 +437,11 @@ test('revision 3 stages: prepare and the dependency store group into preparation
       ['prepare', false],
     ],
   );
-  // The same attempt from alpha.57/58 (no `unused`): the same steps, nothing said unused.
-  const old = { ...row, stages: row.stages.map(({ unused: _u, ...s }) => s) };
+  // The same attempt from alpha.57/58: preparing ran inside writing, the store is not «unused».
+  const old = asAlpha57(running).attempts[0]!;
   const steps57 = timelineOf(old, running.work, true);
-  assert.equal(steps57[0]!.durationMs, 20_000);
+  assert.equal(steps57[0]!.durationMs, 2_000);
+  assert.equal(steps57[1]!.durationMs, 618_000);
   assert.ok(!steps57.some((s) => s.unused || s.parts?.some((p) => p.unused)));
   // Every recorded stage lands in a process step; integration stages in integration.
   const accepted = read<WorkDetailView>('../fixtures/work.accepted.sample.json');
@@ -455,4 +457,53 @@ test('revision 3 stages: prepare and the dependency store group into preparation
       ['acceptance', 'passed', 0],
     ],
   );
+});
+
+test('review round 3: rechecks, the harness stage map, neutral parts, the current step between parts', () => {
+  const base = running.attempts[1]!; // finished attempt row
+  const accepted = read<WorkDetailView>('../fixtures/work.accepted.sample.json');
+  const row = (stages: WorkDetailView['attempts'][number]['stages']) => ({
+    ...base,
+    status: 'succeeded',
+    stages,
+  });
+  // A failed check that its recheck passed does not fail the step; the accepted work stays passed.
+  const rechecked = timelineOf(
+    row([
+      { stage: 'writer-dependencies', durationMs: 4_000, outcome: 'passed' },
+      { stage: 'candidate-environment:setup', durationMs: 3_000, outcome: 'passed' },
+      { stage: 'implementation', durationMs: 60_000, outcome: 'passed' },
+      { stage: 'generate:sdk', durationMs: 40_000, outcome: 'passed' },
+      { stage: 'candidate-test:unit', durationMs: 30_000, outcome: 'failed' },
+      { stage: 'candidate-recheck:unit', durationMs: 31_000, outcome: 'passed' },
+      { stage: 'candidate-review', durationMs: 20_000, outcome: 'passed' },
+      // Cleanup after the review and the integration queue: neither fail a step nor count as work.
+      { stage: 'candidate-environment:cleanup', durationMs: 9_000, outcome: 'failed' },
+      { stage: 'integration-wait', durationMs: 600_000, outcome: 'passed' },
+      { stage: 'integration-test:unit', durationMs: 25_000, outcome: 'passed' },
+    ]),
+    accepted.work,
+    true,
+  );
+  assert.deepEqual(
+    rechecked.map((s) => [s.stage, s.state, s.durationMs]),
+    [
+      ['prepare', 'passed', 7_000],
+      ['writer', 'passed', 60_000],
+      ['gates', 'passed', 101_000],
+      ['review', 'passed', 20_000],
+      ['integration', 'passed', 25_000],
+      ['acceptance', 'passed', undefined],
+    ],
+  );
+  // Running between two checks (lint passed, unit not opened yet): the checks run now.
+  const between = timelineOf(
+    {
+      ...running.attempts[0]!,
+      stages: [{ stage: 'candidate-test:lint', durationMs: 5_000, outcome: 'passed' }],
+    },
+    running.work,
+    true,
+  );
+  assert.equal(between.find((s) => s.stage === 'gates')!.state, 'current');
 });

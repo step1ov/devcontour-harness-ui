@@ -8,7 +8,8 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { Overview } from '../src/components/Overview.tsx';
 import { Settings } from '../src/components/Settings.tsx';
 import { Tasks } from '../src/components/Tasks.tsx';
-import { checkView, type OperatorView } from '../src/model/index.ts';
+import { WorkDetail } from '../src/components/WorkDetail.tsx';
+import { checkView, checkWorkDetail, type OperatorView } from '../src/model/index.ts';
 
 const viewOf = (rel: string): OperatorView => {
   const c = checkView(JSON.parse(readFileSync(new URL(rel, import.meta.url), 'utf8')));
@@ -16,6 +17,13 @@ const viewOf = (rel: string): OperatorView => {
   return c.view;
 };
 const view = viewOf('../fixtures/ru/view.sample.json');
+const work = (() => {
+  const c = checkWorkDetail(
+    JSON.parse(readFileSync(new URL('../fixtures/ru/work.sample.json', import.meta.url), 'utf8')),
+  );
+  if (!c.ok) throw new Error(c.message);
+  return c.detail;
+})();
 const stopped = viewOf('../fixtures/ru/view.stopped.json');
 const href = (id: string) => '#/work/' + id;
 const html = (el: React.ReactElement) => renderToStaticMarkup(el);
@@ -285,53 +293,51 @@ test('review round 2: all cancelled is not «всё принято»; the lead-a
 });
 
 test('revision 3: a writer stopped by its environment waits for the lead and is not counted', () => {
-  // Made-up: the harness alpha.59 shape of a writer-environment stop (needs-lead, environment group).
-  const blocked: OperatorView = {
-    ...view,
-    works: view.works.map((w) =>
-      w.id === 'docs-page'
-        ? {
-            ...w,
-            dependsOn: [],
-            stage: {
-              name: 'stopped',
-              next: [],
-              needs: { actor: 'lead', action: 'diagnose-failure' },
-            },
-            blockers: [
-              {
-                code: 'APPROVAL_REQUIRED',
-                plain:
-                  'исполнитель остановился: окружение закрыло обязательный шаг; решение ведущего',
-                actor: 'lead',
+  // Made-up, in the shape harness alpha.59 emits for cause writer-environment:
+  // a failed work stopped for the lead's diagnosis, a NOT_READY blocker, and
+  // the fixed environment detail with the writer's own words.
+  const stopped = (plain: string, extra: Partial<OperatorView['works'][number]> = {}) =>
+    ({
+      ...view,
+      works: view.works.map((w) =>
+        w.id === 'docs-page'
+          ? {
+              ...w,
+              dependsOn: [],
+              stage: {
+                name: 'stopped',
+                next: [],
+                needs: { actor: 'lead', action: 'diagnose-failure' },
               },
-            ],
-            attempts: {
-              ...w.attempts,
-              used: 0,
-              left: 3,
-              neutral: { used: 1, max: 3 },
-              lastFailure: {
-                attempt: 1,
-                bucket: 'environment',
-                plain:
-                  'окружение — окружение закрыло исполнителю обязательный шаг: «listen EPERM 127.0.0.1»',
+              blockers: [{ code: 'NOT_READY', plain: 'Статус failed', actor: 'lead' }],
+              attempts: {
+                ...w.attempts,
+                used: 0,
+                left: 3,
+                neutral: { used: 1, max: 3 },
+                lastFailure: { attempt: 1, bucket: 'environment', plain },
               },
-            },
-          }
-        : w,
-    ),
-  };
-  const card = shown(
-    html(<Tasks view={blocked} lang="ru" />)
+              ...extra,
+            }
+          : w,
+      ),
+    }) as OperatorView;
+  const blocked = stopped(
+    'окружение — окружение закрыло исполнителю обязательный шаг: «listen EPERM 127.0.0.1»',
+  );
+  const cardOf = (v: OperatorView, lang: 'ru' | 'en' = 'ru') =>
+    html(<Tasks view={v} lang={lang} />)
       .split('<li class="hui-card-ui')
-      .find((x) => x.includes('data-testid="task-docs-page"'))!,
-  );
+      .find((x) => x.includes('data-testid="task-docs-page"'))!;
+  const card = cardOf(blocked);
   assert.match(
-    card,
-    /Ждёт ведущего: окружение не дало выполнить шаг — окружение закрыло исполнителю обязательный шаг: «listen EPERM 127\.0\.0\.1»\. Попытка не засчитана\./,
+    shown(card),
+    /Ждёт ведущего: окружение не дало исполнителю выполнить нужный шаг\. Попытка не засчитана\./,
   );
-  assert.match(card, /Дальше действует: ведущий/);
+  assert.match(shown(card), /Дальше действует: ведущий/);
+  // The writer's own technical words only under «подробности».
+  assert.doesNotMatch(shown(card), /EPERM/);
+  assert.match(card, /<code>«listen EPERM 127\.0\.0\.1»<\/code>/);
   const problems = shown(
     html(<Overview view={blocked} lang="ru" />)
       .split('data-testid="problems"')[1]!
@@ -339,19 +345,73 @@ test('revision 3: a writer stopped by its environment waits for the lead and is 
   );
   assert.match(
     problems,
-    /попытка 1: ждёт ведущего — окружение не дало выполнить шаг \(.*\); попытка не засчитана — действует: ведущий/,
+    /попытка 1: ждёт ведущего — окружение не дало исполнителю выполнить нужный шаг; попытка не засчитана — действует: ведущий/,
   );
-  const en = shown(html(<Tasks view={blocked} lang="en" />));
+  // The English harness text is recognised as well.
+  const en = stopped('environment — the environment blocked a step the writer must run: «EPERM»');
   assert.match(
-    en,
-    /Waits for the lead agent: the environment did not let the writer run a step — .* The attempt is not counted\./,
+    shown(cardOf(en, 'en')),
+    /Waits for the lead agent: the environment did not let the writer run a required step\. The attempt is not counted\./,
   );
-  // An ordinary environment failure that the harness retries itself is not this stop.
-  const retried: OperatorView = {
-    ...blocked,
-    works: blocked.works.map((w) =>
-      w.id === 'docs-page' ? { ...w, stage: { name: 'queued', next: [] }, blockers: [] } : w,
-    ),
-  };
-  assert.doesNotMatch(shown(html(<Tasks view={retried} lang="ru" />)), /Ждёт ведущего: окружение/);
+  // Not this stop: a busy port retried while the plan waits for re-approval, and a preflight stop.
+  const notIt = [
+    stopped('окружение — порт 3000 занят', {
+      stage: { name: 'queued', next: [] },
+      blockers: [{ code: 'APPROVAL_STALE', plain: 'план нужно согласовать заново', actor: 'lead' }],
+    }),
+    stopped('окружение — нужно решение ведущего'),
+  ];
+  for (const v of notIt) {
+    const c = shown(cardOf(v));
+    assert.doesNotMatch(c, /окружение не дало исполнителю|не засчитана/);
+    assert.match(c, /попытка 1 остановилась/);
+  }
+});
+
+test('timeline parts are named in words: no harness stage id outside «подробности»', () => {
+  const ids = [
+    'dependency-store',
+    'writer-dependencies',
+    'candidate-environment:setup',
+    'candidate-environment:port-shared:3000',
+    'prepare',
+    'implementation',
+    'generate:sdk',
+    'candidate-test:lint',
+    'candidate-recheck:lint',
+    'candidate-consumer:web:unit',
+    'candidate-review',
+    'candidate-environment:cleanup',
+    'integration-wait',
+    'integration-prepare',
+    'integration-prepare:web',
+    'integration-environment:setup',
+    'integration-consumer-environment:web:ready',
+    'integration-generate:sdk',
+    'integration-test:unit',
+    'integration-consumer:web:e2e',
+    'integration-review',
+    'brand-new-step:x',
+  ];
+  const detail = structuredClone(work);
+  detail.attempts[0]!.stages = ids.map((stage) => ({
+    stage,
+    durationMs: 1_000,
+    outcome: 'passed' as const,
+  }));
+  for (const lang of ['ru', 'en'] as const) {
+    const markup = html(<WorkDetail detail={detail} lang={lang} />);
+    // From the timeline's first tag end to its last list end (no half tags).
+    const from = markup.indexOf('>', markup.indexOf('data-testid="timeline"')) + 1;
+    const end = markup.lastIndexOf('<', markup.indexOf('data-testid="earlier-attempts"'));
+    const tl = markup.slice(from, end);
+    const leaked = shown(tl).match(/[a-z]+-[a-z]+(:|\b)/g);
+    assert.equal(leaked, null, `${lang}: ${leaked}`);
+    // The unknown one is said as «another step», with its id one click away.
+    assert.match(tl, /<code>brand-new-step:x<\/code>/);
+  }
+  assert.match(
+    shown(html(<WorkDetail detail={detail} lang="ru" />)),
+    /проверка unit у web при интеграции|проверка e2e у web при интеграции/,
+  );
 });

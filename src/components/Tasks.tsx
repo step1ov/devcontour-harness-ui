@@ -156,9 +156,9 @@ function TaskCardView({
   const rounds = code.reduce((n, r) => n + r.rounds.used, 0);
   const cap = code.length === 1 ? code[0]!.rounds.max : null;
   const firstBlocker = w.blockers.find((b) => b.actor !== null) ?? w.blockers[0];
-  const blockedEnv = writerEnvironmentStop(view, steps, w);
+  const blockedEnv = writerEnvironmentStop(w);
   const nowText = blockedEnv
-    ? k.nowWriterEnv(withWorkNames(view, blockedEnv.detail), blockedEnv.notCounted)
+    ? k.nowWriterEnv
     : c.phase === 'accepted'
       ? k.nowAccepted
       : c.phase === 'cancelled'
@@ -202,6 +202,7 @@ function TaskCardView({
         <p data-testid="task-now" data-status={c.phase === 'accepted' ? 'accepted' : undefined}>
           {nowText}
         </p>
+        {blockedEnv?.summary ? <Codes t={t} codes={[blockedEnv.summary]} /> : null}
         {c.waitsOn.length ? (
           <p data-testid="task-waits">
             {k.waitsOn(c.waitsOn.map((id) => workName(view, id)).join(', '))}
@@ -224,7 +225,7 @@ function TaskCardView({
               <AttemptsText line={a.line} t={t} />
             </span>
           ) : null}
-          {a.lastFailure && c.phase !== 'accepted' ? (
+          {a.lastFailure && c.phase !== 'accepted' && !blockedEnv ? (
             <span className="hui-muted">
               {t.problems.lastFailure(
                 a.lastFailure.attempt,
