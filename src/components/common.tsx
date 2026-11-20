@@ -6,7 +6,7 @@
 
 import type { ReactNode } from 'react';
 import { dict, label, type Dict, type GlossaryId, type Lang } from '../model/dict.ts';
-import { formatClock, targetSentence } from '../model/i18n.ts';
+import { formatClock, remoteFreshness, targetSentence } from '../model/i18n.ts';
 import type { Actor, BlockerView, OperatorQuestion, WorkView } from '../model/view.ts';
 
 /** Props every screen takes. */
@@ -137,12 +137,20 @@ export function AcceptedLine({
   lang,
   linkProps,
   verificationHref,
+  timeZone,
+  now,
+  explain = true,
 }: {
   w: Pick<WorkView, 'id' | 'target' | 'resultSha'>;
   lang: Lang;
   linkProps: Pick<ScreenProps, 'onOpenWork' | 'workHref'>;
   /** In-page link to the rows (work detail); otherwise the work link with `#verification`. */
   verificationHref?: string;
+  timeZone?: string | undefined;
+  /** Viewer's clock for the remote check time («вчера 14:02»), epoch ms. */
+  now?: number | undefined;
+  /** Show the «что это значит» disclosure of the remote line (once per list is enough). */
+  explain?: boolean;
 }) {
   const t = dict(lang);
   const where = w.target
@@ -150,9 +158,15 @@ export function AcceptedLine({
     : w.resultSha
       ? t.target.noTarget(w.resultSha)
       : t.target.noLocation;
+  const fresh = w.target ? remoteFreshness(w.target, lang, timeZone, now) : undefined;
   return (
     <div data-status="accepted" className="hui-accepted">
-      <span>{where}</span>{' '}
+      <span data-testid="remote-line">{where}</span>{' '}
+      {fresh ? (
+        <span className="hui-muted" data-testid="remote-checked">
+          {fresh}
+        </span>
+      ) : null}{' '}
       {verificationHref ? (
         <a className="hui-link" href={verificationHref}>
           {t.target.seeChecks}
@@ -162,6 +176,7 @@ export function AcceptedLine({
           {t.target.seeChecks}
         </WorkRef>
       )}
+      {explain && w.target ? <Term id="remote" t={t} named /> : null}
     </div>
   );
 }

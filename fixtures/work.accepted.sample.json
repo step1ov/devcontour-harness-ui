@@ -1,6 +1,6 @@
 {
   "viewVersion": 1,
-  "viewRevision": 1,
+  "viewRevision": 2,
   "generatedAt": "2026-11-19T12:00:00.000Z",
   "source": {
     "producer": "fixture",
@@ -45,8 +45,10 @@
       "ref": "refs/heads/harness/accepted",
       "acceptedSha": "3b1f9e0c2a7d",
       "remote": {
-        "state": "unknown",
-        "reason": "the remote-tracking ref is not read by this harness version"
+        "state": "not-pushed",
+        "trackingRef": "origin/harness/accepted",
+        "checkedAt": "2026-11-18T17:30:00.000Z",
+        "line": "accepted locally; not yet on the remote branch origin/harness/accepted"
       }
     }
   },

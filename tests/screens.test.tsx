@@ -138,11 +138,13 @@ test('work detail (EN) and the accepted work: where it is, drift and the checks 
   assert.match(en, /Why a retry/);
   assert.match(text(en), /lint \(check, candidate\) — passed · ran in attempt 2 · by: harness/);
   assert.match(text(en), /read the diff, ran nothing · by: codex/);
-  const ok = html(<WorkDetail detail={accepted} lang="ru" timeZone={TZ} workHref={workHref} />);
+  const ok = html(<WorkDetail detail={ruAccepted} lang="ru" timeZone={TZ} workHref={workHref} />);
   assert.match(
-    ok,
-    /Принято локально; в удалённом репозитории — неизвестно: the remote-tracking ref is not read by this harness version\./,
+    text(ok),
+    /Принято локально; в удалённой ветке origin\/harness\/accepted ещё нет\. Сверено с копией удалённой ветки на этой машине, без сети; git обновил копию: вчера 17:30\./,
   );
+  assert.match(text(ok), /в удалённой ветке: что это значит/);
+  assert.match(text(ok), /без сети и без git fetch/);
   assert.match(ok, /href="#\/work\/add-greeting#verification"/);
   assert.match(
     ok,
@@ -150,7 +152,63 @@ test('work detail (EN) and the accepted work: where it is, drift and the checks 
   );
   assert.doesNotMatch(ok, /data-testid="why-retry"/, 'no failures: no retry section');
   const okEn = html(<WorkDetail detail={accepted} lang="en" timeZone={TZ} />);
-  assert.match(okEn, /Accepted locally; remote state unknown: /);
+  assert.match(okEn, /Accepted locally; not yet on the remote branch origin\/harness\/accepted\./);
+});
+
+test('remote line: definite states quote the harness line, anything else is unknown, never pushed', () => {
+  const withRemote = (remote: Record<string, unknown>, now?: number) =>
+    text(
+      html(
+        <WorkDetail
+          detail={{
+            ...accepted,
+            work: { ...accepted.work, target: { ...accepted.work.target!, remote } as never },
+          }}
+          lang="en"
+          timeZone={TZ}
+          {...(now === undefined ? {} : { now })}
+        />,
+      ),
+    );
+  const pushed = withRemote({
+    state: 'pushed',
+    trackingRef: 'origin/main',
+    checkedAt: '2026-11-19T11:58:00Z',
+    line: 'already on the remote branch origin/main',
+  });
+  assert.match(pushed, /Accepted locally; already on the remote branch origin\/main\./);
+  assert.match(pushed, /git updated the copy: 11:58\./, 'today: the time only');
+  // Older than yesterday: the date.
+  assert.match(
+    withRemote({ state: 'pushed', checkedAt: '2026-11-10T09:00:00Z', line: 'already on x' }),
+    /git updated the copy: 10\.11\.2026 09:00\./,
+  );
+  // No reflog: the check time is unknown, said so.
+  assert.match(
+    withRemote({ state: 'not-pushed', line: 'accepted locally; not yet on the remote branch o/m' }),
+    /Accepted locally; not yet on the remote branch o\/m\. Compared with this machine.{1,6}s copy of the remote branch, no network; when git updated the copy is unknown\./,
+  );
+  // Unknown: the reason, not the line; never pushed or not pushed.
+  const unknown = withRemote({
+    state: 'unknown',
+    reason: 'no remote branch',
+    line: 'unknown (no remote branch)',
+  });
+  assert.match(unknown, /Accepted locally; remote state unknown: no remote branch\./);
+  assert.doesNotMatch(unknown, /already on|not yet on|git updated/);
+  // A state this build does not know, even with a line that says pushed, is unknown.
+  const future = withRemote({
+    state: 'mirrored',
+    line: 'already on the remote branch origin/main',
+    checkedAt: '2026-11-19T11:00:00Z',
+  });
+  assert.match(future, /Accepted locally; remote state unknown\./);
+  assert.doesNotMatch(future, /already on the remote/);
+  // A blank line falls back to the panel sentence of the state.
+  assert.match(
+    withRemote({ state: 'pushed', line: '  ' }),
+    /on the remote \(as of the last git update/,
+  );
 });
 
 test('work detail: no verification is "no data", an unknown method is not "checked"', () => {
@@ -382,24 +440,12 @@ test('decisions and activity: shown when the view carries them, "no data in this
     ru,
     /ответ на технический вопрос<\/strong> по <code>q-12<\/code>.*кто решил: ведущий/s,
   );
-  const a = html(
-    <Activity view={view} lang="ru" timeZone={TZ} filterHref={(f) => JSON.stringify(f)} />,
-  );
-  assert.match(a, /11:52.*harness.*harness started check candidate-test:unit/s);
-  assert.match(a, /исполнитель<\/strong> the writer asked a question/);
-  const f = html(
-    <Activity view={view} lang="ru" filter={{ actor: 'lead' }} filterHref={() => '#'} />,
-  );
-  assert.match(f, /показано 1 из 3/);
-  assert.doesNotMatch(f, /the writer asked/);
   const { decisions: _d, activity: _a, ...old } = view;
   for (const lang of ['ru', 'en'] as const) {
     const d = html(<Decisions view={old as OperatorView} lang={lang} />);
-    const act = html(<Activity view={old as OperatorView} lang={lang} />);
     const words =
       lang === 'ru' ? /нет данных в этой версии harness/ : /no data in this harness version/;
     assert.match(d, words);
-    assert.match(act, words);
     assert.doesNotMatch(d, /\(0\)/);
   }
   const noReason: OperatorView = {
@@ -409,6 +455,140 @@ test('decisions and activity: shown when the view carries them, "no data in this
   const nr = html(<Decisions view={noReason} lang="ru" />);
   assert.match(nr, /условие пересмотра неизвестно/);
   assert.match(nr, /причина не записана/);
+});
+
+test('who did what: harness lines as written, actor chips, times with «вчера», work links', () => {
+  const a = html(
+    <Activity
+      view={ruView}
+      lang="ru"
+      timeZone={TZ}
+      workHref={workHref}
+      filterHref={(f) => JSON.stringify(f)}
+    />,
+  );
+  const t = text(a);
+  assert.match(t, /События harness за последние 24 ч, новые сверху\./);
+  // Newest first, each with its time, actor chip, the harness line and the code.
+  assert.match(
+    a,
+    /<time class="hui-muted hui-when" dateTime="2026-11-19T11:51:40.000Z">11:51<\/time> <span class="hui-badge hui-actor" data-actor="controller">контроллер<\/span> <span class="hui-plain">контроллер запустил проверку lint: прошла \(работа locale-format, попытка 2, кандидат\)<\/span>/,
+  );
+  assert.ok(t.indexOf('11:51') < t.indexOf('вчера 18:05'), 'newest first, as the harness sends it');
+  // The event of the day before the view: «вчера», not a bare time.
+  assert.match(t, /вчера 18:05 reviewer reviewer codex одобрил план g1, раунд 2/);
+  assert.match(
+    a,
+    /data-actor="writer">исполнитель<\/span> <span class="hui-plain">исполнитель задал вопрос q-17/,
+  );
+  assert.match(a, /data-actor="lead">ведущий<\/span>/);
+  // A work link per event with a work; none for the plan event.
+  assert.match(
+    a,
+    /<a class="hui-link" href="#\/work\/export-csv"><span class="hui-sr">открыть работу <\/span><code>export-csv<\/code><\/a>/,
+  );
+  assert.equal((a.match(/href="#\/work\//g) ?? []).length, 9);
+  // Filters by work and by actor, and the glossary of the actors present.
+  assert.match(a, /href="\{&quot;workId&quot;:&quot;add-greeting&quot;\}"/);
+  assert.match(a, /href="\{&quot;actor&quot;:&quot;reviewer&quot;\}"/);
+  assert.match(t, /Кто есть кто:.*контроллер: что это значит.*исполнитель: что это значит/s);
+  assert.doesNotMatch(t, /хост: что это значит/, 'only the actors in the feed');
+  assert.doesNotMatch(a, /data-testid="activity-clipped"/);
+  // Filtered by a work: only its events, with the count.
+  const byWork = text(
+    html(
+      <Activity
+        view={ruView}
+        lang="ru"
+        filter={{ workId: 'add-greeting' }}
+        filterHref={() => '#'}
+      />,
+    ),
+  );
+  assert.match(byWork, /показано 4 из 10/);
+  assert.doesNotMatch(byWork, /locale-format; пишет/);
+  // A filter that matches nothing is not "nothing happened".
+  const none = text(
+    html(<Activity view={ruView} lang="ru" filter={{ actor: 'host' }} filterHref={() => '#'} />),
+  );
+  assert.match(none, /По выбранному фильтру событий нет\./);
+  assert.doesNotMatch(none, /ничего не происходило/);
+  // English: the same screen in the English dictionary.
+  const en = text(html(<Activity view={view} lang="en" timeZone={TZ} />));
+  assert.match(en, /Harness events of the last 24 h, newest first\./);
+  assert.match(en, /yesterday 18:05 reviewer reviewer codex approved the plan g1, round 2/);
+  assert.match(
+    en,
+    /11:26 lead agent the lead answered question q-12 on locale-format \(technical question\)/,
+  );
+});
+
+test('who did what: [] is a quiet window, a missing feed is an older harness, clipped is counted', () => {
+  for (const lang of ['ru', 'en'] as const) {
+    const quiet = text(html(<Activity view={{ ...view, activity: [] }} lang={lang} />));
+    assert.match(
+      quiet,
+      lang === 'ru'
+        ? /За окно \(24 ч\) ничего не происходило\./
+        : /Nothing happened in the window \(24 h\)\./,
+    );
+    const { activity: _a, ...old } = view;
+    const missing = html(<Activity view={old as OperatorView} lang={lang} />);
+    assert.match(
+      text(missing),
+      lang === 'ru'
+        ? /harness этой версии не ведёт ленту\./
+        : /This harness version keeps no feed\./,
+    );
+    assert.doesNotMatch(text(missing), /ничего не происходило|Nothing happened/);
+    assert.match(missing, /data-testid="activity-missing"/);
+  }
+  // A 7-day window names itself.
+  const week = {
+    ...view,
+    history: { ...view.history, from: '2026-11-12T12:00:00.000Z' },
+    activity: [],
+  };
+  assert.match(text(html(<Activity view={week} lang="ru" />)), /За окно \(7 дней\)/);
+  const clipped = text(
+    html(<Activity view={{ ...view, truncated: { activity: 23 } }} lang="ru" />),
+  );
+  assert.match(clipped, /Ещё 23 события окна не показано: лента держит 50 последних\./);
+  // An unknown actor and an unknown event code are shown as is, not dropped.
+  const future = text(
+    html(
+      <Activity
+        view={{
+          ...view,
+          activity: [
+            {
+              at: '2026-11-19T11:59:00.000Z',
+              actor: 'robot',
+              action: 'robot.waved',
+              plain: 'a robot waved',
+            },
+          ],
+        }}
+        lang="ru"
+        timeZone={TZ}
+      />,
+    ),
+  );
+  assert.match(future, /11:59 robot a robot waved\s+robot\.waved/);
+  // Without a viewer clock or view day, an old event shows its date.
+  const older = text(
+    html(
+      <Activity
+        view={{
+          ...view,
+          activity: [{ ...view.activity![0]!, at: '2026-11-17T08:00:00.000Z' }],
+        }}
+        lang="en"
+        timeZone={TZ}
+      />,
+    ),
+  );
+  assert.match(older, /17\.11\.2026 08:00/);
 });
 
 test('overview: plan strip, waiting with who acts, plain question lines (RU)', () => {
@@ -506,7 +686,7 @@ test('words with grounds (§5.9): every checked, accepted and blocked element sa
   };
   const by = { ru: /кем: \S|кем — неизвестно/, en: /by: \S|by whom — unknown/ };
   const where = {
-    ru: /в удалённом репозитории — (да|ещё нет|неизвестно)|где — неизвестно/,
+    ru: /в удалённом репозитории — (да|ещё нет|неизвестно)|где — неизвестно|в удалённой ветке|on the remote branch/,
     en: /on the remote|not on the remote yet|remote state unknown|where is unknown/,
   };
   const who = {
@@ -621,7 +801,7 @@ test('review fixes: truncation, pause, plan statuses, counters, time budgets, un
     st,
     /Остановлено: just waits for export-csv to be accepted; nothing is needed — никто/,
   );
-  assert.match(st, /Принято локально; в удалённом репозитории — неизвестно; что проверено/);
+  assert.match(st, /Принято локально; в удалённом репозитории — ещё нет; что проверено/);
   const quiet: WorkDetailView = {
     ...accepted,
     work: {

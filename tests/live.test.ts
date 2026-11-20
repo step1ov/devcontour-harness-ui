@@ -590,7 +590,7 @@ test('digestOf of an alpha.55 document ignores the clock within a minute, not ac
 
 test('digestOf of an alpha.56 document is the harness content token, nothing else', () => {
   const v = JSON.parse(readFileSync(sample, 'utf8'));
-  assert.equal(v.viewRevision, 1);
+  v.viewRevision = 1;
   v.source.token = 'aa11';
   const id = harnessId('aa11');
   assert.equal(digestOf(v), id);

@@ -382,6 +382,8 @@ export function WorkDetail({
             lang={lang}
             linkProps={links}
             verificationHref={verificationHref}
+            timeZone={timeZone}
+            now={clock}
           />
         ) : (
           <p>{t.target.notYet}</p>

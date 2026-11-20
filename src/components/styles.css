@@ -378,6 +378,19 @@
   background: var(--hui-accent);
   color: var(--hui-bg);
 }
+.hui-event {
+  overflow-wrap: anywhere;
+}
+.hui-when {
+  font-variant-numeric: tabular-nums;
+}
+.hui-actor {
+  font-weight: 600;
+}
+.hui-activity .hui-terms {
+  margin-top: 8px;
+  align-items: baseline;
+}
 .hui-charts {
   display: grid;
   gap: var(--hui-gap);

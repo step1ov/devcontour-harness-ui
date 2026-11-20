@@ -29,20 +29,70 @@ test('a different major view version is refused with a reason', () => {
   assert.equal(check.ok ? '' : check.code, 'VIEW_VERSION_UNSUPPORTED');
 });
 
-test('revision 1 (harness alpha.56) is known; revision 0 (alpha.55) too; only later ones are newer', () => {
-  assert.equal(KNOWN_VIEW_REVISION, 1);
-  assert.equal(fixture.viewRevision, 1);
-  const c1 = checkView(fixture);
+test('revision 2 (harness alpha.57) is known; revisions 1 and 0 (alpha.56, .55) too; only later ones are newer', () => {
+  assert.equal(KNOWN_VIEW_REVISION, 2);
+  assert.equal(fixture.viewRevision, 2);
+  const c2 = checkView(fixture);
+  assert.equal(c2.ok && c2.newerRevision, false);
+  const r1 = structuredClone(fixture);
+  r1.viewRevision = 1;
+  delete r1.activity;
+  for (const w of r1.works) if (w.target) w.target.remote = { state: 'unknown', reason: 'x' };
+  const c1 = checkView(r1);
+  assert.equal(c1.ok, true, c1.ok ? '' : c1.message);
   assert.equal(c1.ok && c1.newerRevision, false);
-  const old = structuredClone(fixture);
+  assert.equal(c1.ok && c1.view.activity, undefined, 'no feed stays no feed, not []');
+  const old = structuredClone(r1);
   old.viewRevision = 0;
   delete old.history.totals;
   for (const q of old.questions) delete q.answerBasis;
   const c0 = checkView(old);
   assert.equal(c0.ok, true, c0.ok ? '' : c0.message);
   assert.equal(c0.ok && c0.newerRevision, false);
-  const c2 = checkView({ ...fixture, viewRevision: 2 });
-  assert.equal(c2.ok && c2.newerRevision, true);
+  const c3 = checkView({ ...fixture, viewRevision: 3 });
+  assert.equal(c3.ok && c3.newerRevision, true);
+});
+
+test('the gate checks the revision 2 remote fields and the feed the panel renders', () => {
+  const bad = (mutate: (d: any) => void) => {
+    const d = structuredClone(fixture);
+    mutate(d);
+    const c = checkView(d);
+    return c.ok ? '' : c.message;
+  };
+  const accepted = (d: any) => d.works.find((w: any) => w.target);
+  assert.match(
+    bad((d) => (accepted(d).target.remote.checkedAt = '2026-02-30T10:00:00Z')),
+    /works\[0\]\.target/,
+  );
+  assert.match(
+    bad((d) => (accepted(d).target.remote.checkedAt = '2026-11-19T10:00:00')),
+    /works\[0\]\.target/,
+  );
+  assert.match(
+    bad((d) => (accepted(d).target.remote.line = 7)),
+    /works\[0\]\.target/,
+  );
+  assert.match(
+    bad((d) => (d.activity[0].at = 'yesterday')),
+    /activity/,
+  );
+  assert.match(
+    bad((d) => (d.activity[1].plain = null)),
+    /activity/,
+  );
+  assert.match(
+    bad((d) => (d.activity = {})),
+    /activity/,
+  );
+  // Absent optional fields are fine: no line, no check time.
+  assert.equal(
+    bad((d) => {
+      delete accepted(d).target.remote.line;
+      delete accepted(d).target.remote.checkedAt;
+    }),
+    '',
+  );
 });
 
 test('a newer revision is accepted and flagged; unknown fields are ignored', () => {

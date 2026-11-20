@@ -10,7 +10,13 @@ export default defineConfig({
   testDir: 'e2e',
   fullyParallel: true,
   reporter: 'list',
-  use: { baseURL: `http://127.0.0.1:${PORT}/`, colorScheme: 'light', locale: 'ru-RU' },
+  use: {
+    baseURL: `http://127.0.0.1:${PORT}/`,
+    colorScheme: 'light',
+    locale: 'ru-RU',
+    // A fixed zone: the demo's «вчера» and clock texts do not depend on the machine.
+    timezoneId: 'Europe/Moscow',
+  },
   projects: [
     { name: 'desktop', use: { browserName: 'chromium', viewport: { width: 1280, height: 900 } } },
     {

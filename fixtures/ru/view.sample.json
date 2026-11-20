@@ -1,6 +1,6 @@
 {
   "viewVersion": 1,
-  "viewRevision": 1,
+  "viewRevision": 2,
   "generatedAt": "2026-11-19T12:00:00.000Z",
   "source": {
     "producer": "fixture",
@@ -131,8 +131,10 @@
         "ref": "refs/heads/harness/accepted",
         "acceptedSha": "3b1f9e0c2a7d",
         "remote": {
-          "state": "unknown",
-          "reason": "эта версия harness не читает remote-tracking ref"
+          "state": "not-pushed",
+          "trackingRef": "origin/harness/accepted",
+          "checkedAt": "2026-11-18T17:30:00.000Z",
+          "line": "принято локально; в удалённой ветке origin/harness/accepted ещё нет"
         }
       }
     },
@@ -465,25 +467,77 @@
   },
   "activity": [
     {
-      "at": "2026-11-19T11:52:10.000Z",
-      "actor": "harness",
-      "action": "attempt.gate",
+      "at": "2026-11-19T11:51:40.000Z",
+      "actor": "controller",
+      "action": "gate.passed",
       "workId": "locale-format",
-      "plain": "harness запустил проверку candidate-test:unit для locale-format"
+      "plain": "контроллер запустил проверку lint: прошла (работа locale-format, попытка 2, кандидат)"
+    },
+    {
+      "at": "2026-11-19T11:41:00.000Z",
+      "actor": "controller",
+      "action": "attempt.started",
+      "workId": "locale-format",
+      "plain": "контроллер запустил попытку 2 работы locale-format; пишет claude"
+    },
+    {
+      "at": "2026-11-19T11:40:30.000Z",
+      "actor": "controller",
+      "action": "attempt.failed",
+      "workId": "locale-format",
+      "plain": "попытка 1 работы locale-format не удалась: проверка не прошла: lint нашёл лишний импорт"
     },
     {
       "at": "2026-11-19T11:40:00.000Z",
       "actor": "writer",
-      "action": "input.request",
+      "action": "question.asked",
       "workId": "export-csv",
-      "plain": "исполнитель задал вопрос q-17 и остановил export-csv"
+      "subject": "q-17",
+      "plain": "исполнитель задал вопрос q-17 по работе export-csv (важность 8)"
     },
     {
-      "at": "2026-11-19T11:20:00.000Z",
+      "at": "2026-11-19T11:26:00.000Z",
       "actor": "lead",
-      "action": "run.start",
-      "plain": "ведущий запустил прогон графа g1",
-      "subject": "g1"
+      "action": "question.answered",
+      "workId": "locale-format",
+      "subject": "q-12",
+      "plain": "ведущий ответил на вопрос q-12 по работе locale-format (технический вопрос)"
+    },
+    {
+      "at": "2026-11-19T11:14:00.000Z",
+      "actor": "controller",
+      "action": "work.accepted",
+      "workId": "add-greeting",
+      "plain": "работа add-greeting принята (попытка 1): 3b1f9e0c2a7d в refs/heads/harness/accepted, локально"
+    },
+    {
+      "at": "2026-11-19T11:13:00.000Z",
+      "actor": "reviewer",
+      "action": "review.approved",
+      "workId": "add-greeting",
+      "subject": "add-greeting",
+      "plain": "reviewer codex одобрил изменения работы add-greeting (попытка 1, кандидат); читал diff, ничего не запускал"
+    },
+    {
+      "at": "2026-11-19T11:10:30.000Z",
+      "actor": "controller",
+      "action": "gate.passed",
+      "workId": "add-greeting",
+      "plain": "контроллер запустил проверку lint: прошла (работа add-greeting, попытка 1, кандидат)"
+    },
+    {
+      "at": "2026-11-19T11:00:00.000Z",
+      "actor": "controller",
+      "action": "attempt.started",
+      "workId": "add-greeting",
+      "plain": "контроллер запустил попытку 1 работы add-greeting; пишет claude"
+    },
+    {
+      "at": "2026-11-18T18:05:00.000Z",
+      "actor": "reviewer",
+      "action": "review.approved",
+      "subject": "g1",
+      "plain": "reviewer codex одобрил план g1, раунд 2"
     }
   ],
   "decisions": [

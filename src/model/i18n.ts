@@ -98,6 +98,41 @@ export function formatClock(iso: string, timeZone?: string, nowMs?: number): str
   return sameDay ? time : `${at.day}.${at.month}.${at.year} ${time}`;
 }
 
+/**
+ * When an event happened, for lists that span more than a day (the activity
+ * feed, the remote check time): `HH:MM` on the viewer's day of `nowMs`,
+ * «вчера HH:MM» / `yesterday HH:MM` on the calendar day before it, else
+ * `DD.MM.YYYY HH:MM`. Without `nowMs` the date is always shown, so an old
+ * event never reads as today's. `undefined` for an invalid instant or zone.
+ */
+export function formatWhen(
+  iso: string,
+  lang: Lang,
+  timeZone?: string,
+  nowMs?: number,
+): string | undefined {
+  const ms = instantMs(iso);
+  if (Number.isNaN(ms)) return undefined;
+  const at = parts(ms, timeZone);
+  if (!at) return undefined;
+  const time = `${at.hour}:${at.minute}`;
+  const dated = `${at.day}.${at.month}.${at.year} ${time}`;
+  if (nowMs === undefined || !Number.isFinite(nowMs)) return dated;
+  const today = parts(nowMs, timeZone);
+  if (!today) return dated;
+  if (today.year === at.year && today.month === at.month && today.day === at.day) return time;
+  // The calendar day before the viewer's today, by date arithmetic (no DST guess).
+  const y = new Date(Date.UTC(Number(today.year), Number(today.month) - 1, Number(today.day) - 1));
+  const two = (n: number) => String(n).padStart(2, '0');
+  if (
+    String(y.getUTCFullYear()).padStart(4, '0') === at.year &&
+    two(y.getUTCMonth() + 1) === at.month &&
+    two(y.getUTCDate()) === at.day
+  )
+    return dict(lang).yesterday(time);
+  return dated;
+}
+
 /** Footer: «Данные harness на HH:MM; панель ничего не меняет». */
 export function footerSentence(
   generatedAt: string,
@@ -111,14 +146,50 @@ export function footerSentence(
 /**
  * Where an accepted result is (`works[].target`), in one sentence. The remote
  * state is read by the harness from the local remote-tracking ref without a
- * fetch, so the sentence says "as of the last git update on this machine".
- * `unknown` or any state this build does not know reads as unknown, never as
- * "not pushed" or "pushed"; the harness `reason` follows as is.
+ * fetch. From view revision 2 (harness alpha.57) a definite state carries the
+ * harness `line` («в удалённой ветке origin/main ещё нет»), shown as written
+ * after «Принято локально»; before, the sentence says "as of the last git
+ * update on this machine". `unknown` or any state this build does not know
+ * reads as unknown with the harness `reason`, never as "not pushed" or
+ * "pushed", whatever its line says.
  */
 export function targetSentence(target: Pick<TargetView, 'remote'>, lang: Lang): string {
-  const { state, reason } = target.remote;
+  const { state, reason, line } = target.remote;
   const t = dict(lang).target;
-  if (state === 'pushed') return t.pushed;
-  if (state === 'not-pushed') return t.notPushed;
+  if (state === 'pushed' || state === 'not-pushed') {
+    const l = typeof line === 'string' ? line.trim() : '';
+    if (!l) return state === 'pushed' ? t.pushed : t.notPushed;
+    // The harness not-pushed line already starts with «принято локально»
+    // (in the view language, which may differ from the panel's): say it once.
+    const head = [dict('ru').target.acceptedLocally, dict('en').target.acceptedLocally].find((h) =>
+      l.toLowerCase().startsWith(h.toLowerCase()),
+    );
+    const body = head ? l.slice(head.length).replace(/^[\s;,:]+/, '') : l;
+    const text = t.withLine(body || l);
+    return /[.!?]$/.test(text) ? text : text + '.';
+  }
   return t.unknown(typeof reason === 'string' && reason.trim() ? `: ${reason.trim()}` : '');
+}
+
+/**
+ * How fresh the remote state is (revision 2): the harness compared the
+ * accepted commit with this machine's copy of the remote branch, and
+ * `checkedAt` is when git last updated that copy. `undefined` (say nothing)
+ * for a document without a harness line, which already says "as of the last
+ * git update", and for an unknown state without a check time.
+ */
+export function remoteFreshness(
+  target: Pick<TargetView, 'remote'>,
+  lang: Lang,
+  timeZone?: string,
+  nowMs?: number,
+): string | undefined {
+  const { state, checkedAt, line } = target.remote;
+  const t = dict(lang).target;
+  const when =
+    typeof checkedAt === 'string' ? formatWhen(checkedAt, lang, timeZone, nowMs) : undefined;
+  if (when) return t.checkedAt(when);
+  const definite = state === 'pushed' || state === 'not-pushed';
+  if (definite && typeof line === 'string' && line.trim()) return t.checkedAtUnknown;
+  return undefined;
 }
