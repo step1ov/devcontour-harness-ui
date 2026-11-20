@@ -95,8 +95,7 @@ test('both fixtures and a real harness document are valid under the harness sche
     assert.deepEqual(validate(detailSchema, read('../fixtures/ru/' + f)), [], f);
   assert.equal(harnessEmpty.ok, true);
   assert.equal(harnessEmpty.data.viewRevision, 4);
-  // Taken from the alpha.60 branch before its version bump: the package still says alpha.59.
-  assert.match(harnessEmpty.data.source.producerVersion, /^0\.1\.0-alpha\.(59|60)$/);
+  assert.equal(harnessEmpty.data.source.producerVersion, '0.1.0-alpha.60');
   // No state: no connector slice, no tracker questions, no forecast, no updates check.
   for (const k of ['scope', 'sourceQuestions', 'forecast', 'updates'])
     assert.equal(Object.hasOwn(harnessEmpty.data, k), false, k);
