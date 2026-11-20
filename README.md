@@ -146,6 +146,20 @@ import 'devcontour-harness-ui/styles.css';
 Представление не содержит промптов, логов, токенов и абсолютных путей; см.
 дизайн, §9.
 
+## Публикация
+
+Владелец публикует из актуального checkout:
+
+```sh
+git pull && npm ci && npm publish --tag alpha
+```
+
+`prepack` сначала сверяет `node_modules` и `package-lock.json` с
+`package.json` (`scripts/check-deps.mjs`) и при расхождении останавливает
+публикацию до сборки с сообщением «Зависимости не совпадают с
+package-lock.json — выполните npm ci и повторите npm publish» (English: “Dependencies do not match
+package-lock.json — run npm ci and repeat npm publish”) и списком расхождений.
+
 ## Лицензия
 
 MIT
