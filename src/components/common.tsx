@@ -9,8 +9,14 @@ import { dict, knownLabel, label, type Dict, type GlossaryId, type Lang } from '
 import { attemptsLineParts } from '../model/steps.ts';
 import { formatClock, remoteFreshness, targetSentence } from '../model/i18n.ts';
 import { SLOT_STAGES, formatRange, formatRough } from '../model/format.ts';
-import { stageLeft } from '../model/scope.ts';
-import type { Actor, BlockerView, OperatorQuestion, WorkView } from '../model/view.ts';
+import { scopeAbsence, stageLeft } from '../model/scope.ts';
+import type {
+  Actor,
+  BlockerView,
+  OperatorQuestion,
+  OperatorView,
+  WorkView,
+} from '../model/view.ts';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card.tsx';
 import { cn } from './ui/cn.ts';
 
@@ -187,6 +193,23 @@ export function AcceptedLine({
 }
 
 /** A note that a list was clipped by the projection. */
+/**
+ * Why the view has no run slice to list: dropped for size, not read from the
+ * tracker yet (`scopeReason: no-snapshot`), a slice without tasks, an
+ * unreadable snapshot, a reason this panel does not know, an older empty
+ * state (neutral words), or an older harness that does not report it.
+ */
+export function scopeMissingText(view: OperatorView, t: Dict): string {
+  if (view.truncated?.scope) return t.r4.scopeDropped(view.truncated.scope);
+  const absence = scopeAbsence(view);
+  if (absence === 'not-read') return t.overview.scopeNotRead;
+  if (absence === 'unreadable') return t.overview.scopeUnreadable;
+  if (absence === 'empty') return t.overview.scopeEmpty;
+  if (absence === 'unknown') return t.overview.scopeNone;
+  if (absence === 'other') return t.overview.scopeAbsent(String(view.scopeReason));
+  return t.overview.scopeMissing;
+}
+
 export function Clipped({ n, t }: { n: number | undefined; t: Dict }) {
   return n ? <p className="hui-muted hui-clipped">{t.listClipped(n)}</p> : null;
 }

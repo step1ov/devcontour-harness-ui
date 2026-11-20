@@ -290,6 +290,7 @@ const overview = obj({
       actor: opt(S),
       action: opt(S),
       runner: opt(S),
+      neverRun: opt(B),
       restartBy: opt(S),
       line: opt(S),
     }),
@@ -382,6 +383,7 @@ const overview = obj({
       50,
     ),
   ),
+  scopeReason: opt(S),
   scope: opt(
     obj({
       total: opt(C),

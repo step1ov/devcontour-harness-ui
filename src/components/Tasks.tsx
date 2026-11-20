@@ -33,6 +33,7 @@ import {
   WorkEta,
   WorkRef,
   actorLabel,
+  scopeMissingText,
   type ScreenProps,
 } from './common.tsx';
 import { ReviewSubjectCard } from './Reviews.tsx';
@@ -123,9 +124,7 @@ export function Tasks({ view, lang = 'ru', now, onOpenWork, workHref, timeZone }
         ) : null
       ) : (
         <p className="hui:text-xs hui:text-muted-foreground" data-testid="scope-missing">
-          {view.truncated?.scope
-            ? t.r4.scopeDropped(view.truncated.scope)
-            : t.overview.scopeMissing}
+          {scopeMissingText(view, t)}
         </p>
       )}
       {other.length ? (

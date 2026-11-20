@@ -369,6 +369,13 @@ export interface ViewProgress {
      * Absent = an older harness.
      */
     runner?: 'running' | 'not-running';
+    /**
+     * Harness 0.1.0-alpha.62: nothing has run with this state directory yet
+     * (no state, or no works, attempts, call records or controller); `line`
+     * then says how the first run starts. Absent = a state that ran, or an
+     * older harness.
+     */
+    neverRun?: boolean;
     /** Who starts the run again when nobody runs (`lead`: `harness run`). */
     restartBy?: Actor;
     /** The same as a plain line («очередь стоит — никто не запущен; …»). */
@@ -656,6 +663,13 @@ export interface OperatorView {
   decisions?: DecisionView[];
   /** The whole run slice, at most 200 tasks (revision 4). Absent = no connector. */
   scope?: { total?: number; tasks: ScopeTaskView[] };
+  /**
+   * Why `scope` is absent (harness 0.1.0-alpha.62): `no-snapshot` — no
+   * connector has read the tracker tasks yet; `unreadable` — a connector
+   * database exists but this harness could not read it. Absent = `scope` is present, was
+   * dropped for size (`truncated.scope`), or an older harness.
+   */
+  scopeReason?: 'no-snapshot' | 'unreadable';
   /** Open owner questions from the task source, at most 50 (revision 4). */
   sourceQuestions?: SourceQuestion[];
   /** Release forecast (revision 4). Absent = an older harness or an empty scope. */
@@ -681,7 +695,11 @@ export interface OperatorView {
       | 'activity'
       | 'decisions'
       | 'scope'
-      | 'sourceQuestions',
+      | 'sourceQuestions'
+      // Harness 0.1.0-alpha.61: works that lost their revision 4 fields for
+      // size, and `updates.whatsNew` items over 10. Typed, not shown yet.
+      | 'workFields'
+      | 'whatsNew',
       number
     >
   >;
