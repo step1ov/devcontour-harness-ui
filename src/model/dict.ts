@@ -869,6 +869,8 @@ const ru = {
     scopeNotRead: 'Показаны только работы harness: harness ещё не читал задачи из трекера.',
     scopeUnreadable:
       'Показаны только работы harness: снимок задач трекера есть, но harness не смог его прочитать.',
+    scopeEmpty: 'Показаны только работы harness: в срезе задач трекера задач нет.',
+    scopeNone: 'Показаны только работы harness: среза задач прогона в представлении нет.',
     scopeAbsent: (reason: string) =>
       `Показаны только работы harness: среза задач прогона в представлении нет (${reason}).`,
     howAskLead: 'Как: попросите ведущего сбросить попытки (команда — в «подробностях»).',
@@ -1818,6 +1820,8 @@ const en: Dict = {
     scopeNotRead: 'Only harness works are shown: the harness has not read the tracker tasks yet.',
     scopeUnreadable:
       'Only harness works are shown: a tracker snapshot exists, but the harness could not read it.',
+    scopeEmpty: 'Only harness works are shown: the tracker slice has no tasks.',
+    scopeNone: 'Only harness works are shown: the view has no run slice.',
     scopeAbsent: (reason: string) =>
       `Only harness works are shown: the view has no run slice (${reason}).`,
     howAskLead: 'How: ask the lead agent to reset the attempts (the command is under “details”).',

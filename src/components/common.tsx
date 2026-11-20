@@ -194,15 +194,18 @@ export function AcceptedLine({
 
 /** A note that a list was clipped by the projection. */
 /**
- * Why the view has no run slice: dropped for size, not read from the tracker
- * yet (harness `scopeReason: no-snapshot` or nothing has run), a reason this
- * panel does not know, or an older harness that does not report it.
+ * Why the view has no run slice to list: dropped for size, not read from the
+ * tracker yet (`scopeReason: no-snapshot`), a slice without tasks, an
+ * unreadable snapshot, a reason this panel does not know, an older empty
+ * state (neutral words), or an older harness that does not report it.
  */
 export function scopeMissingText(view: OperatorView, t: Dict): string {
   if (view.truncated?.scope) return t.r4.scopeDropped(view.truncated.scope);
   const absence = scopeAbsence(view);
   if (absence === 'not-read') return t.overview.scopeNotRead;
   if (absence === 'unreadable') return t.overview.scopeUnreadable;
+  if (absence === 'empty') return t.overview.scopeEmpty;
+  if (absence === 'unknown') return t.overview.scopeNone;
   if (absence === 'other') return t.overview.scopeAbsent(String(view.scopeReason));
   return t.overview.scopeMissing;
 }

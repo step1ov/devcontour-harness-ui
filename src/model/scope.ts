@@ -222,17 +222,22 @@ export function neverRun(view: OperatorView): boolean {
 /**
  * Why the view has no run slice (`scope` absent and not dropped for size):
  * `not-read` — the harness has not read the tracker tasks yet (`scopeReason:
- * no-snapshot`, or nothing has run at all); `unreadable` — a tracker snapshot
- * exists but the harness could not read it; `other` — a reason this panel
- * does not know; `not-reported` — an older harness without the field.
+ * no-snapshot`); `empty` — the harness sent a slice without tasks;
+ * `unreadable` — a tracker snapshot exists but the harness could not read it;
+ * `other` — a reason this panel does not know; `unknown` — an older empty
+ * state: nothing ran, but whether a tracker was read it cannot tell (it may
+ * have skipped an unreadable connector); `not-reported` — an older harness
+ * without the field over a state that ran.
  */
 export function scopeAbsence(
   view: OperatorView,
-): 'not-read' | 'unreadable' | 'other' | 'not-reported' {
+): 'not-read' | 'empty' | 'unreadable' | 'other' | 'unknown' | 'not-reported' {
+  const raw = (view as { scope?: unknown }).scope;
+  if (isObj(raw) && Array.isArray(raw.tasks)) return 'empty';
   // A newer harness may name a reason this build does not know.
   const reason = view.scopeReason as string | undefined;
   if (reason === 'no-snapshot') return 'not-read';
   if (reason === 'unreadable') return 'unreadable';
   if (typeof reason === 'string') return 'other';
-  return neverRun(view) ? 'not-read' : 'not-reported';
+  return neverRun(view) ? 'unknown' : 'not-reported';
 }

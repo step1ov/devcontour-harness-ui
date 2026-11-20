@@ -18,6 +18,8 @@ export function asAlpha59<T>(doc: T): T {
   if (d.truncated) {
     delete d.truncated.scope;
     delete d.truncated.sourceQuestions;
+    delete d.truncated.workFields;
+    delete d.truncated.whatsNew;
     if (!Object.keys(d.truncated).length) delete d.truncated;
   }
   if (d.health) delete d.health.sources;

@@ -182,7 +182,22 @@ test('alpha.60 documents (revision 4 without neverRun/scopeReason) stay valid un
   assert.deepEqual(validate(overviewSchema60, harnessEmpty60.data), []);
   assert.deepEqual(validate(overviewSchema, harnessEmpty60.data), []);
   const real = checkView(harnessEmpty60.data);
+  assert.equal(real.ok, true, real.ok ? '' : real.message);
   assert.equal(real.ok && real.newerRevision, false);
+  const now = checkView(harnessEmpty.data);
+  assert.equal(now.ok, true, now.ok ? '' : now.message);
+  // The gate checks the new fields' types.
+  for (const bad of [
+    { ...harnessEmpty.data, scopeReason: 5 },
+    {
+      ...harnessEmpty.data,
+      progress: {
+        ...harnessEmpty.data.progress,
+        queue: { ...harnessEmpty.data.progress.queue, neverRun: 'yes' },
+      },
+    },
+  ])
+    assert.equal(checkView(bad).ok, false);
   // The fixtures carry no alpha.62 field, so they are alpha.60 documents too.
   for (const [name, doc, schema] of fixtures()) {
     const old60 = schema === overviewSchema ? overviewSchema60 : detailSchema60;
@@ -201,7 +216,10 @@ test('alpha.59 documents (revision 3) stay valid under the alpha.60 schemas and 
   const real = checkView(harnessEmpty59.data);
   assert.equal(real.ok && real.newerRevision, false);
   for (const [name, doc, schema] of fixtures()) {
-    const old = asAlpha59(doc);
+    // Seeded with the alpha.61 truncation keys: the transform drops them too.
+    const old = asAlpha59(
+      schema === overviewSchema ? { ...doc, truncated: { workFields: 2, whatsNew: 1 } } : doc,
+    );
     const old59 = schema === overviewSchema ? overviewSchema59 : detailSchema59;
     assert.deepEqual(validate(old59, old), [], name);
     assert.deepEqual(validate(schema, old), [], name);

@@ -678,6 +678,17 @@ test('never run: the harness line instead of «Очередь идёт», and «
     shown(html(<Tasks view={viewOf(ruEmpty)} lang="ru" />)),
     /harness ещё не читал задачи из трекера/,
   );
+  // The harness field alone decides, and its own line is shown: no warning, another line.
+  const own = structuredClone(empty62);
+  own.health.warnings = [];
+  own.progress.queue.line = 'Свежий каталог: первый запуск делает ведущий.';
+  const o = overview(own);
+  assert.match(o, /data-testid="queue-state"[^>]*>Ещё не запускали</);
+  assert.match(o, /data-testid="queue-line"[^>]*>Свежий каталог: первый запуск делает ведущий\.</);
+  assert.doesNotMatch(o, /Ещё ничего не запускали — ведущий начнёт/);
+  // Without the field and without the warning the same document is not «not started».
+  delete own.progress.queue.neverRun;
+  assert.doesNotMatch(overview(own), /Ещё не запускали/);
   // A pause still wins over «not started».
   const paused = structuredClone(ruEmpty);
   paused.progress.queue.paused = true;
@@ -693,7 +704,26 @@ test('an alpha.60 empty state (no neverRun/scopeReason) reads as never run from 
     m,
     /data-testid="queue-line"[^>]*>Ещё ничего не запускали — ведущий начнёт с harness run\.</,
   );
-  assert.match(shown(m), /harness ещё не читал задачи из трекера/);
+  // Whether a tracker was read, an old empty state cannot tell (it may have
+  // skipped an unreadable connector): neutral words, neither «не читал» nor «не сообщает».
+  for (const s of [shown(m), shown(html(<Tasks view={viewOf(empty60)} lang="ru" />))]) {
+    assert.match(s, /среза задач прогона в представлении нет\./);
+    assert.doesNotMatch(s, /ещё не читал|не сообщает/);
+  }
+  assert.match(shown(overview(empty60, 'en')), /the view has no run slice\./);
+});
+
+test('a slice without tasks (read before the first run) is not «never read»', () => {
+  const read0 = structuredClone(empty62);
+  delete read0.scopeReason;
+  read0.scope = { tasks: [] };
+  for (const s of [shown(overview(read0)), shown(html(<Tasks view={viewOf(read0)} lang="ru" />))]) {
+    assert.match(s, /в срезе задач трекера задач нет/);
+    assert.doesNotMatch(s, /ещё не читал|не сообщает/);
+  }
+  assert.match(shown(overview(read0, 'en')), /the tracker slice has no tasks/);
+  // The queue still says nothing has run.
+  assert.match(overview(read0), /data-testid="queue-state"[^>]*>Ещё не запускали</);
 });
 
 test('scope absent: an older revision says it does not report, an unknown reason is named', () => {
