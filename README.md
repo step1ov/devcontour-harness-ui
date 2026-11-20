@@ -121,7 +121,7 @@ import 'devcontour-harness-ui/styles.css';
 Экраны: `Overview`, `Tasks`, `WorkDetail` (документ `harness view --work <id>`),
 `Reviews`, `Decisions`, `Activity`, `Settings`, `History`, `Health`.
 Стили собраны заранее (Tailwind с префиксом `hui:`, без preflight, только
-внутри `.hui`), Radix и компоненты shadcn/ui — внутри пакета: хосту нужен
+внутри `.hui`, слои `hui-*`; глобальны лишь регистрации `@property --tw-*`), Radix и компоненты shadcn/ui — внутри пакета: хосту нужен
 только React. У всех
 `lang` (по умолчанию `ru`), `timeZone`, `now` и навигация `onOpenWork` или
 `workHref`.

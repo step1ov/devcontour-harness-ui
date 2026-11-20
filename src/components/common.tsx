@@ -232,7 +232,10 @@ export function StageStatus({
     );
   }
   if (name === 'stopped' || name === 'blocked') {
-    const b = w.blockers[0];
+    // The reason that names someone first; a stage need names who acts when
+    // the reasons name nobody — never "nobody" while the view names someone.
+    const named = w.blockers.find((x) => x.actor !== null);
+    const b = named ?? w.blockers[0];
     const reason = b
       ? b.plain && b.plain.trim()
         ? b.plain
@@ -240,7 +243,8 @@ export function StageStatus({
       : w.stage.needs
         ? label(t.action, w.stage.needs.action)
         : t.blocker.stoppedNoReason;
-    const actor = b ? b.actor : w.stage.needs ? w.stage.needs.actor : undefined;
+    const needs = w.stage.needs && w.stage.needs.actor !== null ? w.stage.needs.actor : undefined;
+    const actor = named ? named.actor : needs !== undefined ? needs : b ? b.actor : undefined;
     const who =
       actor === null
         ? t.blocker.nobody

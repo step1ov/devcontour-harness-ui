@@ -20,7 +20,11 @@ execFileSync(process.execPath, [cli, '-i', 'src/components/styles.css', '-o', ou
   cwd: root,
   stdio: ['ignore', 'ignore', 'inherit'],
 });
-const css = scopeGlobals(readFileSync(out, 'utf8'));
+// Tailwind's own `properties` layer gets a panel name too, so it never joins a host's layer order.
+const css = scopeGlobals(readFileSync(out, 'utf8')).replace(
+  /@layer properties\b/g,
+  '@layer hui-properties',
+);
 // A newer Tailwind that writes the global rule differently must fail the build, not leak.
 if (/(^|[\s{}])\*\s*,\s*:{1,2}before/.test(css.replace(/\.hui \*/g, ''))) {
   throw new Error('build-css: an unscoped universal rule survived; update scopeGlobals');

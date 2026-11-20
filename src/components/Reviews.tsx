@@ -42,15 +42,13 @@ export function ReviewSubjectCard({
   return (
     <article className="hui-panel hui-card" data-testid={`review-${r.kind}-${r.subject}`}>
       <div className="hui-row">
-        <strong>
-          <code>{r.subject}</code>
-        </strong>
-        <span className="hui-badge">{label(v.kind, r.kind)}</span>
+        <strong>{label(v.kind, r.kind)}</strong>
         <span className={'hui-badge ' + (r.approved ? 'hui-ok' : 'hui-warn')}>
           {r.approved ? v.approved : v.notApproved}
         </span>
         {r.workId ? <WorkRef id={r.workId} {...links} /> : null}
         {r.sameVendor ? <span className="hui-badge hui-warn">{v.sameVendor}</span> : null}
+        <Codes t={t} codes={[r.subject]} />
       </div>
       {r.line ? <p className="hui-muted">{r.line}</p> : null}
       <ul className="hui-facts">
@@ -70,7 +68,7 @@ export function ReviewSubjectCard({
           <ul className="hui-list">
             {r.findings.map((f) => (
               <li key={f.id} className="hui-item" data-testid={`finding-${f.id}`}>
-                <code>{f.id}</code> <span className="hui-badge">{f.severity}</span>{' '}
+                <span className="hui-badge">{f.severity}</span>{' '}
                 <span>{label(v.finding, f.status)}</span>
                 {f.rounds !== undefined ? (
                   <span className="hui-muted"> · {v.findingRounds(f.rounds)}</span>
@@ -85,6 +83,7 @@ export function ReviewSubjectCard({
                   </div>
                 ) : null}
                 {f.title ? <div className="hui-muted">{f.title}</div> : null}
+                <Codes t={t} codes={[f.id]} />
               </li>
             ))}
           </ul>

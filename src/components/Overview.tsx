@@ -162,7 +162,10 @@ export function Overview({
     !health.controller.present &&
     progress.running === 0 &&
     harnessLeft > 0;
-  const allDone = progress.total > 0 && harnessLeft === 0;
+  const finished = progress.total > 0 && harnessLeft === 0;
+  // Nothing accepted and everything cancelled is not «всё принято».
+  const allDone = finished && progress.done > 0;
+  const allCancelled = finished && progress.done === 0;
   const story = storySentence({
     view,
     running,
@@ -192,16 +195,20 @@ export function Overview({
           </p>
           <div className="hui:flex hui:flex-wrap hui:items-center hui:gap-2 hui-header">
             <Badge
-              tone={progress.queue.paused || standing ? 'warn' : 'ok'}
+              tone={progress.queue.paused || standing ? 'warn' : allCancelled ? 'neutral' : 'ok'}
               data-testid="queue-state"
             >
               {progress.queue.paused
                 ? o.queuePaused(progress.queue.reason ?? '')
                 : standing
                   ? o.queueStanding
-                  : allDone
-                    ? o.queueDone
-                    : o.queueRunning}
+                  : allCancelled
+                    ? o.queueCancelled
+                    : allDone
+                      ? outsideLeft
+                        ? o.queueHarnessDone
+                        : o.queueDone
+                      : o.queueRunning}
             </Badge>
             {progress.queue.paused ? (
               <span data-status="blocked" data-testid="queue-who" className="hui:text-sm">
@@ -257,6 +264,12 @@ export function Overview({
             <span className="hui:inline-block hui:size-2.5 hui:rounded-full hui:bg-wait" />
             {o.legendWaiting}
           </li>
+          {overall.cancelled ? (
+            <li className="hui:flex hui:items-center hui:gap-1.5">
+              <span className="hui:inline-block hui:size-2.5 hui:rounded-full hui:bg-muted-foreground" />
+              {o.legendCancelled}
+            </li>
+          ) : null}
           {overall.outside || overall.outsideUnlisted ? (
             <li className="hui:flex hui:items-center hui:gap-1.5">
               <span className="hui:inline-block hui:size-2.5 hui:rounded-full hui:bg-track" />
@@ -747,7 +760,9 @@ function storySentence({
   if (allDone)
     return outsideLeft
       ? s.harnessDone(view.progress.done, outsideLeft)
-      : s.allDone(view.progress.done, view.progress.done, cancelled);
+      : s.allDone(view.progress.done, view.progress.total - cancelled, cancelled);
+  if (view.progress.total > 0 && view.progress.done === 0 && cancelled >= view.progress.total)
+    return s.allCancelled(cancelled);
   if (running.length)
     return s.running(
       running.map((w) => s.workAt(workName(view, w.id), stageLabel(w.stage.name, lang))),
@@ -808,7 +823,7 @@ function problemsOf(
     if (w.stage.name === 'stopped') {
       const b = w.blockers.find((x) => x.actor !== null) ?? w.blockers[0];
       // Who acts: the same people as «Нужно от вас» and «Остальные ожидания».
-      const actors = actorsOn(steps, w.id);
+      const actors = actorsOn(steps, w.id, view);
       const needs = w.stage.needs?.actor;
       out.push({
         kind: p.kindStopped,
@@ -904,11 +919,7 @@ function StepHead({ s, t, view, links }: { s: Step; t: Dict; view: OperatorView;
   return (
     <>
       <strong>
-        {head ? (
-          head.charAt(0).toUpperCase() + head.slice(1)
-        ) : (
-          <code>{s.action ?? s.code ?? t.unknown}</code>
-        )}
+        {head ? head.charAt(0).toUpperCase() + head.slice(1) : t.overview.unknownAction}
       </strong>
       {' — '}
       {s.workIds.length ? (
@@ -921,8 +932,11 @@ function StepHead({ s, t, view, links }: { s: Step; t: Dict; view: OperatorView;
           </span>
         ))
       ) : (
-        <code>{s.subject || t.unknown}</code>
+        <span>{s.subject ? t.overview.otherSubject : t.unknown}</span>
       )}
+      {!head || (!s.workIds.length && s.subject) ? (
+        <Codes t={t} codes={[s.action ?? s.code, s.subject]} />
+      ) : null}
     </>
   );
 }
@@ -1063,7 +1077,9 @@ function DependencyLine({
                 ? o.nobodyThere
                 : st.kind === 'waits'
                   ? o.waitsThere
-                  : o.unknownThere(st.stage === undefined ? undefined : stage(st.stage));
+                  : st.kind === 'cancelled'
+                    ? o.cancelledThere
+                    : o.unknownThere(st.stage === undefined ? undefined : stage(st.stage));
         return (
           <span key={id}>
             {i ? '; ' : ''}

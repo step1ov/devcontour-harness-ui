@@ -4,7 +4,7 @@
 // view record; nothing new is counted. Pure: no node:*, no React.
 
 import { SLOT_STAGES, leadMayAnswer, questionStatus } from './format.ts';
-import { actorsOn, type NextSteps, type StepActor } from './steps.ts';
+import { actorsOn, leadAnswers, type NextSteps, type StepActor } from './steps.ts';
 import type {
   AttemptRow,
   OperatorQuestion,
@@ -14,16 +14,7 @@ import type {
   WorkView,
 } from './view.ts';
 
-/**
- * A question the lead answers by the policy (`leadAnswers.technical` and a
- * technical question the lead may answer, F-W): it does not wait for you.
- */
-export function leadAnswers(
-  view: Pick<OperatorView, 'settings'>,
-  q: Pick<OperatorQuestion, 'answerableBy' | 'impact'>,
-): boolean {
-  return view.settings.thresholds.leadAnswersTechnical === true && leadMayAnswer(q);
-}
+export { leadAnswers };
 
 /** Asking questions split by who answers them: you, or the lead under the policy. */
 export function splitQuestions(view: OperatorView, steps: NextSteps) {
@@ -78,19 +69,11 @@ export function taskCard(view: OperatorView, steps: NextSteps, w: WorkView): Tas
     // A running work is never "waiting" (F-J): the harness acts, unless the
     // view names someone else for it (the same people as on the Overview).
     phase = 'running';
-    const actors = actorsOn(steps, w.id);
+    const actors = actorsOn(steps, w.id, view);
     next = actors.length ? { kind: 'actors', actors } : { kind: 'harness', stage: w.stage.name };
   } else {
-    let actors = actorsOn(steps, w.id);
-    // Questions the lead answers by the policy name the lead, not you (F-W);
-    // a decision of yours on the same work still names you.
-    if (asking.length && asking.every((q) => leadAnswers(view, q))) {
-      const yours =
-        steps.operator.some((s) => s.workIds.includes(w.id)) ||
-        steps.unlistedAnswers.includes(w.id);
-      if (!yours) actors = actors.filter((a) => a !== 'operator');
-      if (!actors.includes('lead')) actors = ['lead', ...actors];
-    }
+    // Questions the lead answers by the policy name the lead, not you (F-W).
+    const actors = actorsOn(steps, w.id, view);
     if (asking.length || steps.unlistedAnswers.includes(w.id)) phase = 'question';
     else if (dep) phase = 'dependency';
     else if (w.stage.name === 'stopped' || w.stage.name === 'blocked') phase = 'stopped';
@@ -160,19 +143,18 @@ export function timelineOf(
 ): TimelineStep[] {
   const seen = new Map(row?.stages.map((s) => [s.stage, s]) ?? []);
   const isAccepted = accepted(work);
-  const ahead = new Set(latest ? work.stage.next : []);
+  const terminal = isAccepted || work.stage.name === 'cancelled';
   const known = PROCESS.filter((s) => s !== 'acceptance');
   // Stages a newer harness reports that this build does not know keep their place after the known ones.
   const extra = (row?.stages ?? []).map((s) => s.stage).filter((s) => !PROCESS.includes(s));
   const order = [...known, ...extra];
-  // The stopped latest attempt of a work with attempts left: the rest comes in the next one.
-  const notReached: TimelineStep['state'] = !latest
-    ? 'skipped'
-    : work.attempts.left > 0
-      ? 'next'
-      : 'skipped';
-  const startedAfter = (i: number) =>
-    order.slice(i + 1).some((x) => seen.has(x) || (latest && work.stage.name === x));
+  const failedRow =
+    row?.status === 'failed' || (row?.stages ?? []).some((s) => s.outcome === 'failed');
+  // A stopped latest attempt of a work that goes on: the rest comes in the next attempt.
+  const notReached: TimelineStep['state'] =
+    latest && !terminal && work.attempts.left > 0 ? 'next' : 'skipped';
+  const current = latest && !terminal ? order.indexOf(work.stage.name) : -1;
+  const lastSeen = Math.max(-1, ...order.map((x, i) => (seen.has(x) ? i : -1)));
   let failed = false;
   const out: TimelineStep[] = [];
   for (const [i, stage] of order.entries()) {
@@ -181,13 +163,17 @@ export function timelineOf(
     if (s?.outcome === 'passed') state = 'passed';
     else if (s?.outcome === 'failed') state = 'failed';
     // Only the work's own stage runs now, never two at once.
-    else if (latest && !isAccepted && work.stage.name === stage && SLOT_STAGES.has(stage))
-      state = 'current';
+    else if (i === current && SLOT_STAGES.has(stage)) state = 'current';
     // Seen without an outcome: passed when a later stage started, else unknown.
-    else if (s) state = startedAfter(i) ? 'passed' : 'unknown';
-    else if (failed) state = notReached;
-    else if (!latest) state = 'skipped';
-    else if (isAccepted) state = 'not-needed';
+    else if (s) state = i < current || i < lastSeen ? 'passed' : 'unknown';
+    // Not in the record: after a failure it was not reached; a missing record
+    // before the current stage (or of an accepted work without records) is
+    // unknown, never a guess.
+    else if (failed || (failedRow && i > lastSeen)) state = latest ? notReached : 'skipped';
+    else if (!latest) state = i > lastSeen ? 'skipped' : 'unknown';
+    else if (isAccepted) state = seen.size ? 'not-needed' : 'unknown';
+    else if (work.stage.name === 'cancelled') state = 'skipped';
+    else if (current >= 0 && i < current) state = 'unknown';
     else state = 'ahead';
     if (state === 'failed') failed = true;
     out.push({
@@ -198,7 +184,14 @@ export function timelineOf(
   }
   out.push({
     stage: 'acceptance',
-    state: isAccepted && latest ? 'passed' : !latest ? 'skipped' : failed ? notReached : 'ahead',
+    state:
+      isAccepted && latest
+        ? 'passed'
+        : !latest || work.stage.name === 'cancelled'
+          ? 'skipped'
+          : failed || failedRow
+            ? notReached
+            : 'ahead',
   });
   return out;
 }

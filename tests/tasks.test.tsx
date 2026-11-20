@@ -223,7 +223,7 @@ test('review fixes: cancelled, tasks outside with all harness work done, who act
   assert.doesNotMatch(o, /Очередь стоит/);
   assert.match(
     o,
-    /Все работы harness приняты \(3\); ещё 1 задача не передана в harness — их передаёт ведущий\./,
+    /Всё, что передано в harness, принято \(3\); ещё 1 задача не передана в harness — их передаёт ведущий\./,
   );
   // A stopped work whose only blocker names nobody, while the stage names the lead.
   const stop: OperatorView = {
@@ -250,4 +250,36 @@ test('review fixes: cancelled, tasks outside with all harness work done, who act
   );
   assert.match(problems, /docs-page : проверка не прошла — действует: ведущий/);
   assert.doesNotMatch(problems, /никто — просто ждёт очереди/);
+});
+
+test('review round 2: all cancelled is not «всё принято»; the lead-answered question names the lead everywhere', () => {
+  const cancelled: OperatorView = {
+    ...view,
+    progress: { ...view.progress, total: 3, done: 0, running: 0, byStage: { cancelled: 3 } },
+    works: [],
+    questions: [],
+  };
+  const c = html(<Overview view={cancelled} lang="ru" />);
+  assert.match(c, /data-testid="queue-state">Всё отменено</);
+  assert.match(c, /Все работы отменены \(3\); принятых нет/);
+  assert.doesNotMatch(c, /Всё принято|Все работы приняты/);
+  // A running work with a technical question the lead answers: the lead, not you, in problems and cards.
+  const asking: OperatorView = {
+    ...view,
+    questions: view.questions.map((q) =>
+      q.workId === 'locale-format' ? { ...q, state: 'awaiting-answer' } : q,
+    ),
+  };
+  const card = shown(
+    html(<Tasks view={asking} lang="ru" />)
+      .split('<li class="hui-card-ui')
+      .find((x) => x.includes('data-testid="task-locale-format"'))!,
+  );
+  assert.match(card, /Дальше действует: ведущий/);
+  assert.doesNotMatch(card, /Дальше действует: вы/);
+  // A plan review card shows its kind in words; the subject id only under «подробности».
+  const tasks = html(<Tasks view={view} lang="ru" />);
+  const review = tasks.slice(tasks.indexOf('data-testid="other-reviews"'));
+  assert.doesNotMatch(shown(review), /\bg1\b/);
+  assert.match(review, /<code>g1<\/code>/);
 });

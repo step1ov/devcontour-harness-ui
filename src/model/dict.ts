@@ -590,8 +590,10 @@ const ru = {
     empty: 'Работ пока нет.',
     allDone: (done: number, total: number, cancelled: number) =>
       `Все работы приняты: ${done} из ${total}${cancelled ? `; отменено ${cancelled}` : ''}.`,
+    allCancelled: (n: number) =>
+      `Все работы отменены (${n}); принятых нет — что дальше, решает ведущий.`,
     harnessDone: (done: number, outside: number) =>
-      `Все работы harness приняты (${done}); ещё ${rp(outside, 'задача не передана', 'задачи не переданы', 'задач не передано')} в harness — их передаёт ведущий.`,
+      `Всё, что передано в harness, принято (${done}); ещё ${rp(outside, 'задача не передана', 'задачи не переданы', 'задач не передано')} в harness — их передаёт ведущий.`,
     onlyOutside: (outside: number) =>
       `В harness пока нет работ; ${rp(outside, 'задача ждёт', 'задачи ждут', 'задач ждут')} передачи от ведущего.`,
     workAt: (name: string, stage: string) => `${name} (этап «${stage}»)`,
@@ -765,6 +767,7 @@ const ru = {
     nobodyThere: 'по ней никто — просто ждёт очереди',
     runningThere: (stage: string) => `по ней действует: harness — этап «${stage}»`,
     waitsThere: 'по ней никто — она сама ждёт другой работы',
+    cancelledThere: 'она отменена — ведущему нужно перепланировать',
     unknownThere: (stage: string | undefined) =>
       `по ней кто действует — неизвестно${stage ? ` (этап «${stage}»)` : ' (её нет в этом представлении)'}`,
     unlistedWaiting: (n: number) =>
@@ -797,6 +800,9 @@ const ru = {
     warnings: 'Предупреждения harness',
     queueStanding: 'Очередь стоит',
     queueDone: 'Всё принято',
+    queueHarnessDone: 'Всё, что в harness, принято',
+    queueCancelled: 'Всё отменено',
+    legendCancelled: 'отменены',
     standingWhy: 'harness не запущен, и сама очередь не пойдёт',
     standingWho: 'ведущему нужно снова запустить harness',
     scopeTitle: 'Весь объём работ',
@@ -830,6 +836,8 @@ const ru = {
     noProblems: 'Проблем по ходу не видно.',
     stageFor: (elapsed: string) => `идёт ${elapsed}`,
     command: 'команда:',
+    unknownAction: 'Действие, которое панель не знает',
+    otherSubject: 'не про одну работу (см. «подробности»)',
   },
   budgetScope: { total: 'общий', group: 'группа', work: 'работа' } as Labels,
   budgetState: {
@@ -1392,6 +1400,8 @@ const en: Dict = {
     empty: 'There are no work orders yet.',
     allDone: (done: number, total: number, cancelled: number) =>
       `All work is accepted: ${done} of ${total}${cancelled ? `; ${cancelled} cancelled` : ''}.`,
+    allCancelled: (n: number) =>
+      `All work orders were cancelled (${n}); nothing is accepted — the lead agent decides what comes next.`,
     harnessDone: (done: number, outside: number) =>
       `All harness work is accepted (${done}); ${ep(outside, 'more task is', 'more tasks are')} not handed to the harness yet — the lead agent hands them over.`,
     onlyOutside: (outside: number) =>
@@ -1560,6 +1570,7 @@ const en: Dict = {
     nobodyThere: 'on that one, nobody — it just waits its turn',
     runningThere: (stage: string) => `on that one, acts: the harness — stage “${stage}”`,
     waitsThere: 'on that one, nobody — it waits for another work order itself',
+    cancelledThere: 'it was cancelled — the lead agent has to replan',
     unknownThere: (stage: string | undefined) =>
       `on that one, who acts is unknown${stage ? ` (stage “${stage}”)` : ' (not in this view)'}`,
     unlistedWaiting: (n: number) =>
@@ -1592,6 +1603,9 @@ const en: Dict = {
     warnings: 'Harness warnings',
     queueStanding: 'The queue has stopped',
     queueDone: 'All accepted',
+    queueHarnessDone: 'All harness work accepted',
+    queueCancelled: 'All cancelled',
+    legendCancelled: 'cancelled',
     standingWhy: 'the harness is not running, and the queue will not move by itself',
     standingWho: 'the lead agent has to start the harness again',
     scopeTitle: 'The whole scope',
@@ -1625,6 +1639,8 @@ const en: Dict = {
     noProblems: 'No problems so far.',
     stageFor: (elapsed: string) => `for ${elapsed}`,
     command: 'command:',
+    unknownAction: 'An action this panel does not know',
+    otherSubject: 'not about one work order (see “details”)',
   },
   budgetScope: { total: 'total', group: 'group', work: 'work' },
   budgetState: { within: 'within', exceeded: 'exceeded', undetermined: 'undetermined' },

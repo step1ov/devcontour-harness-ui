@@ -16,7 +16,7 @@
 // when several records name the same thing (the escalation, the blocker
 // and the stage of one stop). Pure: no node:*, no React.
 
-import { SLOT_STAGES, questionStatus } from './format.ts';
+import { SLOT_STAGES, leadMayAnswer, questionStatus } from './format.ts';
 import type {
   Actor,
   BlockerView,
@@ -25,6 +25,17 @@ import type {
   OperatorView,
   WorkView,
 } from './view.ts';
+
+/**
+ * A question the lead answers by the policy (`leadAnswers.technical` and a
+ * technical question the lead may answer, F-W): it does not wait for you.
+ */
+export function leadAnswers(
+  view: Pick<OperatorView, 'settings'>,
+  q: Pick<OperatorQuestion, 'answerableBy' | 'impact'>,
+): boolean {
+  return view.settings.thresholds.leadAnswersTechnical === true && leadMayAnswer(q);
+}
 
 /** Who acts, as the panel groups it. `user` is the harness diagnosis name of the operator. */
 export type StepActor = 'operator' | 'lead' | (string & {});
@@ -298,11 +309,18 @@ export function nextSteps(view: OperatorView): NextSteps {
   ];
   for (const id of [...new Set(ids)]) {
     const w = byId.get(id);
-    // An accepted or cancelled work asks nothing of anyone (F-AY): its stale
-    // records name no step, no wait and no count.
-    if (w && isTerminal(w)) continue;
-    const waitsOn = (w?.dependsOn ?? []).filter(unfinished);
-    const entries = entriesOf(w, id, view.escalations, waitsOn.length > 0);
+    // An accepted work asks nothing of anyone (F-AY): its stale records name
+    // no step, no wait and no count. A cancelled one keeps only its
+    // escalations (e.g. the lead replans its dependents).
+    if (w && isTerminal(w) && w.stage.name !== 'cancelled') continue;
+    const cancelled = w?.stage.name === 'cancelled';
+    const waitsOn = cancelled ? [] : (w?.dependsOn ?? []).filter(unfinished);
+    const entries = entriesOf(
+      w && cancelled ? { ...w, blockers: [], stage: { name: w.stage.name, next: [] } } : w,
+      id,
+      view.escalations,
+      waitsOn.length > 0,
+    );
     const dep: DependencyWait | undefined = waitsOn.length
       ? { workId: id, on: waitsOn, code: '', records: [] }
       : undefined;
@@ -352,6 +370,8 @@ export function nextSteps(view: OperatorView): NextSteps {
       w &&
       !isTerminal(w) &&
       !SLOT_STAGES.has(w.stage.name) &&
+      // Someone named acts on it: not "just waits its turn".
+      !own.length &&
       (nobody.length || (!entries.length && !waits && isHeld(w)))
     )
       queue.push({ workId: id, blockers: nobody, unexplained: !nobody.length });
@@ -393,15 +413,24 @@ const isTerminal = (w: WorkView) =>
  * Who acts on a work next, in order: lead steps that come first, then the
  * operator, then the rest. Used to say what a dependency waits for.
  */
-export function actorsOn(steps: NextSteps, workId: string): StepActor[] {
+export function actorsOn(
+  steps: NextSteps,
+  workId: string,
+  /** With the view: questions the lead answers by the policy name the lead, not you (F-W). */
+  view?: Pick<OperatorView, 'settings'>,
+): StepActor[] {
   const out: StepActor[] = [];
   const add = (a: StepActor) => {
     if (!out.includes(a)) out.push(a);
   };
   const mine = (s: Step) => s.workIds.includes(workId);
   for (const s of steps.operator.filter(mine)) for (const f of s.after) add(f.actor);
-  if (steps.questions.some((q) => q.workId === workId) || steps.unlistedAnswers.includes(workId))
-    add('operator');
+  const asking = steps.questions.filter((q) => q.workId === workId);
+  const byLead =
+    view !== undefined && asking.length > 0 && asking.every((q) => leadAnswers(view, q));
+  if (byLead) add('lead');
+  else if (asking.length || steps.unlistedAnswers.includes(workId)) add('operator');
+  if (byLead && steps.unlistedAnswers.includes(workId)) add('operator');
   for (const s of steps.operator.filter(mine)) add(s.actor);
   for (const s of steps.lead.filter(mine)) add(s.actor);
   for (const s of steps.other.filter(mine)) add(s.actor);
@@ -462,6 +491,8 @@ export type DependencyState =
   | { kind: 'queue' }
   /** Waits for another work itself. */
   | { kind: 'waits' }
+  /** Cancelled: the dependent cannot start until its plan changes. */
+  | { kind: 'cancelled' }
   /** Not in this view (a clipped list), or nothing said about it. */
   | { kind: 'unknown'; stage?: string };
 
@@ -471,14 +502,15 @@ export type DependencyState =
  * "nobody acts" for a work this view does not show.
  */
 export function dependencyState(
-  view: Pick<OperatorView, 'works'>,
+  view: Pick<OperatorView, 'works'> & Partial<Pick<OperatorView, 'settings'>>,
   steps: NextSteps,
   id: string,
 ): DependencyState {
-  const actors = actorsOn(steps, id);
+  const actors = actorsOn(steps, id, view.settings ? { settings: view.settings } : undefined);
   if (actors.length) return { kind: 'actors', actors };
   const w = view.works.find((x) => x.id === id);
   if (!w) return { kind: 'unknown' };
+  if (w.stage.name === 'cancelled') return { kind: 'cancelled' };
   if (SLOT_STAGES.has(w.stage.name)) return { kind: 'running', stage: w.stage.name };
   // An explicit wait for its own dependency wins over a queued stage.
   if (steps.dependencies.some((d) => d.workId === id)) return { kind: 'waits' };

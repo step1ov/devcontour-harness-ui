@@ -98,11 +98,18 @@ test('every rule of the built stylesheet is scoped to the panel', () => {
   // Own layer names: a host's `base`/`utilities` layers neither merge with nor reorder ours.
   for (const m of noComments.matchAll(/@layer ([^{;]+)[{;]/g))
     for (const name of m[1]!.split(',').map((x) => x.trim()))
-      assert.match(name, /^(hui-[a-z]+|properties)$/, `layer ${name}`);
+      assert.match(name, /^hui-[a-z]+$/, `layer ${name}`);
   // No sibling or descendant reach out of the panel: `.hui ~ p`, `.hui-x + *`.
   for (const { selector } of rules(noComments))
     for (const part of parts(selector))
       assert.doesNotMatch(part, /^\.hui[\w-]*\s*[~+](?!\s*\.hui)/, `reaches a sibling: ${part}`);
+  // The only other global at-rule: Tailwind's `@property --tw-*` registrations.
+  for (const m of noComments.matchAll(/@([a-z-]+)\s+([^{;]*)/g))
+    assert.ok(
+      ['layer', 'media', 'supports', 'property'].includes(m[1]!),
+      `unexpected at-rule @${m[1]} ${m[2]}`,
+    );
+  for (const m of noComments.matchAll(/@property\s+([^\s{]+)/g)) assert.match(m[1]!, /^--tw-/);
   // Tailwind's custom property fallback is scoped to the panel by build-css.mjs.
   assert.doesNotMatch(noComments, /\*, ::before, ::after, ::backdrop/);
 });

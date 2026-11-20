@@ -234,7 +234,15 @@ function TaskCardView({
             </span>
           ) : null}
         </p>
-        <p className="hui:font-medium" data-testid="task-next" data-status="blocked">
+        <p
+          className="hui:font-medium"
+          data-testid="task-next"
+          data-status={
+            c.phase === 'accepted' || c.phase === 'cancelled' || c.phase === 'running'
+              ? undefined
+              : 'blocked'
+          }
+        >
           <span className="hui-who">{next}</span>
         </p>
         {c.questions.length ? (

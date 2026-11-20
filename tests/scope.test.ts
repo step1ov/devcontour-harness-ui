@@ -333,3 +333,93 @@ test('cancelled works are counted apart, never as waiting', () => {
   assert.equal(o.waiting, 0);
   assert.equal(scopeLeft(v).works, 0);
 });
+
+test('review round 2: a named stage need is not «just waits»; cancelled keeps its escalation', () => {
+  // Stopped, its only reason names nobody, the stage names the lead: never in the queue.
+  const v: OperatorView = {
+    ...view,
+    works: view.works.map((w) =>
+      w.id === 'docs-page'
+        ? {
+            ...w,
+            dependsOn: [],
+            stage: {
+              ...w.stage,
+              name: 'stopped',
+              needs: { actor: 'lead', action: 'diagnose-failure' },
+            },
+            blockers: [{ code: 'GATE_FAILED', plain: 'a check failed', actor: null }],
+          }
+        : w,
+    ),
+  };
+  const steps = nextSteps(v);
+  assert.ok(!steps.queue.some((q) => q.workId === 'docs-page'));
+  assert.ok(steps.lead.some((s) => s.workIds.includes('docs-page')));
+  // A cancelled work: blockers and needs dropped, the lead's escalation kept; its dependent says so.
+  const c: OperatorView = {
+    ...view,
+    works: view.works.map((w) =>
+      w.id === 'export-csv'
+        ? {
+            ...w,
+            stage: { name: 'cancelled', next: [], needs: { actor: 'operator', action: 'answer' } },
+            blockers: [{ code: 'INPUT_REQUIRED', plain: 'waits for you', actor: 'operator' }],
+          }
+        : w,
+    ),
+    questions: view.questions.filter((q) => q.workId !== 'export-csv'),
+    escalations: [
+      {
+        workId: 'export-csv',
+        code: 'CANCELLED',
+        actor: 'lead',
+        action: 'replan-dependents',
+        since: view.generatedAt,
+      },
+    ],
+  };
+  const cs = nextSteps(c);
+  assert.deepEqual(
+    cs.lead.filter((s) => s.workIds.includes('export-csv')).map((s) => s.action),
+    ['replan-dependents'],
+  );
+  assert.ok(!cs.operator.some((s) => s.workIds.includes('export-csv')));
+  assert.deepEqual(cs.unlistedAnswers, []);
+});
+
+test('review round 2: timeline never guesses a missing record or promises a next attempt', () => {
+  // Running at the checks, the row has no stage records yet: earlier stages unknown, not «впереди».
+  const bare = { ...running.attempts[0]!, stages: [] };
+  assert.deepEqual(
+    timelineOf(bare, running.work, true).map((s) => s.state),
+    ['unknown', 'unknown', 'current', 'ahead', 'ahead', 'ahead'],
+  );
+  // An accepted work without stage records: unknown, not «не понадобилось».
+  const accepted = read<WorkDetailView>('../fixtures/work.accepted.sample.json');
+  const none = timelineOf({ ...accepted.attempts[0]!, stages: [] }, accepted.work, true);
+  assert.ok(none.slice(0, -1).every((s) => s.state === 'unknown'));
+  assert.ok(
+    timelineOf(undefined, accepted.work, true)
+      .slice(0, -1)
+      .every((s) => s.state === 'unknown'),
+  );
+  // A failed row that names no failed stage (a stall in writing): after the last seen stage, the next attempt.
+  const stalled = {
+    ...running.attempts[1]!,
+    stages: [
+      { stage: 'prepare', durationMs: 1000, outcome: 'passed' as const },
+      { stage: 'writer' },
+    ],
+  };
+  const queued = { ...running.work, stage: { name: 'queued', next: [] } };
+  assert.deepEqual(
+    timelineOf(stalled, queued, true).map((s) => s.state),
+    ['passed', 'unknown', 'next', 'next', 'next', 'next'],
+  );
+  // A cancelled work is promised nothing.
+  const cancelled = { ...running.work, stage: { name: 'cancelled', next: [] } };
+  assert.ok(
+    !timelineOf(stalled, cancelled, true).some((s) => s.state === 'next' || s.state === 'ahead'),
+  );
+});
