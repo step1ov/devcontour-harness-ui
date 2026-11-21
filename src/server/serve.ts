@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto';
 import { readFile, realpath, stat } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { extname, join, resolve, sep } from 'node:path';
-import { checkView, checkWorkDetail } from '../model/compat.ts';
+import { checkOverview, checkWorkDetail } from '../model/compat.ts';
 import { liveHub, MAX_STREAMS, type WatchSpec } from './live.ts';
 import {
   harnessView,
@@ -191,7 +191,8 @@ export function unwrapView(parsed: unknown): unknown {
 export const WORK_ID = /^[A-Za-z0-9_-]{1,80}$/;
 
 type Gate = (v: unknown) => { ok: true } | { ok: false; code: string; message: string };
-const viewGate: Gate = checkView;
+// The overview route also carries the setup document (revision 5).
+const viewGate: Gate = checkOverview;
 const detailGate: Gate = checkWorkDetail;
 
 type FileRead =
@@ -323,6 +324,35 @@ function activeWork(view: unknown): boolean {
   if (typeof v?.progress?.running === 'number') return v.progress.running > 0;
   const a = Array.isArray(v?.attempts) ? v.attempts[0] : undefined;
   return a !== undefined && a !== null && typeof a === 'object' && a.finishedAt === undefined;
+}
+
+/**
+ * What a `--repository` panel watches: the project manifest and policy, and
+ * the state directory the manifest names (read again on every hint, so a
+ * project set up after the panel started is picked up). The harness decides
+ * what they mean; the panel only notices that something changed.
+ */
+export async function projectPaths(root: string): Promise<string[]> {
+  const harness = join(root, '.harness');
+  const paths = [harness, join(harness, 'project.json'), join(harness, 'policy.json')];
+  try {
+    const m = JSON.parse(await readFile(join(harness, 'project.json'), 'utf8')) as {
+      paths?: { state?: unknown };
+    };
+    const state = m?.paths?.state;
+    if (typeof state === 'string' && state !== '') {
+      const dir = resolve(root, state);
+      paths.push(
+        dir,
+        join(dir, 'binding.json'),
+        join(dir, 'state.sqlite'),
+        join(dir, 'state.sqlite-wal'),
+      );
+    }
+  } catch {
+    // No manifest yet, or not JSON: its own signature says so.
+  }
+  return paths;
 }
 
 /** Cheap change signature of paths: mtime, size and inode; a missing path is `-`. */
@@ -529,13 +559,17 @@ export async function startServer(options: ServeOptions): Promise<RunningServer>
       if (!r.ok) return { ok: false, code: r.code, message: r.message, checkedAt };
       return { ok: true, token: digestOf(r.view), checkedAt, activeWork: activeWork(r.view) };
     },
-    hint: () =>
-      signature([
-        live!.state,
-        join(live!.state, 'state.sqlite'),
-        join(live!.state, 'state.sqlite-wal'),
-        ...(live!.policy !== undefined ? [live!.policy] : []),
-      ]),
+    hint: async () =>
+      signature(
+        live!.repository !== undefined
+          ? await projectPaths(live!.repository)
+          : [
+              live!.state!,
+              join(live!.state!, 'state.sqlite'),
+              join(live!.state!, 'state.sqlite-wal'),
+              ...(live!.policy !== undefined ? [live!.policy] : []),
+            ],
+      ),
     ...intervals,
     fresh: true,
   });

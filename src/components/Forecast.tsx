@@ -12,7 +12,9 @@ import type { ForecastView } from '../model/view.ts';
 import { dict, type Dict, type Lang } from '../model/dict.ts';
 import { formatRough } from '../model/format.ts';
 import { instantMs } from '../model/compat.ts';
+import { formatClock } from '../model/i18n.ts';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card.tsx';
+import { Progress } from './ui/progress.tsx';
 
 const SIZE = 120;
 const STROKE = 12;
@@ -125,32 +127,60 @@ export function sinceMs(
 
 /** What the time ring says, from the forecast fields (and the clock for elapsed). */
 export function timeState(f: ForecastView, lang: Lang, now?: number) {
-  const t = dict(lang).forecast;
-  const { remaining } = f.time;
-  const elapsedMs = sinceMs(f.time.elapsedMs, f.time.startedAt, now);
-  const elapsed = elapsedMs === undefined ? t.notStarted : t.elapsed(spanWords(elapsedMs, lang));
-  if (f.progress.left === 0)
+  const d = dict(lang);
+  const t = d.forecast;
+  const { estimate, finishedAt } = f.time;
+  // Revision 5: a finished release has a fixed elapsed time (up to `finishedAt`);
+  // it no longer goes on with the clock.
+  const finished = finishedAt !== undefined || estimate === 'nothing';
+  const elapsedMs = finished ? f.time.elapsedMs : sinceMs(f.time.elapsedMs, f.time.startedAt, now);
+  if (finished || f.progress.left === 0) {
+    const at = finishedAt !== undefined ? formatClock(finishedAt, undefined, now) : undefined;
+    const took = elapsedMs === undefined ? undefined : spanWords(elapsedMs, lang);
+    const head =
+      finishedAt !== undefined && at
+        ? d.r5.finished(at) + (took ? ` · ${d.r5.took(took)}` : '')
+        : elapsedMs === undefined
+          ? t.notStarted
+          : t.elapsed(spanWords(elapsedMs, lang));
     return {
       kind: 'done' as const,
       share: 1,
       band: undefined,
       center: '✓',
-      sub: t.nothingLeft,
-      text: `${elapsed} · ${t.nothingLeft}`,
+      sub: finishedAt !== undefined ? d.r5.finishedWord : t.nothingLeft,
+      text: `${head} · ${t.nothingLeft}`,
+      range: undefined,
     };
-  if (remaining && elapsedMs === undefined) {
+  }
+  const elapsed = elapsedMs === undefined ? t.notStarted : t.elapsed(spanWords(elapsedMs, lang));
+  // Which range «осталось» stands on: revision 5 names it (`estimate`); before
+  // it, `remaining` when present. `unknown` is unknown even with a stale range.
+  const rough =
+    estimate === 'rough' || (estimate === undefined && !f.time.remaining)
+      ? f.time.rough
+      : undefined;
+  const range =
+    estimate === 'unknown'
+      ? undefined
+      : (rough ?? (estimate === 'rough' ? undefined : f.time.remaining));
+  const leftText = (words: string) =>
+    rough ? d.r5.leftRough(words, rough.samples) : t.left(words);
+  if (range && elapsedMs === undefined) {
     // A range without an elapsed time: the range stands; only the ring has no share to draw.
-    const words = remainingWords(remaining, lang);
+    const words = remainingWords(range, lang);
     return {
       kind: 'noElapsed' as const,
       share: undefined,
       band: undefined,
       center: words,
-      sub: t.leftWord,
-      text: `${t.elapsedUnknown} · ${t.left(words)}`,
+      sub: rough ? d.r5.roughWord : t.leftWord,
+      text: `${t.elapsedUnknown} · ${leftText(words)}`,
+      range,
+      rough: rough !== undefined,
     };
   }
-  if (!remaining || elapsedMs === undefined)
+  if (!range || elapsedMs === undefined)
     return {
       kind: 'unknown' as const,
       share: undefined,
@@ -158,17 +188,20 @@ export function timeState(f: ForecastView, lang: Lang, now?: number) {
       center: t.unknownMark,
       sub: t.unknownWord,
       text: `${elapsed} · ${t.leftUnknown}`,
+      range: undefined,
     };
-  const words = remainingWords(remaining, lang);
+  const words = remainingWords(range, lang);
   // Geometry only: the elapsed part of elapsed + remaining (upper end solid, lower end the band).
   const whole = (left: number) => (elapsedMs + left > 0 ? elapsedMs / (elapsedMs + left) : 0);
   return {
     kind: 'known' as const,
-    share: whole(remaining.hiMs),
-    band: whole(remaining.loMs),
+    share: whole(range.hiMs),
+    band: whole(range.loMs),
     center: words,
-    sub: t.leftWord,
-    text: `${elapsed} · ${t.left(words)}`,
+    sub: rough ? d.r5.roughWord : t.leftWord,
+    text: `${elapsed} · ${leftText(words)}`,
+    range,
+    rough: rough !== undefined,
   };
 }
 
@@ -230,9 +263,12 @@ export function ForecastRings({
   forecast,
   lang = 'ru',
   now,
+  truncatedWorks,
 }: {
   forecast: ForecastView;
   lang?: Lang;
+  /** `truncated.forecastWorks` (revision 5): unfinished works not listed. */
+  truncatedWorks?: number | undefined;
   /** The viewer's clock (ms); elapsed and the wait go on from the harness's start points. */
   now?: number | undefined;
 }) {
@@ -242,7 +278,9 @@ export function ForecastRings({
   const time = timeState(forecast, lang, now);
   const wait = forecast.time.humanWait;
   const waitMs = wait.works ? (sinceMs(wait.ms, wait.since, now) ?? wait.ms) : 0;
-  const r = forecast.time.remaining;
+  const r = time.range;
+  const added = p.added ?? [];
+  const works = p.works ?? [];
   const percent = Math.max(0, Math.min(100, Math.round(p.percent)));
   return (
     <Card data-testid="forecast" className="hui-forecast">
@@ -292,6 +330,11 @@ export function ForecastRings({
                 {f.elapsedUnknownWhy}
               </p>
             ) : null}
+            {time.kind !== 'unknown' && time.kind !== 'done' && time.rough ? (
+              <p className="hui:text-xs hui:text-muted-foreground" data-testid="time-rough">
+                {t.r5.roughWhy}
+              </p>
+            ) : null}
             {r && (time.kind === 'known' || time.kind === 'noElapsed') ? (
               <p className="hui:text-xs hui:text-muted-foreground">
                 {f.basis(
@@ -302,6 +345,37 @@ export function ForecastRings({
             ) : null}
           </Tile>
         </div>
+        {added.length ? (
+          <div className="hui:text-sm" data-testid="forecast-added">
+            <p className="hui:font-medium">{t.r5.added}</p>
+            <ul className="hui:mt-1 hui:grid hui:list-disc hui:gap-1 hui:ps-5">
+              {added.map((a, i) => (
+                <li key={a.key + i}>{a.line}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+        {works.length ? (
+          <div className="hui:text-sm" data-testid="forecast-works">
+            <p className="hui:font-medium">{t.r5.worksTitle}</p>
+            <ul className="hui:mt-1 hui:grid hui:gap-2">
+              {works.map((w) => {
+                const pc = Math.max(0, Math.min(100, Math.round(w.percent)));
+                return (
+                  <li key={w.workId} className="hui:grid hui:gap-1" data-retry={w.retry}>
+                    <span>{w.line}</span>
+                    <Progress value={pc} max={100} label={w.line} className="hui:h-1.5" />
+                  </li>
+                );
+              })}
+            </ul>
+            {truncatedWorks ? (
+              <p className="hui:text-xs hui:text-muted-foreground">
+                {t.r5.worksClipped(truncatedWorks)}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
         <p
           className="hui:rounded-control hui:bg-muted hui:px-3 hui:py-2 hui:text-sm"
           data-testid="human-wait"

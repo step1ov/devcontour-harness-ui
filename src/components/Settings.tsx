@@ -11,6 +11,7 @@ import type { Binding, OperatorView, ReviewRuleView, RoleBinding } from '../mode
 import { Clipped, Heading, type ScreenProps } from './common.tsx';
 import { UpdatesSection } from './Updates.tsx';
 import { instantMs } from '../model/compat.ts';
+import { hasOverview, SetupScreen } from './Setup.tsx';
 
 /** Theme choice of the viewer: follow the system, or light, or dark. */
 export type ThemeChoice = 'system' | 'light' | 'dark';
@@ -78,6 +79,8 @@ export function reviewPairs(
 
 export function Settings({ view, lang = 'ru', theme = 'system', onThemeChange }: SettingsProps) {
   const t = dict(lang);
+  // A document without the overview lists (revision 5 setup): the setup state, not a throw.
+  if (!hasOverview(view)) return <SetupScreen view={view} lang={lang} />;
   const v = t.settings;
   const s = view.settings;
   const th = s.thresholds;

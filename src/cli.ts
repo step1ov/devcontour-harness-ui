@@ -30,15 +30,20 @@ function packageRoot(): string {
   }
 }
 
-const usage = `Usage: devcontour-harness-ui (--view <file> | --demo | --state <dir> [--policy <file>])
+const usage = `Usage: devcontour-harness-ui (--view <file> | --demo | --state <dir> [--policy <file>] | --repository <dir>)
                             [--lang ru|en] [--window 24h|7d] [--harness <bin>] [--port N] [--host 127.0.0.1]
-       devcontour-harness-ui --check [--harness <bin>] [--state <dir> [--policy <file>]]
+       devcontour-harness-ui --check [--harness <bin>] [--state <dir> [--policy <file>] | --repository <dir>]
 
   --view <file>    operator view JSON (from \`harness view\`); an open page updates when the file changes
   --demo           serve the bundled sample view
   --state <dir>    compute the view with the installed \`harness view\`
                    (devcontour-harness 0.1.0-alpha.55 or newer); an open page updates by itself
   --policy <file>  policy for --state; needed while the state has no binding
+  --repository <dir>
+                   project root: the harness finds the state and the policy in
+                   .harness/project.json on every check (devcontour-harness
+                   0.1.0-alpha.65 or newer). May start before harness setup: the
+                   page shows «setup in progress» and switches by itself
   --window 24h|7d  history window for --state (default: the harness default, 24h)
   --check          print {harness, ui, viewVersion, compatible, fix?}; exit 0 compatible, 3 not
   --lang ru|en     language of harness texts when the page does not ask for one;
@@ -63,6 +68,7 @@ async function main() {
         view: { type: 'string' },
         demo: { type: 'boolean' },
         state: { type: 'string' },
+        repository: { type: 'string' },
         policy: { type: 'string' },
         window: { type: 'string' },
         check: { type: 'boolean' },
@@ -86,13 +92,20 @@ async function main() {
     fail('INVALID_INPUT', `--lang: expected ru or en, got ${args.lang}.`, 2);
   if (args.check) {
     if (args.view !== undefined || args.demo)
-      fail('INVALID_INPUT', '--check takes --harness, --state and --policy only.\n' + usage, 2);
+      fail(
+        'INVALID_INPUT',
+        '--check takes --harness, --state, --policy and --repository only.\n' + usage,
+        2,
+      );
+    if (args.state !== undefined && args.repository !== undefined)
+      fail('INVALID_INPUT', 'Pass only one of --state and --repository.\n' + usage, 2);
     if (args.policy !== undefined && args.state === undefined)
       fail('INVALID_INPUT', '--policy needs --state.\n' + usage, 2);
     const report = await compatReport({
       bin: args.harness ?? 'harness',
       ui: version,
       ...(args.state !== undefined ? { state: resolve(args.state) } : {}),
+      ...(args.repository !== undefined ? { repository: resolve(args.repository) } : {}),
       ...(args.policy !== undefined ? { policy: resolve(args.policy) } : {}),
     });
     process.stdout.write(JSON.stringify({ ok: report.compatible, ...report }) + '\n');
@@ -101,21 +114,40 @@ async function main() {
   }
   if (args.window !== undefined && args.window !== '24h' && args.window !== '7d')
     fail('INVALID_INPUT', `--window: expected 24h or 7d, got ${args.window}.`, 2);
-  if (args.window !== undefined && args.state === undefined)
+  const harnessRoute = args.state !== undefined || args.repository !== undefined;
+  if (args.window !== undefined && !harnessRoute)
     fail(
       'INVALID_INPUT',
-      '--window needs --state; a --view file has the window it was written with.\n' + usage,
+      '--window needs --state or --repository; a --view file has the window it was written with.\n' +
+        usage,
       2,
     );
-  const sources = [args.view !== undefined, args.demo === true, args.state !== undefined];
+  const sources = [
+    args.view !== undefined,
+    args.demo === true,
+    args.state !== undefined,
+    args.repository !== undefined,
+  ];
   if (sources.filter(Boolean).length > 1)
-    fail('INVALID_INPUT', 'Pass only one of --view, --demo and --state.\n' + usage, 2);
+    fail(
+      'INVALID_INPUT',
+      'Pass only one of --view, --demo, --state and --repository.\n' + usage,
+      2,
+    );
   if (args.policy !== undefined && args.state === undefined)
-    fail('INVALID_INPUT', '--policy needs --state.\n' + usage, 2);
-  if (args.harness !== undefined && args.state === undefined)
-    fail('INVALID_INPUT', '--harness needs --state.\n' + usage, 2);
+    fail(
+      'INVALID_INPUT',
+      '--policy needs --state; with --repository the policy is .harness/policy.json.\n' + usage,
+      2,
+    );
+  if (args.harness !== undefined && !harnessRoute)
+    fail('INVALID_INPUT', '--harness needs --state or --repository.\n' + usage, 2);
   if (!sources.some(Boolean))
-    fail('INVALID_INPUT', 'Pass --view <file>, --demo or --state <dir>.\n' + usage, 2);
+    fail(
+      'INVALID_INPUT',
+      'Pass --view <file>, --demo, --state <dir> or --repository <dir>.\n' + usage,
+      2,
+    );
   const lang =
     args.lang === 'ru' || args.lang === 'en'
       ? args.lang
@@ -125,7 +157,7 @@ async function main() {
           ),
         );
   let source: Pick<ServeOptions, 'viewFile' | 'harness' | 'workFiles' | 'localized'>;
-  if (args.state !== undefined) {
+  if (harnessRoute) {
     const bin = args.harness ?? 'harness';
     let support;
     try {
@@ -147,6 +179,13 @@ async function main() {
           'to a file and pass --view <file>.',
         2,
       );
+    if (args.repository !== undefined && !support.repository)
+      fail(
+        'HARNESS_VIEW_UNAVAILABLE',
+        `The installed harness${support.version ? ' ' + support.version : ''} has no \`harness view --repository\`. ` +
+          '--repository needs devcontour-harness 0.1.0-alpha.65 or newer; pass --state <dir> instead.',
+        2,
+      );
     if (args.window !== undefined && !support.window)
       fail(
         'HARNESS_VIEW_UNAVAILABLE',
@@ -156,7 +195,9 @@ async function main() {
     source = {
       harness: {
         bin,
-        state: resolve(args.state),
+        ...(args.repository !== undefined
+          ? { repository: resolve(args.repository) }
+          : { state: resolve(args.state!) }),
         ...(args.window !== undefined ? { window: args.window } : {}),
         ...(args.policy !== undefined ? { policy: resolve(args.policy) } : {}),
         lang: support.lang,

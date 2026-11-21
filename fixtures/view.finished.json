@@ -1,0 +1,673 @@
+{
+  "viewVersion": 1,
+  "viewRevision": 5,
+  "generatedAt": "2026-11-19T12:00:00.000Z",
+  "source": {
+    "producer": "fixture",
+    "producerVersion": "0.1.0-alpha.65",
+    "stateVersion": 1,
+    "token": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+  },
+  "settings": {
+    "policyDigest": "sha256:0f3c",
+    "approvalMode": "agent",
+    "mode": "live",
+    "concurrency": 2,
+    "roles": [
+      {
+        "role": "backend",
+        "writer": {
+          "runtime": "claude",
+          "model": "example-writer",
+          "effort": "high"
+        }
+      },
+      {
+        "role": "frontend",
+        "writer": {
+          "runtime": "claude",
+          "model": "example-writer"
+        }
+      }
+    ],
+    "reviews": [
+      {
+        "kind": "code",
+        "scope": "global",
+        "reviewer": {
+          "runtime": "codex",
+          "model": "example-reviewer"
+        },
+        "alternates": [],
+        "vendor": "different-vendor"
+      },
+      {
+        "kind": "plan",
+        "scope": "global",
+        "reviewer": {
+          "runtime": "codex"
+        },
+        "alternates": [],
+        "vendor": "different-vendor"
+      }
+    ],
+    "thresholds": {
+      "inputSeverity": 7,
+      "leadAnswersMaxSeverity": 4,
+      "criticalPaths": 2,
+      "maxAttempts": 3,
+      "repairBudget": 6,
+      "maxNeutralFailures": 3,
+      "reviewRoundCap": 6,
+      "reviewEscalationRounds": 3,
+      "leadAnswersTechnical": true
+    },
+    "budgets": [
+      {
+        "scope": "total",
+        "usd": 40
+      },
+      {
+        "scope": "work",
+        "usd": 8
+      }
+    ],
+    "budgetOnUnknown": "stop",
+    "timeouts": {
+      "runTimeoutMs": 900000,
+      "leaseMs": 30000,
+      "stall": {
+        "intervalMs": 30000,
+        "quietMs": 180000,
+        "stalledMs": 600000,
+        "action": "report"
+      }
+    },
+    "lean": {
+      "state": "off"
+    },
+    "defaulted": [
+      "thresholds.repairBudget",
+      "timeouts.leaseMs",
+      "timeouts.runTimeoutMs",
+      "timeouts.stall"
+    ]
+  },
+  "works": [
+    {
+      "id": "add-greeting",
+      "graphId": "g1",
+      "title": "Add greet(name)",
+      "status": "done",
+      "stage": {
+        "name": "done",
+        "next": []
+      },
+      "attempts": {
+        "used": 1,
+        "max": 3,
+        "left": 2,
+        "failed": 0,
+        "interrupted": 0,
+        "rechecks": 0,
+        "neutral": {
+          "used": 0,
+          "max": 3
+        },
+        "line": "1 attempt, accepted on the first"
+      },
+      "blockers": [],
+      "spend": {
+        "calls": 3,
+        "usd": {
+          "value": 1.92,
+          "bound": "exact"
+        },
+        "durationMs": 840000
+      },
+      "resultSha": "3b1f9e0c2a7d",
+      "target": {
+        "repositoryId": "app",
+        "ref": "refs/heads/harness/accepted",
+        "acceptedSha": "3b1f9e0c2a7d",
+        "remote": {
+          "state": "not-pushed",
+          "trackingRef": "origin/harness/accepted",
+          "checkedAt": "2026-11-18T17:30:00.000Z",
+          "line": "accepted locally; not yet on the remote branch origin/harness/accepted"
+        }
+      }
+    },
+    {
+      "id": "locale-format",
+      "graphId": "g1",
+      "title": "Format dates by locale",
+      "status": "done",
+      "stage": {
+        "name": "done",
+        "next": []
+      },
+      "attempts": {
+        "used": 2,
+        "max": 3,
+        "left": 1,
+        "failed": 1,
+        "interrupted": 0,
+        "rechecks": 0,
+        "neutral": {
+          "used": 0,
+          "max": 3
+        },
+        "runs": 3,
+        "line": "3 runs, 2 of them counted attempts; accepted on the second"
+      },
+      "blockers": [],
+      "spend": {
+        "calls": 5,
+        "usd": {
+          "value": 3.4,
+          "bound": "lower"
+        },
+        "durationMs": 1900000
+      },
+      "resultSha": "5c2e8f1b9a04",
+      "target": {
+        "repositoryId": "app",
+        "ref": "refs/heads/harness/accepted",
+        "acceptedSha": "5c2e8f1b9a04",
+        "remote": {
+          "state": "not-pushed",
+          "trackingRef": "origin/harness/accepted",
+          "checkedAt": "2026-11-18T17:30:00.000Z",
+          "line": "accepted locally; not yet on the remote branch origin/harness/accepted"
+        }
+      }
+    },
+    {
+      "id": "export-csv",
+      "graphId": "g1",
+      "title": "Export report as CSV",
+      "status": "done",
+      "stage": {
+        "name": "done",
+        "next": []
+      },
+      "attempts": {
+        "used": 1,
+        "max": 3,
+        "left": 2,
+        "failed": 0,
+        "interrupted": 0,
+        "rechecks": 0,
+        "neutral": {
+          "used": 0,
+          "max": 3
+        },
+        "line": "1 attempt, accepted on the first"
+      },
+      "blockers": [],
+      "spend": {
+        "calls": 2,
+        "usd": {
+          "value": 0.7,
+          "bound": "exact"
+        },
+        "durationMs": 420000
+      },
+      "resultSha": "7d3a6b2c8e15",
+      "target": {
+        "repositoryId": "app",
+        "ref": "refs/heads/harness/accepted",
+        "acceptedSha": "7d3a6b2c8e15",
+        "remote": {
+          "state": "not-pushed",
+          "trackingRef": "origin/harness/accepted",
+          "checkedAt": "2026-11-18T17:30:00.000Z",
+          "line": "accepted locally; not yet on the remote branch origin/harness/accepted"
+        }
+      }
+    },
+    {
+      "id": "docs-page",
+      "graphId": "g1",
+      "title": "Document the export",
+      "status": "done",
+      "stage": {
+        "name": "done",
+        "next": []
+      },
+      "attempts": {
+        "used": 1,
+        "max": 3,
+        "left": 2,
+        "failed": 0,
+        "interrupted": 0,
+        "rechecks": 0,
+        "neutral": {
+          "used": 0,
+          "max": 3
+        },
+        "line": "1 attempt, accepted on the first"
+      },
+      "blockers": [],
+      "spend": {
+        "calls": 0,
+        "usd": {
+          "value": 0,
+          "bound": "exact"
+        },
+        "durationMs": 0
+      },
+      "resultSha": "9e4b7c3d0f26",
+      "target": {
+        "repositoryId": "app",
+        "ref": "refs/heads/harness/accepted",
+        "acceptedSha": "9e4b7c3d0f26",
+        "remote": {
+          "state": "not-pushed",
+          "trackingRef": "origin/harness/accepted",
+          "checkedAt": "2026-11-18T17:30:00.000Z",
+          "line": "accepted locally; not yet on the remote branch origin/harness/accepted"
+        }
+      }
+    }
+  ],
+  "reviews": [
+    {
+      "kind": "plan",
+      "subject": "g1",
+      "approved": true,
+      "rounds": {
+        "used": 2,
+        "max": 6
+      },
+      "open": {
+        "blocking": 0,
+        "notes": 0
+      },
+      "accepted": 1,
+      "reviewer": {
+        "runtime": "codex"
+      },
+      "sameVendor": false,
+      "spend": {
+        "calls": 2,
+        "usd": {
+          "value": 0.6,
+          "bound": "exact"
+        }
+      },
+      "findings": [
+        {
+          "id": "F1",
+          "severity": "high",
+          "status": "closed",
+          "rounds": 1
+        },
+        {
+          "id": "F2",
+          "severity": "note",
+          "status": "accepted-limitation",
+          "rounds": 2,
+          "disposition": {
+            "decision": "accepted-limitation",
+            "by": "lead",
+            "round": 2
+          }
+        }
+      ],
+      "line": "plan approved after 2 rounds, 1 note accepted as a limitation"
+    }
+  ],
+  "questions": [],
+  "escalations": [],
+  "drift": [],
+  "progress": {
+    "total": 4,
+    "byStage": {
+      "done": 4
+    },
+    "running": 0,
+    "done": 4,
+    "waitingOperator": 0,
+    "queue": {
+      "paused": false,
+      "runner": "not-running",
+      "line": "Everything is accepted; nothing runs and nothing waits."
+    }
+  },
+  "history": {
+    "from": "2026-11-18T12:00:00.000Z",
+    "to": "2026-11-19T12:00:00.000Z",
+    "bucketMs": 3600000,
+    "load": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 1, 1, 2, 1, 1, 2, 1, 1],
+    "attemptsStarted": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 1, 1, 1, 2, 1, 1, 1],
+    "attemptsFailed": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
+    "gatesPassed": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3],
+    "gatesFailed": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
+    "spendUsd": [
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7
+    ],
+    "spendBound": "lower",
+    "budgetUsd": 40,
+    "gatesReused": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0],
+    "spendOpeningUsd": {
+      "value": 1.2,
+      "bound": "exact"
+    },
+    "totals": {
+      "attemptsStarted": 11,
+      "attemptsFailed": 1,
+      "failuresByBucket": {
+        "defect": 1
+      },
+      "gatesPassed": 27,
+      "gatesFailed": 1,
+      "gatesReused": 1,
+      "reviewRounds": {
+        "plan": 2,
+        "contract": 1,
+        "code": 1,
+        "attempt": 4
+      },
+      "spendUsd": {
+        "value": 6.3,
+        "bound": "lower"
+      },
+      "wallMs": 27600000,
+      "attemptMs": 33000000,
+      "loadPeak": 2
+    }
+  },
+  "health": {
+    "controller": {
+      "present": false
+    },
+    "stalledAttempts": 0,
+    "quietAttempts": 0,
+    "environmentFailures": 0,
+    "budgeting": "on",
+    "budgets": [
+      {
+        "scope": "total",
+        "state": "within",
+        "spentUsd": {
+          "value": 6.02,
+          "bound": "lower"
+        },
+        "limitUsd": 40
+      },
+      {
+        "scope": "work",
+        "id": "locale-format",
+        "state": "within",
+        "spentUsd": {
+          "value": 3.4,
+          "bound": "lower"
+        },
+        "limitUsd": 8
+      }
+    ],
+    "spentTotalUsd": {
+      "value": 6.02,
+      "bound": "lower"
+    },
+    "drift": {
+      "checked": 4,
+      "drifted": 0,
+      "unavailable": 0
+    },
+    "warnings": [],
+    "sources": [
+      {
+        "connector": "relay-main",
+        "provider": "relay",
+        "level": "below-recommended",
+        "taskContext": false,
+        "contractVersion": 1,
+        "line": "Relay without the task context: the writer will not get the feature and scenario description; Relay ≥ 0.14.0 is needed",
+        "checkedAt": "2026-11-19T11:55:00.000Z"
+      }
+    ]
+  },
+  "activity": [
+    {
+      "at": "2026-11-19T11:51:45.000Z",
+      "actor": "controller",
+      "action": "gate.reused",
+      "workId": "locale-format",
+      "plain": "check typecheck was reused from the candidate: same tree, not run (locale-format, attempt 2, integration)"
+    },
+    {
+      "at": "2026-11-19T11:51:40.000Z",
+      "actor": "controller",
+      "action": "gate.passed",
+      "workId": "locale-format",
+      "plain": "the controller ran check lint: passed (locale-format, attempt 2, candidate)"
+    },
+    {
+      "at": "2026-11-19T11:41:00.000Z",
+      "actor": "controller",
+      "action": "attempt.started",
+      "workId": "locale-format",
+      "plain": "the controller started attempt 2 of locale-format; claude writes"
+    },
+    {
+      "at": "2026-11-19T11:40:30.000Z",
+      "actor": "controller",
+      "action": "attempt.failed",
+      "workId": "locale-format",
+      "plain": "attempt 1 of locale-format failed: a check failed: lint found an unused import"
+    },
+    {
+      "at": "2026-11-19T11:40:00.000Z",
+      "actor": "writer",
+      "action": "question.asked",
+      "workId": "export-csv",
+      "subject": "q-17",
+      "plain": "the writer asked question q-17 on export-csv (severity 8)"
+    },
+    {
+      "at": "2026-11-19T11:27:00.000Z",
+      "actor": "lead",
+      "action": "question.answered",
+      "workId": "locale-format",
+      "subject": "q-12",
+      "plain": "the lead answered question q-12 on locale-format (technical question)"
+    },
+    {
+      "at": "2026-11-19T11:25:00.000Z",
+      "actor": "writer",
+      "action": "question.asked",
+      "workId": "locale-format",
+      "subject": "q-12",
+      "plain": "the writer asked question q-12 on locale-format (severity 6)"
+    },
+    {
+      "at": "2026-11-19T11:14:00.000Z",
+      "actor": "controller",
+      "action": "work.accepted",
+      "workId": "add-greeting",
+      "plain": "add-greeting was accepted (attempt 1): 3b1f9e0c2a7d on refs/heads/harness/accepted, locally"
+    },
+    {
+      "at": "2026-11-19T11:13:40.000Z",
+      "actor": "controller",
+      "action": "gate.reused",
+      "workId": "add-greeting",
+      "plain": "check unit was reused from the candidate: same tree, not run (add-greeting, attempt 1, integration)"
+    },
+    {
+      "at": "2026-11-19T11:13:00.000Z",
+      "actor": "reviewer",
+      "action": "review.approved",
+      "workId": "add-greeting",
+      "subject": "add-greeting",
+      "plain": "reviewer codex approved the changes of add-greeting (attempt 1, candidate); read the diff, ran nothing"
+    },
+    {
+      "at": "2026-11-19T11:11:00.000Z",
+      "actor": "controller",
+      "action": "gate.passed",
+      "workId": "add-greeting",
+      "plain": "the controller ran check unit: passed (add-greeting, attempt 1, candidate)"
+    },
+    {
+      "at": "2026-11-19T11:10:30.000Z",
+      "actor": "controller",
+      "action": "gate.passed",
+      "workId": "add-greeting",
+      "plain": "the controller ran check lint: passed (add-greeting, attempt 1, candidate)"
+    },
+    {
+      "at": "2026-11-19T11:10:00.000Z",
+      "actor": "reviewer",
+      "action": "review.approved",
+      "subject": "g1",
+      "plain": "reviewer codex approved the plan g1, round 2"
+    },
+    {
+      "at": "2026-11-19T11:00:00.000Z",
+      "actor": "controller",
+      "action": "attempt.started",
+      "workId": "add-greeting",
+      "plain": "the controller started attempt 1 of add-greeting; claude writes"
+    },
+    {
+      "at": "2026-11-19T09:20:00.000Z",
+      "actor": "operator",
+      "action": "question.answered",
+      "workId": "add-greeting",
+      "subject": "q-5",
+      "plain": "the operator answered question q-5 on add-greeting"
+    },
+    {
+      "at": "2026-11-19T09:05:00.000Z",
+      "actor": "writer",
+      "action": "question.asked",
+      "workId": "add-greeting",
+      "subject": "q-5",
+      "plain": "the writer asked question q-5 on add-greeting (severity 7)"
+    },
+    {
+      "at": "2026-11-18T18:05:00.000Z",
+      "actor": "reviewer",
+      "action": "review.changes-requested",
+      "subject": "g1",
+      "plain": "reviewer codex returned the plan g1: 1 blocking finding, round 1"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "d-2",
+      "kind": "technical-answer",
+      "by": "lead",
+      "at": "2026-11-19T11:30:00.000Z",
+      "workId": "locale-format",
+      "requestId": "q-12",
+      "temporary": false,
+      "title": "Lead chose the date library already in use",
+      "reason": "technical: no change for the user"
+    },
+    {
+      "id": "d-1",
+      "kind": "accepted-limitation",
+      "by": "lead",
+      "at": "2026-11-19T11:10:00.000Z",
+      "subject": "g1",
+      "findingId": "F2",
+      "temporary": true,
+      "revisit": "before the release",
+      "title": "Plan note F2 accepted for now",
+      "reason": "a wording note in the plan; no change for the user"
+    }
+  ],
+  "scope": {
+    "tasks": [
+      {
+        "id": "rt-demo-1",
+        "connector": "relay-main",
+        "key": "DEMO-1",
+        "title": "Add greet(name)",
+        "workId": "add-greeting",
+        "state": "in-harness"
+      },
+      {
+        "id": "rt-demo-2",
+        "connector": "relay-main",
+        "key": "DEMO-2",
+        "title": "Format dates by locale",
+        "workId": "locale-format",
+        "state": "in-harness"
+      },
+      {
+        "id": "rt-demo-3",
+        "connector": "relay-main",
+        "key": "DEMO-3",
+        "title": "Export report as CSV",
+        "workId": "export-csv",
+        "state": "in-harness"
+      },
+      {
+        "id": "rt-demo-4",
+        "connector": "relay-main",
+        "key": "DEMO-4",
+        "title": "Document the export",
+        "workId": "docs-page",
+        "state": "in-harness"
+      }
+    ]
+  },
+  "forecast": {
+    "progress": {
+      "percent": 100,
+      "weighted": 4,
+      "total": 4,
+      "done": 4,
+      "inWork": 0,
+      "left": 0,
+      "basis": "scope",
+      "line": "done 100 %, all 4 task(s) accepted"
+    },
+    "time": {
+      "startedAt": "2026-11-19T09:10:00.000Z",
+      "elapsedMs": 9600000,
+      "finishedAt": "2026-11-19T11:50:00.000Z",
+      "estimate": "nothing",
+      "humanWait": {
+        "works": 0,
+        "ms": 0
+      },
+      "line": "release finished at 11:50, took 2 h 40 min"
+    },
+    "assumptions": [
+      "scope: all tasks of the run slice, including ones not handed over to harness (weight 0); done in the source without harness — 100 %, cancelled — out of scope",
+      "accepted = 100 %; a work in an attempt counts the stages before its current one (prepare, writer, gates, review, integration); between attempts (waiting, queued) it counts 0",
+      "time left: unfinished share × attempt duration p50–p90 × attempts per accepted task; low end in parallel on concurrency, high end sequential",
+      "waiting for people and the lead is not in the estimate"
+    ]
+  },
+  "updates": {
+    "state": "available",
+    "mode": "notify",
+    "current": {
+      "harness": "0.1.0-alpha.60",
+      "ui": "0.1.0-alpha.5"
+    },
+    "available": {
+      "harness": "0.1.0-alpha.61",
+      "ui": "0.1.0-alpha.6"
+    },
+    "checkedAt": "2026-11-19T08:00:00.000Z",
+    "line": "Available: harness 0.1.0-alpha.61 + panel 0.1.0-alpha.6 (now harness 0.1.0-alpha.60 + panel 0.1.0-alpha.5). What is new — harness update --check; update — harness update --apply --state .harness/state",
+    "whatsNew": [
+      "harness 0.1.0-alpha.61: the release forecast accounts for breaks between attempts",
+      "panel 0.1.0-alpha.6: forecast history on the History tab"
+    ],
+    "command": "harness update --apply --state .harness/state"
+  },
+  "stage": {
+    "name": "work",
+    "lines": []
+  }
+}

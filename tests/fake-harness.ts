@@ -39,6 +39,12 @@ export function fakeHarness(o: {
   window?: boolean;
   /** `view` refuses while this file exists (a test switches failures on and off). */
   refuseWhile?: string;
+  /**
+   * Revision 5 (harness alpha.65): the output schema has the setup branch,
+   * and `view --repository <root>` answers with the setup document until
+   * `<root>/.harness/project.json` exists (then with the overview).
+   */
+  repository?: boolean;
 }): FakeHarness {
   const dir = mkdtempSync(join(tmpdir(), 'hui-fake-harness-'));
   const bin = join(dir, 'harness');
@@ -65,6 +71,7 @@ export function fakeHarness(o: {
                   properties: { viewVersion: { type: 'number', const: declared } },
                 },
                 { type: 'object', properties: { work: {} } },
+                ...(o.repository ? [{ type: 'object', properties: { stage: {}, setup: {} } }] : []),
               ],
             },
           }
@@ -97,6 +104,19 @@ if (${Boolean(o.hang)} && argv[0] !== '--version') {
     out({ apiVersion: 'devcontour-harness/v1alpha1', command: 'view', ok: false,
       error: { code: refuse.code, class: 'input', message: refuse.message, issues: [] } });
     process.exit(2);
+  }
+  const repo = ${Boolean(o.repository)} && argv[1] === '--repository' ? argv[2] : undefined;
+  if (repo !== undefined && !fs.existsSync(repo + '/.harness/project.json')) {
+    out({ apiVersion: 'devcontour-harness/v1alpha1', command: 'view', ok: true,
+      data: { viewVersion: 1, viewRevision: 5, generatedAt: '2026-11-19T12:00:00.000Z',
+        // The argv is recorded in the producer, as for a work detail.
+        source: { producer: JSON.stringify(argv), producerVersion: '0.1.0-alpha.65', stateVersion: 1,
+          token: 'f'.repeat(64) },
+        stage: { name: 'setup', lines: argv.includes('ru')
+          ? ['Идёт настройка harness', 'Задач пока нет']
+          : ['Harness setup is in progress', 'No tasks yet'] },
+        setup: { waitingFor: 'project' } } });
+    process.exit(0);
   }
   const work = argv.find((a) => a.startsWith('--work='));
   if (work && work !== '--work=locale-format') {

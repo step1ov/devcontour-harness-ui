@@ -1,0 +1,18 @@
+{
+  "viewVersion": 1,
+  "viewRevision": 5,
+  "generatedAt": "2026-11-19T12:00:00.000Z",
+  "source": {
+    "producer": "fixture",
+    "producerVersion": "0.1.0-alpha.65",
+    "stateVersion": 1,
+    "token": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  },
+  "stage": {
+    "name": "setup",
+    "lines": ["Harness setup is in progress", "No tasks yet"]
+  },
+  "setup": {
+    "waitingFor": "policy"
+  }
+}

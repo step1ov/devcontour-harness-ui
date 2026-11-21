@@ -9,7 +9,7 @@
 // It is not a full schema validator: the harness owns the schema, and
 // tests/contract.test.ts checks that every schema-valid fixture passes here.
 
-import { VIEW_VERSION, type OperatorView, type WorkDetailView } from './view.ts';
+import { VIEW_VERSION, type OperatorView, type SetupView, type WorkDetailView } from './view.ts';
 
 export type ViewCheck =
   | { ok: true; view: OperatorView; newerRevision: boolean }
@@ -20,7 +20,7 @@ export type ViewCheck =
     };
 
 /** Highest `viewRevision` this build knows how to render in full. */
-export const KNOWN_VIEW_REVISION = 4;
+export const KNOWN_VIEW_REVISION = 5;
 
 type Obj = Record<string, unknown>;
 const isObject = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -178,6 +178,7 @@ const work = obj({
     interrupted: C,
     rechecks: C,
     neutral: obj({ used: C, max: C }),
+    runs: opt(C),
     line: opt(S),
     lastFailure: opt(
       obj({ attempt: C, bucket: S, plain: S, at: opt(I), kind: opt(S), counted: opt(B) }),
@@ -420,6 +421,18 @@ const overview = obj({
       50,
     ),
   ),
+  sourceReviews: opt(
+    arr(
+      obj({
+        connector: S,
+        provider: S,
+        tasks: arr(obj({ taskId: S, key: opt(S), workId: S, column: S, since: I }), 50),
+        line: S,
+      }),
+      10,
+    ),
+  ),
+  stage: opt(obj({ name: S, lines: arr(S, 5) })),
   forecast: opt(
     obj({
       progress: obj({
@@ -431,11 +444,28 @@ const overview = obj({
         left: C,
         basis: S,
         line: S,
+        added: opt(arr(obj({ key: S, workId: opt(S), at: I, before: C, after: C, line: S }), 10)),
+        works: opt(
+          arr(
+            obj({
+              workId: S,
+              key: opt(S),
+              percent: N,
+              attempt: opt(obj({ n: C, max: C })),
+              retry: opt(S),
+              line: S,
+            }),
+            50,
+          ),
+        ),
       }),
       time: obj({
         startedAt: opt(I),
         elapsedMs: opt(C),
+        finishedAt: opt(I),
         remaining: opt(obj({ loMs: C, hiMs: C, samples: C, attemptsPerTask: N })),
+        rough: opt(obj({ loMs: C, hiMs: C, samples: C, attemptsPerTask: N })),
+        estimate: opt(S),
         humanWait: obj({ works: C, ms: C, since: opt(I) }),
         line: S,
       }),
@@ -496,6 +526,14 @@ const detail = obj({
   truncated: opt(rec(C)),
 });
 
+const setupDoc = obj({
+  viewRevision: C,
+  generatedAt: I,
+  source,
+  stage: obj({ name: S, lines: arr(S, 5) }),
+  setup: obj({ waitingFor: S }),
+});
+
 function versionRefusal(value: unknown): Extract<ViewCheck, { ok: false }> | undefined {
   if (!isObject(value) || typeof value.viewVersion !== 'number')
     return { ok: false, code: 'NOT_A_VIEW', message: 'The document has no numeric viewVersion.' };
@@ -547,4 +585,42 @@ export function checkView(value: unknown): ViewCheck {
     view: value as unknown as OperatorView,
     newerRevision: ((value as Obj).viewRevision as number) > KNOWN_VIEW_REVISION,
   };
+}
+
+export type SetupCheck = { ok: true; setup: SetupView; newerRevision: boolean };
+
+/**
+ * A setup document (revision 5, `harness view --repository` before setup):
+ * `stage.name: setup`, a `setup` object and no overview lists. An overview
+ * with `stage.name: setup` (a state without works) is not one: it still has
+ * its works, health and the rest.
+ */
+export function isSetupDocument(value: unknown): boolean {
+  return (
+    isObject(value) &&
+    isObject(value.setup) &&
+    isObject(value.stage) &&
+    value.stage.name === 'setup' &&
+    !Object.hasOwn(value, 'works') &&
+    !Object.hasOwn(value, 'work')
+  );
+}
+
+/** The gate of the setup document alone. */
+export function checkSetup(value: unknown): SetupCheck | Extract<ViewCheck, { ok: false }> {
+  const refused = versionRefusal(value) ?? shapeRefusal(setupDoc, value, 'setup view');
+  if (refused) return refused;
+  return {
+    ok: true,
+    setup: value as unknown as SetupView,
+    newerRevision: ((value as Obj).viewRevision as number) > KNOWN_VIEW_REVISION,
+  };
+}
+
+/**
+ * What `GET /api/view` may answer (revision 5): the overview, or — before
+ * the harness is set up — the setup document.
+ */
+export function checkOverview(value: unknown): ViewCheck | SetupCheck {
+  return isSetupDocument(value) ? checkSetup(value) : checkView(value);
 }

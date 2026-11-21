@@ -33,5 +33,6 @@ export {
   timeState,
 } from './components/Forecast.tsx';
 export { UPDATE_BANNER_STATES, UpdatesBanner, UpdatesSection } from './components/Updates.tsx';
-export { SourceQuestionItem } from './components/Overview.tsx';
+export { SourceQuestionItem, SourceReviewItem } from './components/Overview.tsx';
+export { SetupNote, SetupScreen, hasOverview, inSetup, stageLines } from './components/Setup.tsx';
 export { Term, type ScreenProps } from './components/common.tsx';

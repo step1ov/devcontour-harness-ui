@@ -10,7 +10,14 @@ import { spawn, type ChildProcess } from 'node:child_process';
 export interface HarnessViewOptions {
   /** Harness executable: `harness` on PATH by default, or a path. */
   bin: string;
-  state: string;
+  /** State directory (`--state`). Exactly one of `state` and `repository`. */
+  state?: string;
+  /**
+   * Project root (`--repository`, harness 0.1.0-alpha.65, view revision 5):
+   * the harness finds the state and the policy in `.harness/project.json` on
+   * every run, and answers with the setup document until they exist.
+   */
+  repository?: string;
   policy?: string;
   /** History window passed as `--window` (`24h` or `7d`); absent = the harness default (24 h). */
   window?: string;
@@ -29,6 +36,13 @@ export interface HarnessSupport {
   window: boolean;
   /** `viewVersion` the `view` operation declares in its output schema, when it names one. */
   viewVersion?: number;
+  /**
+   * The `view` operation answers with the setup document before setup (its
+   * output schema has the setup branch, harness 0.1.0-alpha.65): it takes
+   * `--repository <root>`. The catalog does not list that flag in the input
+   * schema, so the setup branch is the signal.
+   */
+  repository: boolean;
 }
 
 export class HarnessUnavailable extends Error {
@@ -179,7 +193,21 @@ export async function probeHarness(bin: string): Promise<HarnessSupport> {
     lang: isObject(props) && Object.hasOwn(props, 'lang'),
     window: isObject(props) && Object.hasOwn(props, 'window'),
     ...(viewVersion !== undefined ? { viewVersion } : {}),
+    repository:
+      (isObject(props) && Object.hasOwn(props, 'repository')) || hasSetupBranch(view?.outputSchema),
   };
+}
+
+/** The `view` output schema has a branch with a `setup` property (the setup document). */
+function hasSetupBranch(schema: unknown): boolean {
+  if (!isObject(schema)) return false;
+  return (['anyOf', 'oneOf'] as const).some(
+    (k) =>
+      Array.isArray(schema[k]) &&
+      (schema[k] as unknown[]).some(
+        (b) => isObject(b) && isObject(b.properties) && Object.hasOwn(b.properties, 'setup'),
+      ),
+  );
 }
 
 /**
@@ -223,7 +251,10 @@ export async function harnessView(
   lang: 'ru' | 'en' | undefined,
   workId?: string,
 ): Promise<HarnessViewResult> {
-  const args = ['view', '--state', o.state];
+  const args =
+    o.repository !== undefined
+      ? ['view', '--repository', o.repository]
+      : ['view', '--state', o.state!];
   if (o.policy !== undefined) args.push('--policy', o.policy);
   if (lang !== undefined) args.push('--lang', lang);
   if (o.window !== undefined) args.push('--window', o.window);

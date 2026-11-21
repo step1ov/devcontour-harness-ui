@@ -35,6 +35,8 @@ export interface HeaderCounts {
   questions: number;
   /** Operator decisions: the «Нужно от вас» items that are not questions (`nextSteps().operator`). */
   decisions: number;
+  /** Tasks waiting for your check in the task source (revision 5, `sourceReviews`). */
+  reviews?: number;
   /** Every operator decision waits for the lead first: the sentence says «(после ведущего)». */
   afterLead?: boolean;
   /** `progress.waitingOperator`: works waiting for the operator, over all works. */
@@ -54,6 +56,7 @@ export function headerSentence(c: HeaderCounts, lang: Lang): string {
   const asks: string[] = [];
   if (c.questions) asks.push(h.answer(c.questions));
   if (c.decisions) asks.push(h.decide(c.decisions) + (c.afterLead ? h.afterLead : ''));
+  if (c.reviews) asks.push(h.review(c.reviews));
   let from: string;
   if (asks.length) from = asks.join(h.and) + (c.incomplete ? h.maybeMore : '');
   else if (c.waitingOperator) from = h.waiting(c.waitingOperator);

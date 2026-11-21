@@ -4,7 +4,7 @@
 // `{harness, ui, viewVersion, compatible, fix?}`. Read-only: the harness
 // commands it runs write nothing.
 
-import { checkView } from '../model/compat.ts';
+import { checkOverview } from '../model/compat.ts';
 import { VIEW_VERSION } from '../model/view.ts';
 import {
   HarnessUnavailable,
@@ -26,13 +26,21 @@ export interface CompatReport {
   /** What to do when not compatible, or when the state could not be read. */
   fix?: string;
   /** `harness view` on the given state: its refusal when it did not produce a view. */
-  view?: { ok: true } | { ok: false; code: string; message: string };
+  view?:
+    | {
+        ok: true;
+        /** Revision 5: the harness is not set up yet; what it waits for (`project`, `policy`). */
+        setup?: string;
+      }
+    | { ok: false; code: string; message: string };
 }
 
 export async function compatReport(o: {
   bin: string;
   ui: string;
   state?: string;
+  /** Project root (`--repository`): read with `harness view --repository`; before setup, the setup document. */
+  repository?: string;
   policy?: string;
 }): Promise<CompatReport> {
   const base = { ui: o.ui, uiViewVersion: VIEW_VERSION };
@@ -63,19 +71,37 @@ export async function compatReport(o: {
         `The installed harness${harness ? ' ' + harness : ''} has no \`harness view\`. ` +
         'Install devcontour-harness 0.1.0-alpha.55 or newer.',
     };
+  if (o.repository !== undefined && !support.repository)
+    return {
+      ...base,
+      harness,
+      viewVersion: support.viewVersion ?? null,
+      compatible: false,
+      fix:
+        `The installed harness${harness ? ' ' + harness : ''} has no \`harness view --repository\`. ` +
+        '--repository needs devcontour-harness 0.1.0-alpha.65 or newer; pass --state <dir> instead.',
+    };
   let viewVersion = support.viewVersion ?? null;
   let view: CompatReport['view'];
-  if (o.state !== undefined) {
+  if (o.state !== undefined || o.repository !== undefined) {
     const r = await harnessView(
-      { bin: o.bin, state: o.state, ...(o.policy !== undefined ? { policy: o.policy } : {}) },
+      {
+        bin: o.bin,
+        ...(o.repository !== undefined ? { repository: o.repository } : { state: o.state! }),
+        ...(o.policy !== undefined ? { policy: o.policy } : {}),
+      },
       undefined,
     );
     if (!r.ok) view = { ok: false, code: r.code, message: r.message };
     else {
       const v = (r.view as { viewVersion?: unknown } | null)?.viewVersion;
       if (typeof v === 'number') viewVersion = v;
-      const c = checkView(r.view);
-      view = c.ok ? { ok: true } : { ok: false, code: c.code, message: c.message };
+      const c = checkOverview(r.view);
+      view = !c.ok
+        ? { ok: false, code: c.code, message: c.message }
+        : 'setup' in c
+          ? { ok: true, setup: String(c.setup.setup.waitingFor) }
+          : { ok: true };
     }
   }
   if (viewVersion !== null && viewVersion !== VIEW_VERSION)

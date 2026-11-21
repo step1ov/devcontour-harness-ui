@@ -16,6 +16,7 @@ import { Alert } from '../components/ui/alert.tsx';
 import { Button } from '../components/ui/button.tsx';
 import { cn } from '../components/ui/cn.ts';
 import { WorkDetail } from '../components/WorkDetail.tsx';
+import { inSetup, SetupNote, SetupScreen } from '../components/Setup.tsx';
 import {
   dict,
   httpViewSource,
@@ -27,6 +28,7 @@ import {
   pickLang,
   nextSteps,
   type OperatorView,
+  type SetupCheck,
   type ViewCheck,
   type WorkDetailCheck,
 } from '../model/index.ts';
@@ -566,7 +568,7 @@ function App() {
     // An old link (`#/reviews`) lands where its content lives now.
     if (redirect) window.location.replace(redirect + (route.anchor ? '#' + route.anchor : ''));
   }, [redirect]);
-  const { value: check, live } = useLive<ViewCheck & Digested>(
+  const { value: check, live } = useLive<(ViewCheck | SetupCheck) & Digested>(
     (signal) => source.load(signal),
     'view',
     undefined,
@@ -590,6 +592,16 @@ function App() {
   else if (!check)
     body = <Note bad={Boolean(error)}>{error ? t.app.connectionLost(error) : t.app.loading}</Note>;
   else if (!check.ok) body = <Refusal head={t.app.incompatible} r={check} />;
+  else if ('setup' in check)
+    // Revision 5: the harness is not set up in the project yet. Not an error:
+    // the page keeps reading and switches to the screens once an overview comes.
+    body = (
+      <>
+        <Freshness generatedAt={check.setup.generatedAt} live={live} />
+        {check.newerRevision ? <Note>{t.app.newerRevision}</Note> : null}
+        <SetupScreen view={check.setup} lang={lang} />
+      </>
+    );
   else {
     const view = check.view;
     const common = { view, lang, now: Date.now(), workHref: workHash };
@@ -621,7 +633,10 @@ function App() {
         <Freshness generatedAt={view.generatedAt} live={live} />
         {check.newerRevision ? <Note>{t.app.newerRevision}</Note> : null}
         <UpdatesBanner updates={view.updates} lang={lang} />
-        {isEmpty(view) ? (
+        {inSetup(view) ? (
+          // Revision 5: a state without works — «Идёт настройка harness», «Задач пока нет».
+          <SetupNote view={view} lang={lang} />
+        ) : isEmpty(view) ? (
           <Note>
             {t.app.empty} <code>harness run</code>
           </Note>

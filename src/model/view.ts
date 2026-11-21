@@ -316,6 +316,11 @@ export interface WorkView {
     neutral: { used: number; max: number };
     /** One-line summary computed by the harness; never re-derived here. */
     line?: string;
+    /**
+     * Runs in all, uncounted ones included (a writer question, an environment
+     * refusal, a stop); present only when it differs from `used` (revision 5).
+     */
+    runs?: number;
     /** Why the previous attempt stopped (harness alpha.55). */
     lastFailure?: {
       attempt: number;
@@ -507,6 +512,30 @@ export interface SourceQuestion {
   readAt: string;
 }
 
+/** Accepted works waiting in the task source for a person's check (revision 5). */
+export interface SourceReview {
+  connector: string;
+  provider: string;
+  tasks: { taskId: string; key?: string; workId: string; column: string; since: string }[];
+  /** «ждут вашей проверки в Relay: WEB-1, WEB-2». */
+  line: string;
+}
+
+/**
+ * The setup document (revision 5, `setupViewSchema`): `harness view
+ * --repository <root>` before the harness is set up in the project (no
+ * `.harness/project.json`, no policy or binding). The panel keeps reading
+ * until an overview comes.
+ */
+export interface SetupView {
+  viewVersion: typeof VIEW_VERSION;
+  viewRevision: number;
+  generatedAt: string;
+  source: OperatorView['source'];
+  stage: { name: 'setup'; lines: string[] };
+  setup: { waitingFor: 'project' | 'policy' };
+}
+
 /** Release forecast (revision 4, harness alpha.60, proposal P11): an observation, not a promise. */
 export interface ForecastView {
   progress: {
@@ -520,13 +549,42 @@ export interface ForecastView {
     /** `scope`: the run slice of the connector; `works`: harness works only. */
     basis: 'scope' | 'works';
     line: string;
+    /**
+     * Tasks added to the release after it started (revision 5), at most 10:
+     * «добавлена задача WEB-3 (задач 2 → 3)».
+     */
+    added?: {
+      key: string;
+      workId?: string;
+      at: string;
+      before: number;
+      after: number;
+      line: string;
+    }[];
+    /** Readiness of each unfinished work and its counted attempt (revision 5), at most 50. */
+    works?: {
+      workId: string;
+      key?: string;
+      percent: number;
+      attempt?: { n: number; max: number };
+      /** `repair`: the running attempt fixes the last review; `answer`: it goes on after a question. */
+      retry?: 'repair' | 'answer';
+      line: string;
+    }[];
   };
   time: {
+    /** Start of the release (revision 5: the first scope snapshot or the first attempt). */
     startedAt?: string;
+    /** The release is finished (revision 5): the end of the last attempt; `elapsedMs` stops there. */
+    finishedAt?: string;
     /** From the start of the first attempt of the scope; absent = not started. */
     elapsedMs?: number;
     /** Absent below the sample minimum: unknown, never zero. */
     remaining?: { loMs: number; hiMs: number; samples: number; attemptsPerTask: number };
+    /** Revision 5: a rough range from 1–4 finished attempts of the release. */
+    rough?: { loMs: number; hiMs: number; samples: number; attemptsPerTask: number };
+    /** Revision 5: what «осталось» is based on. Absent = an older harness. */
+    estimate?: 'precise' | 'rough' | 'unknown' | 'nothing';
     /** Works waiting for a person or the lead now, and the longest wait; not in the forecast. */
     humanWait: { works: number; ms: number; since?: string };
     line: string;
@@ -672,6 +730,13 @@ export interface OperatorView {
   scopeReason?: 'no-snapshot' | 'unreadable';
   /** Open owner questions from the task source, at most 50 (revision 4). */
   sourceQuestions?: SourceQuestion[];
+  /**
+   * Accepted works left in the task source for a person to check (revision
+   * 5); each task is also an escalation `SOURCE_REVIEW` (actor operator).
+   */
+  sourceReviews?: SourceReview[];
+  /** Project stage (revision 5): `setup` while there are no works yet. */
+  stage?: { name: 'setup' | 'work'; lines: string[] };
   /** Release forecast (revision 4). Absent = an older harness or an empty scope. */
   forecast?: ForecastView;
   /** Updates (revision 4). Absent = no updates config and no check. */
@@ -699,7 +764,10 @@ export interface OperatorView {
       // Harness 0.1.0-alpha.61: works that lost their revision 4 fields for
       // size, and `updates.whatsNew` items over 10. Typed, not shown yet.
       | 'workFields'
-      | 'whatsNew',
+      | 'whatsNew'
+      // Revision 5.
+      | 'sourceReviews'
+      | 'forecastWorks',
       number
     >
   >;

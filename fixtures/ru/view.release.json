@@ -1,0 +1,840 @@
+{
+  "viewVersion": 1,
+  "viewRevision": 5,
+  "generatedAt": "2026-11-19T12:00:00.000Z",
+  "source": {
+    "producer": "fixture",
+    "producerVersion": "0.1.0-alpha.65",
+    "stateVersion": 1,
+    "token": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+  },
+  "settings": {
+    "policyDigest": "sha256:0f3c",
+    "approvalMode": "agent",
+    "mode": "live",
+    "concurrency": 2,
+    "roles": [
+      {
+        "role": "backend",
+        "writer": {
+          "runtime": "claude",
+          "model": "example-writer",
+          "effort": "high"
+        }
+      },
+      {
+        "role": "frontend",
+        "writer": {
+          "runtime": "claude",
+          "model": "example-writer"
+        }
+      }
+    ],
+    "reviews": [
+      {
+        "kind": "code",
+        "scope": "global",
+        "reviewer": {
+          "runtime": "codex",
+          "model": "example-reviewer"
+        },
+        "alternates": [],
+        "vendor": "different-vendor"
+      },
+      {
+        "kind": "plan",
+        "scope": "global",
+        "reviewer": {
+          "runtime": "codex"
+        },
+        "alternates": [],
+        "vendor": "different-vendor"
+      }
+    ],
+    "thresholds": {
+      "inputSeverity": 7,
+      "leadAnswersMaxSeverity": 4,
+      "criticalPaths": 2,
+      "maxAttempts": 3,
+      "repairBudget": 6,
+      "maxNeutralFailures": 3,
+      "reviewRoundCap": 6,
+      "reviewEscalationRounds": 3,
+      "leadAnswersTechnical": true
+    },
+    "budgets": [
+      {
+        "scope": "total",
+        "usd": 40
+      },
+      {
+        "scope": "work",
+        "usd": 8
+      }
+    ],
+    "budgetOnUnknown": "stop",
+    "timeouts": {
+      "runTimeoutMs": 900000,
+      "leaseMs": 30000,
+      "stall": {
+        "intervalMs": 30000,
+        "quietMs": 180000,
+        "stalledMs": 600000,
+        "action": "report"
+      }
+    },
+    "lean": {
+      "state": "off"
+    },
+    "defaulted": [
+      "thresholds.repairBudget",
+      "timeouts.leaseMs",
+      "timeouts.runTimeoutMs",
+      "timeouts.stall"
+    ]
+  },
+  "works": [
+    {
+      "id": "add-greeting",
+      "graphId": "g1",
+      "title": "Add greet(name)",
+      "status": "done",
+      "stage": {
+        "name": "done",
+        "next": []
+      },
+      "attempts": {
+        "used": 1,
+        "max": 3,
+        "left": 2,
+        "failed": 0,
+        "interrupted": 0,
+        "rechecks": 0,
+        "neutral": {
+          "used": 0,
+          "max": 3
+        },
+        "line": "1 попытка, принято с первой"
+      },
+      "blockers": [],
+      "spend": {
+        "calls": 3,
+        "usd": {
+          "value": 1.92,
+          "bound": "exact"
+        },
+        "durationMs": 840000
+      },
+      "resultSha": "3b1f9e0c2a7d",
+      "target": {
+        "repositoryId": "app",
+        "ref": "refs/heads/harness/accepted",
+        "acceptedSha": "3b1f9e0c2a7d",
+        "remote": {
+          "state": "not-pushed",
+          "trackingRef": "origin/harness/accepted",
+          "checkedAt": "2026-11-18T17:30:00.000Z",
+          "line": "принято локально; в удалённой ветке origin/harness/accepted ещё нет"
+        }
+      }
+    },
+    {
+      "id": "locale-format",
+      "graphId": "g1",
+      "title": "Format dates by locale",
+      "status": "verifying",
+      "stage": {
+        "name": "gates",
+        "step": "candidate-test:unit",
+        "since": "2026-11-19T11:52:10.000Z",
+        "next": ["review", "integration"],
+        "typical": {
+          "p50Ms": 300000,
+          "p90Ms": 720000,
+          "samples": 6
+        }
+      },
+      "attempts": {
+        "used": 2,
+        "max": 3,
+        "left": 1,
+        "failed": 1,
+        "interrupted": 0,
+        "rechecks": 1,
+        "neutral": {
+          "used": 0,
+          "max": 3
+        },
+        "line": "запусков 3, из них засчитано попыток 2; 1 сбой (проверка), 1 идёт; осталось попыток 1 из 3",
+        "lastFailure": {
+          "attempt": 1,
+          "bucket": "defect",
+          "plain": "проверка не прошла: lint нашёл лишний импорт",
+          "at": "2026-11-19T11:40:30.000Z",
+          "kind": "gate",
+          "counted": true
+        },
+        "runs": 3
+      },
+      "liveness": "active",
+      "runtime": "claude",
+      "model": "example-writer",
+      "blockers": [],
+      "spend": {
+        "calls": 5,
+        "usd": {
+          "value": 3.4,
+          "bound": "lower"
+        },
+        "durationMs": 1900000
+      }
+    },
+    {
+      "id": "export-csv",
+      "graphId": "g1",
+      "title": "Export report as CSV",
+      "status": "held",
+      "stage": {
+        "name": "input",
+        "next": ["writer", "gates", "review", "integration"],
+        "needs": {
+          "actor": "operator",
+          "action": "answer"
+        }
+      },
+      "attempts": {
+        "used": 1,
+        "max": 3,
+        "left": 2,
+        "failed": 0,
+        "interrupted": 0,
+        "rechecks": 0,
+        "neutral": {
+          "used": 0,
+          "max": 3
+        }
+      },
+      "blockers": [
+        {
+          "code": "INPUT_REQUIRED",
+          "plain": "ждёт вашего ответа на вопрос q-17",
+          "actor": "operator"
+        }
+      ],
+      "question": {
+        "requestId": "q-17",
+        "state": "awaiting-answer",
+        "severity": 8
+      },
+      "spend": {
+        "calls": 2,
+        "usd": {
+          "value": 0.7,
+          "bound": "exact"
+        },
+        "durationMs": 420000
+      },
+      "dependsOn": ["add-greeting"]
+    },
+    {
+      "id": "docs-page",
+      "graphId": "g1",
+      "title": "Document the export",
+      "status": "ready",
+      "stage": {
+        "name": "queued",
+        "next": ["writer", "gates", "review", "integration"]
+      },
+      "attempts": {
+        "used": 0,
+        "max": 3,
+        "left": 3,
+        "failed": 0,
+        "interrupted": 0,
+        "rechecks": 0,
+        "neutral": {
+          "used": 0,
+          "max": 3
+        }
+      },
+      "blockers": [
+        {
+          "code": "DEPENDENCY_INCOMPLETE",
+          "plain": "просто ждёт приёмки export-csv; ничего не нужно",
+          "actor": null
+        }
+      ],
+      "spend": {
+        "calls": 0,
+        "usd": {
+          "value": 0,
+          "bound": "exact"
+        },
+        "durationMs": 0
+      },
+      "dependsOn": ["export-csv"]
+    }
+  ],
+  "reviews": [
+    {
+      "kind": "plan",
+      "subject": "g1",
+      "approved": true,
+      "rounds": {
+        "used": 2,
+        "max": 6
+      },
+      "open": {
+        "blocking": 0,
+        "notes": 0
+      },
+      "accepted": 1,
+      "reviewer": {
+        "runtime": "codex"
+      },
+      "sameVendor": false,
+      "spend": {
+        "calls": 2,
+        "usd": {
+          "value": 0.6,
+          "bound": "exact"
+        }
+      },
+      "findings": [
+        {
+          "id": "F1",
+          "severity": "high",
+          "status": "closed",
+          "rounds": 1
+        },
+        {
+          "id": "F2",
+          "severity": "note",
+          "status": "accepted-limitation",
+          "rounds": 2,
+          "disposition": {
+            "decision": "accepted-limitation",
+            "by": "lead",
+            "round": 2
+          }
+        }
+      ],
+      "line": "план одобрен после 2 раундов, 1 заметка принята как ограничение"
+    }
+  ],
+  "questions": [
+    {
+      "requestId": "q-17",
+      "workId": "export-csv",
+      "state": "awaiting-answer",
+      "version": 1,
+      "severity": 8,
+      "answerableBy": "operator",
+      "title": "Какой разделитель использовать в CSV?",
+      "createdAt": "2026-11-19T11:40:00.000Z",
+      "impact": "user-visible",
+      "plain": "Меняет, как выгруженный файл открывается в табличных программах.",
+      "options": [
+        {
+          "id": "comma",
+          "label": "запятая (,)"
+        },
+        {
+          "id": "semicolon",
+          "label": "точка с запятой (;)",
+          "recommended": true
+        }
+      ],
+      "rationale": "табличные программы с русской локалью открывают файл с «;» без настройки"
+    },
+    {
+      "requestId": "q-12",
+      "workId": "locale-format",
+      "state": "delivered",
+      "version": 1,
+      "severity": 6,
+      "answerableBy": "operator-or-lead",
+      "impact": "technical",
+      "plain": "Для пользователя ничего не меняется: даты выглядят так же.",
+      "answeredBy": "lead",
+      "answerBasis": {
+        "by": "lead",
+        "rule": "technical",
+        "reason": "хватает встроенного Intl.DateTimeFormat, без новой зависимости",
+        "impact": "technical",
+        "at": "2026-11-19T11:27:00.000Z",
+        "line": "ответил ведущий (технический вопрос): хватает встроенного Intl.DateTimeFormat, без новой зависимости"
+      },
+      "title": "Какую библиотеку дат использовать для форматирования?",
+      "createdAt": "2026-11-19T11:25:00.000Z",
+      "line": "ответ передан попытке 2"
+    }
+  ],
+  "escalations": [
+    {
+      "workId": "add-greeting",
+      "subject": "DEMO-1",
+      "code": "SOURCE_REVIEW",
+      "actor": "operator",
+      "action": "review-in-source",
+      "since": "2026-11-19T10:05:00.000Z"
+    }
+  ],
+  "drift": [
+    {
+      "workId": "add-greeting",
+      "repositoryId": "app",
+      "ref": "refs/heads/harness/accepted",
+      "acceptedSha": "3b1f9e0c2a7d",
+      "head": "9c04d1aa77e2",
+      "commitsSinceAccepted": 2,
+      "filesSinceAccepted": 3
+    }
+  ],
+  "progress": {
+    "total": 4,
+    "byStage": {
+      "done": 1,
+      "gates": 1,
+      "input": 1,
+      "queued": 1
+    },
+    "running": 1,
+    "done": 1,
+    "waitingOperator": 1,
+    "queue": {
+      "paused": false,
+      "runner": "running",
+      "line": "Очередь идёт: harness запущен."
+    }
+  },
+  "history": {
+    "from": "2026-11-18T12:00:00.000Z",
+    "to": "2026-11-19T12:00:00.000Z",
+    "bucketMs": 3600000,
+    "load": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 1, 1, 2, 1, 1, 2, 1, 1],
+    "attemptsStarted": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 1, 1, 1, 2, 1, 1, 1],
+    "attemptsFailed": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
+    "gatesPassed": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3],
+    "gatesFailed": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
+    "spendUsd": [
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7
+    ],
+    "spendBound": "lower",
+    "budgetUsd": 40,
+    "gatesReused": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0],
+    "spendOpeningUsd": {
+      "value": 1.2,
+      "bound": "exact"
+    },
+    "totals": {
+      "attemptsStarted": 11,
+      "attemptsFailed": 1,
+      "failuresByBucket": {
+        "defect": 1
+      },
+      "gatesPassed": 27,
+      "gatesFailed": 1,
+      "gatesReused": 1,
+      "reviewRounds": {
+        "plan": 2,
+        "contract": 1,
+        "code": 1,
+        "attempt": 4
+      },
+      "spendUsd": {
+        "value": 6.3,
+        "bound": "lower"
+      },
+      "wallMs": 27600000,
+      "attemptMs": 33000000,
+      "loadPeak": 2
+    }
+  },
+  "health": {
+    "controller": {
+      "present": true,
+      "leaseUntil": "2026-11-19T12:00:25.000Z"
+    },
+    "stalledAttempts": 0,
+    "quietAttempts": 0,
+    "environmentFailures": 0,
+    "budgeting": "on",
+    "budgets": [
+      {
+        "scope": "total",
+        "state": "within",
+        "spentUsd": {
+          "value": 6.02,
+          "bound": "lower"
+        },
+        "limitUsd": 40
+      },
+      {
+        "scope": "work",
+        "id": "locale-format",
+        "state": "within",
+        "spentUsd": {
+          "value": 3.4,
+          "bound": "lower"
+        },
+        "limitUsd": 8
+      }
+    ],
+    "spentTotalUsd": {
+      "value": 6.02,
+      "bound": "lower"
+    },
+    "drift": {
+      "checked": 1,
+      "drifted": 1,
+      "unavailable": 0
+    },
+    "warnings": [],
+    "sources": [
+      {
+        "connector": "relay-main",
+        "provider": "relay",
+        "level": "below-recommended",
+        "taskContext": false,
+        "contractVersion": 1,
+        "line": "Relay без контекста задачи: исполнитель не получит описание функции и сценария; нужна Relay ≥ 0.14.0",
+        "checkedAt": "2026-11-19T11:55:00.000Z"
+      }
+    ]
+  },
+  "activity": [
+    {
+      "at": "2026-11-19T11:51:45.000Z",
+      "actor": "controller",
+      "action": "gate.reused",
+      "workId": "locale-format",
+      "plain": "проверка typecheck взята с кандидата: то же дерево, не запускалась (работа locale-format, попытка 2, интеграция)"
+    },
+    {
+      "at": "2026-11-19T11:51:40.000Z",
+      "actor": "controller",
+      "action": "gate.passed",
+      "workId": "locale-format",
+      "plain": "контроллер запустил проверку lint: прошла (работа locale-format, попытка 2, кандидат)"
+    },
+    {
+      "at": "2026-11-19T11:41:00.000Z",
+      "actor": "controller",
+      "action": "attempt.started",
+      "workId": "locale-format",
+      "plain": "контроллер запустил попытку 2 работы locale-format; пишет claude"
+    },
+    {
+      "at": "2026-11-19T11:40:30.000Z",
+      "actor": "controller",
+      "action": "attempt.failed",
+      "workId": "locale-format",
+      "plain": "попытка 1 работы locale-format не удалась: проверка не прошла: lint нашёл лишний импорт"
+    },
+    {
+      "at": "2026-11-19T11:40:00.000Z",
+      "actor": "writer",
+      "action": "question.asked",
+      "workId": "export-csv",
+      "subject": "q-17",
+      "plain": "исполнитель задал вопрос q-17 по работе export-csv (важность 8)"
+    },
+    {
+      "at": "2026-11-19T11:27:00.000Z",
+      "actor": "lead",
+      "action": "question.answered",
+      "workId": "locale-format",
+      "subject": "q-12",
+      "plain": "ведущий ответил на вопрос q-12 по работе locale-format (технический вопрос)"
+    },
+    {
+      "at": "2026-11-19T11:25:00.000Z",
+      "actor": "writer",
+      "action": "question.asked",
+      "workId": "locale-format",
+      "subject": "q-12",
+      "plain": "исполнитель задал вопрос q-12 по работе locale-format (важность 6)"
+    },
+    {
+      "at": "2026-11-19T11:14:00.000Z",
+      "actor": "controller",
+      "action": "work.accepted",
+      "workId": "add-greeting",
+      "plain": "работа add-greeting принята (попытка 1): 3b1f9e0c2a7d в refs/heads/harness/accepted, локально"
+    },
+    {
+      "at": "2026-11-19T11:13:40.000Z",
+      "actor": "controller",
+      "action": "gate.reused",
+      "workId": "add-greeting",
+      "plain": "проверка unit взята с кандидата: то же дерево, не запускалась (работа add-greeting, попытка 1, интеграция)"
+    },
+    {
+      "at": "2026-11-19T11:13:00.000Z",
+      "actor": "reviewer",
+      "action": "review.approved",
+      "workId": "add-greeting",
+      "subject": "add-greeting",
+      "plain": "reviewer codex одобрил изменения работы add-greeting (попытка 1, кандидат); читал diff, ничего не запускал"
+    },
+    {
+      "at": "2026-11-19T11:11:00.000Z",
+      "actor": "controller",
+      "action": "gate.passed",
+      "workId": "add-greeting",
+      "plain": "контроллер запустил проверку unit: прошла (работа add-greeting, попытка 1, кандидат)"
+    },
+    {
+      "at": "2026-11-19T11:10:30.000Z",
+      "actor": "controller",
+      "action": "gate.passed",
+      "workId": "add-greeting",
+      "plain": "контроллер запустил проверку lint: прошла (работа add-greeting, попытка 1, кандидат)"
+    },
+    {
+      "at": "2026-11-19T11:10:00.000Z",
+      "actor": "reviewer",
+      "action": "review.approved",
+      "subject": "g1",
+      "plain": "reviewer codex одобрил план g1, раунд 2"
+    },
+    {
+      "at": "2026-11-19T11:00:00.000Z",
+      "actor": "controller",
+      "action": "attempt.started",
+      "workId": "add-greeting",
+      "plain": "контроллер запустил попытку 1 работы add-greeting; пишет claude"
+    },
+    {
+      "at": "2026-11-19T09:20:00.000Z",
+      "actor": "operator",
+      "action": "question.answered",
+      "workId": "add-greeting",
+      "subject": "q-5",
+      "plain": "оператор ответил на вопрос q-5 по работе add-greeting"
+    },
+    {
+      "at": "2026-11-19T09:05:00.000Z",
+      "actor": "writer",
+      "action": "question.asked",
+      "workId": "add-greeting",
+      "subject": "q-5",
+      "plain": "исполнитель задал вопрос q-5 по работе add-greeting (важность 7)"
+    },
+    {
+      "at": "2026-11-18T18:05:00.000Z",
+      "actor": "reviewer",
+      "action": "review.changes-requested",
+      "subject": "g1",
+      "plain": "reviewer codex вернул план g1: блокирующих замечаний 1, раунд 1"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "d-2",
+      "kind": "technical-answer",
+      "by": "lead",
+      "at": "2026-11-19T11:30:00.000Z",
+      "workId": "locale-format",
+      "requestId": "q-12",
+      "temporary": false,
+      "title": "Ведущий выбрал уже используемую библиотеку дат",
+      "reason": "технический вопрос: для пользователя ничего не меняется"
+    },
+    {
+      "id": "d-1",
+      "kind": "accepted-limitation",
+      "by": "lead",
+      "at": "2026-11-19T11:10:00.000Z",
+      "subject": "g1",
+      "findingId": "F2",
+      "temporary": true,
+      "revisit": "перед релизом",
+      "title": "Заметка F2 к плану принята пока",
+      "reason": "заметка о формулировке в плане; для пользователя ничего не меняется"
+    }
+  ],
+  "scope": {
+    "tasks": [
+      {
+        "id": "rt-demo-1",
+        "connector": "relay-main",
+        "key": "DEMO-1",
+        "title": "Добавить greet(name)",
+        "workId": "add-greeting",
+        "state": "in-harness"
+      },
+      {
+        "id": "rt-demo-2",
+        "connector": "relay-main",
+        "key": "DEMO-2",
+        "title": "Форматировать даты по локали",
+        "workId": "locale-format",
+        "state": "in-harness"
+      },
+      {
+        "id": "rt-demo-3",
+        "connector": "relay-main",
+        "key": "DEMO-3",
+        "title": "Выгрузить отчёт в CSV",
+        "workId": "export-csv",
+        "state": "in-harness"
+      },
+      {
+        "id": "rt-demo-4",
+        "connector": "relay-main",
+        "key": "DEMO-4",
+        "title": "Описать выгрузку",
+        "workId": "docs-page",
+        "state": "in-harness"
+      },
+      {
+        "id": "rt-demo-5",
+        "connector": "relay-main",
+        "key": "DEMO-5",
+        "title": "Импорт отчёта из CSV",
+        "state": "not-handed-over",
+        "plain": "ещё не передана в harness"
+      },
+      {
+        "id": "rt-demo-6",
+        "connector": "relay-main",
+        "key": "DEMO-6",
+        "title": "Печать отчёта",
+        "state": "not-ready",
+        "plain": "у задачи нет критериев приёмки"
+      }
+    ]
+  },
+  "sourceQuestions": [
+    {
+      "connector": "relay-main",
+      "provider": "relay",
+      "id": "rq-41",
+      "ref": "Q-41",
+      "title": "Вопрос: нужна ли выгрузка в Excel?",
+      "question": "Делать ли вместе с CSV выгрузку в .xlsx?",
+      "options": ["только CSV", "CSV и .xlsx"],
+      "recommendation": "в этом выпуске только CSV; .xlsx — отдельной задачей",
+      "provisional": "работа идёт только с CSV",
+      "tasks": ["DEMO-3"],
+      "url": "https://relay.example.test/docs/Q-41",
+      "readAt": "2026-11-19T11:55:00.000Z"
+    }
+  ],
+  "forecast": {
+    "progress": {
+      "percent": 23,
+      "weighted": 1.4,
+      "total": 6,
+      "done": 1,
+      "inWork": 1,
+      "left": 5,
+      "basis": "scope",
+      "line": "готово ~23 %, осталось задач: 5 из 6, в работе: 1",
+      "added": [
+        {
+          "key": "DEMO-6",
+          "at": "2026-11-19T11:00:00.000Z",
+          "before": 5,
+          "after": 6,
+          "line": "добавлена задача DEMO-6 (задач 5 → 6)"
+        }
+      ],
+      "works": [
+        {
+          "workId": "locale-format",
+          "key": "DEMO-2",
+          "percent": 60,
+          "attempt": {
+            "n": 2,
+            "max": 3
+          },
+          "retry": "repair",
+          "line": "DEMO-2: ~60 %, попытка 2 из 3, исправляет замечания"
+        },
+        {
+          "workId": "export-csv",
+          "key": "DEMO-3",
+          "percent": 10,
+          "attempt": {
+            "n": 1,
+            "max": 3
+          },
+          "retry": "answer",
+          "line": "DEMO-3: ~10 %, попытка 1 из 3, продолжает после ответа"
+        },
+        {
+          "workId": "docs-page",
+          "key": "DEMO-4",
+          "percent": 0,
+          "line": "DEMO-4: ~0 %, не начиналась"
+        }
+      ]
+    },
+    "time": {
+      "startedAt": "2026-11-19T09:10:00.000Z",
+      "elapsedMs": 10200000,
+      "humanWait": {
+        "works": 1,
+        "ms": 1200000,
+        "since": "2026-11-19T11:40:00.000Z"
+      },
+      "line": "прошло 2 ч 50 мин · осталось ~25 мин – 55 мин (грубо, по 2 попыткам); ждут людей сейчас: 1, до 20 мин — в прогноз не входит",
+      "rough": {
+        "loMs": 1500000,
+        "hiMs": 3300000,
+        "samples": 2,
+        "attemptsPerTask": 1
+      },
+      "estimate": "rough"
+    },
+    "assumptions": [
+      "объём: все задачи среза прогона, в том числе не переданные в harness (вес 0); закрытая в источнике без harness — 100 %, отменённая — вне объёма",
+      "принято — 100 %; работа в попытке — доля этапов до текущего (подготовка, написание, проверки, ревью, интеграция); между попытками (ожидание, очередь) — 0",
+      "осталось: незавершённая доля × длительность попытки p50–p90 × попыток на принятую задачу; нижняя граница — параллельно по concurrency, верхняя — последовательно",
+      "ожидание людей и ведущего в прогноз не входит",
+      "осталось (грубо): по 1–4 закончившимся попыткам выпуска — разброс от самой короткой до самой долгой попытки"
+    ]
+  },
+  "updates": {
+    "state": "available",
+    "mode": "notify",
+    "current": {
+      "harness": "0.1.0-alpha.60",
+      "ui": "0.1.0-alpha.5"
+    },
+    "available": {
+      "harness": "0.1.0-alpha.61",
+      "ui": "0.1.0-alpha.6"
+    },
+    "checkedAt": "2026-11-19T08:00:00.000Z",
+    "line": "Доступна harness 0.1.0-alpha.61 + панель 0.1.0-alpha.6 (сейчас harness 0.1.0-alpha.60 + панель 0.1.0-alpha.5). Что нового — harness update --check; обновить — harness update --apply --state .harness/state",
+    "whatsNew": [
+      "harness 0.1.0-alpha.61: прогноз выпуска учитывает перерывы между попытками",
+      "панель 0.1.0-alpha.6: история прогноза на вкладке «История»"
+    ],
+    "command": "harness update --apply --state .harness/state"
+  },
+  "stage": {
+    "name": "work",
+    "lines": []
+  },
+  "sourceReviews": [
+    {
+      "connector": "relay-main",
+      "provider": "relay",
+      "tasks": [
+        {
+          "taskId": "rt-demo-1",
+          "key": "DEMO-1",
+          "workId": "add-greeting",
+          "column": "review",
+          "since": "2026-11-19T10:05:00.000Z"
+        }
+      ],
+      "line": "ждут вашей проверки в Relay: DEMO-1"
+    }
+  ]
+}

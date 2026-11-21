@@ -4,7 +4,7 @@
 // stream is blocked falls back to polling.
 import { expect, test, type Page } from '@playwright/test';
 import { spawn, type ChildProcessByStdio } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Readable } from 'node:stream';
@@ -308,4 +308,36 @@ test('the work screen holds one stream, the work detail one', async ({ page }) =
   await expect(page.getByTestId('freshness')).toContainText('снимок');
   expect(opened.length).toBe(1);
   expect(new URL(opened[0]!).searchParams.get('work')).toBe('locale-format');
+});
+
+test('--repository before harness setup: «Идёт настройка harness», then the screens by themselves', async ({
+  page,
+}) => {
+  const s = scratch();
+  const repo = join(s.dir, 'repo');
+  mkdirSync(repo);
+  const viewFile = join(s.dir, 'view.json');
+  writeView(viewFile, 'setup-done', 'Вопрос после настройки');
+  const fake = fakeHarness({ view: true, lang: true, repository: true, viewFile });
+  const cli = await startCli(['--repository', repo, '--harness', fake.bin]);
+  try {
+    await page.goto(cli.url + '?lang=ru#/');
+    const setup = page.getByTestId('setup');
+    await expect(setup).toBeVisible();
+    await expect(setup).toContainText('Идёт настройка harness');
+    await expect(setup).toContainText('Задач пока нет');
+    await expect(setup).toContainText('.harness/project.json');
+    // Not an error: no refusal and no stale warning.
+    await expect(page.getByTestId('stale')).toHaveCount(0);
+    await expect(page.locator('main')).not.toContainText('не может показать');
+    // Harness setup writes the project file: the page switches without a reload.
+    mkdirSync(join(repo, '.harness'));
+    writeFileSync(join(repo, '.harness', 'project.json'), '{}');
+    await expect(page.locator('main')).toContainText('Вопрос после настройки', { timeout: 5000 });
+    await expect(page.getByTestId('setup')).toHaveCount(0);
+  } finally {
+    await cli.stop();
+    fake.remove();
+    s.remove();
+  }
 });

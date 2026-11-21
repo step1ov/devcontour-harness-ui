@@ -10,7 +10,13 @@
 // `{ error: { code, message } }`. The UI CLI and the proposed
 // `harness serve-view` serve the same routes.
 
-import { checkView, checkWorkDetail, type ViewCheck, type WorkDetailCheck } from './compat.ts';
+import {
+  checkOverview,
+  checkWorkDetail,
+  type SetupCheck,
+  type ViewCheck,
+  type WorkDetailCheck,
+} from './compat.ts';
 
 /** A loaded document may carry the server digest of its content (`x-hui-digest`). */
 export interface Digested {
@@ -18,8 +24,12 @@ export interface Digested {
 }
 
 export interface ViewSource {
-  /** Current view or a typed refusal; rejects only on transport failure. */
-  load(signal?: AbortSignal): Promise<ViewCheck & Digested>;
+  /**
+   * Current view or a typed refusal; rejects only on transport failure.
+   * Before the harness is set up (revision 5) it may be the setup document
+   * (`{ ok: true, setup }`); a host without one returns `ViewCheck` only.
+   */
+  load(signal?: AbortSignal): Promise<(ViewCheck | SetupCheck) & Digested>;
   /** Work detail document or a typed refusal; absent = the host has no detail route. */
   loadWork?(workId: string, signal?: AbortSignal): Promise<WorkDetailCheck & Digested>;
   /**
@@ -85,7 +95,7 @@ export function liveEventOf(kind: string, data: unknown): LiveEvent | undefined 
 /** A fixed document (tests, previews, a host snapshot), with optional work details by id. */
 export function staticViewSource(view: unknown, works: Record<string, unknown> = {}): ViewSource {
   return {
-    load: async () => checkView(view),
+    load: async () => checkOverview(view),
     loadWork: async (id) =>
       Object.hasOwn(works, id)
         ? checkWorkDetail(works[id])
@@ -189,7 +199,7 @@ export function httpViewSource(
     };
   };
   return {
-    load: (signal) => get(viewUrl, checkView, signal),
+    load: (signal) => get(viewUrl, checkOverview, signal),
     loadWork: (id, signal) =>
       get(urlOf('api/work/' + encodeURIComponent(id)), checkWorkDetail, signal),
     ...(ES ? { subscribe } : {}),

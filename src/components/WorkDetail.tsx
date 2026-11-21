@@ -223,6 +223,11 @@ export function WorkDetail({
           </Heading>
           <p>
             {w.attemptsLine(a.used, a.max, a.left)}{' '}
+            {a.runs !== undefined && a.runs !== a.used ? (
+              <span data-testid="attempt-runs">
+                {t.r5.runs(a.runs, a.used)}. {t.r5.runsWhy}{' '}
+              </span>
+            ) : null}
             {a.lastFailure ? (
               <>
                 {w.lastFailure(a.lastFailure.attempt, a.lastFailure.plain)}{' '}
