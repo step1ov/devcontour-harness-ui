@@ -111,7 +111,8 @@ hash-адреса: `#/` обзор, `#/tasks` задачи, `#/work/<id>` про
 - `--check [--harness <bin>] [--state <dir> [--policy <file>] | --repository <dir>]`
   — печатает `{harness, ui, viewVersion, compatible, fix?, view?}`; выход 0 —
   совместимо, 3 — нет. До настройки harness `--repository` даёт `view: {ok:
-true, setup: "project"}` и выход 0.
+true, setup: "project"}` и выход 0; отказ `harness view --repository` (например, `POLICY_REQUIRED`) —
+  выход 3.
 
 В stdout печатается одна строка JSON, подсказки идут в stderr. Коды
 выхода: 0, 2 (ввод), 3 (отказ) и 4 (инфраструктура).

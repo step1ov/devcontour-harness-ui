@@ -130,10 +130,12 @@ export function timeState(f: ForecastView, lang: Lang, now?: number) {
   const d = dict(lang);
   const t = d.forecast;
   const { estimate, finishedAt } = f.time;
-  // Revision 5: a finished release has a fixed elapsed time (up to `finishedAt`);
-  // it no longer goes on with the clock.
+  // Revision 5: nothing is left (`estimate: nothing`) or the release is
+  // finished (`finishedAt`, elapsed fixed up to it).
   const finished = finishedAt !== undefined || estimate === 'nothing';
-  const elapsedMs = finished ? f.time.elapsedMs : sinceMs(f.time.elapsedMs, f.time.startedAt, now);
+  // Only a finish time stops the clock: `elapsedMs` then ends there.
+  const elapsedMs =
+    finishedAt !== undefined ? f.time.elapsedMs : sinceMs(f.time.elapsedMs, f.time.startedAt, now);
   if (finished || f.progress.left === 0) {
     const at = finishedAt !== undefined ? formatClock(finishedAt, undefined, now) : undefined;
     const took = elapsedMs === undefined ? undefined : spanWords(elapsedMs, lang);

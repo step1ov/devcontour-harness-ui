@@ -184,6 +184,12 @@ export function Overview({
   const unfinished = overall.total - overall.done - overall.cancelled;
   // Harness works only: tasks outside the harness are the lead's to hand over, not the queue's.
   const harnessLeft = progress.total - progress.done - overall.cancelled;
+  // The release totals: the forecast's (revision 5: the whole release) when
+  // the harness sends one, so the hero line and the ring say the same.
+  const fp = view.forecast?.progress;
+  const releaseTotal = fp ? fp.total : progress.total;
+  const releaseDone = fp ? fp.done : progress.done;
+  const releaseLeft = fp ? fp.left : harnessLeft;
   // With a forecast that has nothing left, a listed task without a work is
   // closed in the tracker, not waiting to be handed over.
   const outsideLeft = view.forecast?.progress.left === 0 ? 0 : (overall.outside ?? 0);
@@ -195,13 +201,14 @@ export function Overview({
   const standing =
     !progress.queue.paused &&
     !fresh &&
-    // A finished release (revision 5: every work accepted) does not stand:
-    // nobody has to start a run for it.
-    !(progress.total > 0 && harnessLeft <= 0) &&
+    // A finished release does not stand: nobody has to start a run for it.
+    !(releaseTotal > 0 && releaseLeft <= 0) &&
     (runner !== undefined
       ? runner === 'not-running'
       : !health.controller.present && progress.running === 0 && harnessLeft > 0);
   const standingLine = progress.queue.line?.trim() || undefined;
+  // Every harness work is finished; tasks outside the harness may still be
+  // left (`outsideLeft`, from the forecast when there is one).
   const finished = progress.total > 0 && harnessLeft === 0;
   // Nothing accepted and everything cancelled is not «всё принято».
   const allDone = finished && progress.done > 0;
@@ -303,7 +310,7 @@ export function Overview({
               </span>
             ) : null}
             <span className="hui:text-sm hui:text-muted-foreground">
-              {o.acceptedOf(progress.done, progress.total)}
+              {o.acceptedOf(releaseDone, releaseTotal)}
             </span>
           </div>
         </CardContent>

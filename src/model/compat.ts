@@ -624,3 +624,11 @@ export function checkSetup(value: unknown): SetupCheck | Extract<ViewCheck, { ok
 export function checkOverview(value: unknown): ViewCheck | SetupCheck {
   return isSetupDocument(value) ? checkSetup(value) : checkView(value);
 }
+
+/**
+ * What `GET /api/work/<id>` may answer: the work detail, or — before the
+ * harness is set up (`--repository`, revision 5) — the setup document.
+ */
+export function checkWork(value: unknown): WorkDetailCheck | SetupCheck {
+  return isSetupDocument(value) ? checkSetup(value) : checkWorkDetail(value);
+}

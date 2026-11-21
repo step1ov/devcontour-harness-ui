@@ -588,3 +588,20 @@ export function sourceReviewItems(view: OperatorView): {
   const tasks = groups.reduce((n, g) => n + g.tasks.length, 0);
   return { groups, loose, count: tasks + loose.length };
 }
+
+/**
+ * The check in the task source that waits on one work (revision 5), from
+ * `sourceReviews[]` or else its `SOURCE_REVIEW` escalation; `undefined` when
+ * none does. The Tasks card says it next to «принято».
+ */
+export function sourceReviewOf(
+  view: OperatorView,
+  workId: string,
+): { key?: string; column?: string; since: string } | undefined {
+  for (const g of view.sourceReviews ?? [])
+    for (const x of g.tasks)
+      if (x.workId === workId)
+        return { ...(x.key ? { key: x.key } : {}), column: x.column, since: x.since };
+  const e = view.escalations.find((x) => x.code === SOURCE_REVIEW && x.workId === workId);
+  return e ? { ...(e.subject ? { key: e.subject } : {}), since: e.since } : undefined;
+}

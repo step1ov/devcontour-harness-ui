@@ -341,3 +341,26 @@ test('--repository before harness setup: «Идёт настройка harness»
     s.remove();
   }
 });
+
+test('--repository: a harness refusal shows as a refusal, not as setup', async ({ page }) => {
+  const s = scratch();
+  const repo = join(s.dir, 'repo');
+  mkdirSync(repo);
+  const fake = fakeHarness({
+    view: true,
+    lang: true,
+    repository: true,
+    refuse: { code: 'POLICY_REQUIRED', message: 'no policy and no binding' },
+  });
+  const cli = await startCli(['--repository', repo, '--harness', fake.bin]);
+  try {
+    await page.goto(cli.url + '?lang=ru#/');
+    await expect(page.locator('main')).toContainText('POLICY_REQUIRED');
+    await expect(page.locator('main')).toContainText('Представление сейчас недоступно');
+    await expect(page.getByTestId('setup')).toHaveCount(0);
+  } finally {
+    await cli.stop();
+    fake.remove();
+    s.remove();
+  }
+});

@@ -421,8 +421,8 @@ const ru = {
     incompatible: 'Панель не может показать эти данные:',
     notFound: 'Такого раздела нет.',
     readOnly: 'Панель только читает: ничего не запускает и не отвечает за вас.',
-    liveQuestions: (n: number, clipped: boolean) =>
-      `Ждут вашего ответа: ${rp(n, 'вопрос', 'вопроса', 'вопросов')}${clipped ? ' и, возможно, ещё (список обрезан)' : ''}.`,
+    liveQuestions: (n: number, clipped: boolean, reviews = 0) =>
+      `Ждут вашего ответа: ${rp(n, 'вопрос', 'вопроса', 'вопросов')}${reviews ? `; вашей проверки в источнике задач: ${rp(reviews, 'задача', 'задачи', 'задач')}` : ''}${clipped ? ' и, возможно, ещё (список обрезан)' : ''}.`,
     refusal: {
       NOT_A_VIEW: 'Данные не похожи на представление harness.',
       VIEW_VERSION_UNSUPPORTED: 'Эта версия панели не знает такой версии представления.',
@@ -1362,8 +1362,7 @@ const ru = {
     added: 'Добавлено в выпуск после начала:',
     worksTitle: 'Готовность незаконченных работ',
     worksClipped: (n: number) =>
-      `Ещё ${rp(n, 'работа', 'работы', 'работ')} не показано (предел представления).`,
-    retry: { repair: 'исправляет замечания', answer: 'продолжает после ответа' } as Labels,
+      `Ещё ${rp(n, 'работа', 'работы', 'работ')} не ${n % 10 === 1 && n % 100 !== 11 ? 'показана' : 'показаны'} (предел представления).`,
     leftRough: (r: string, n: number) =>
       `осталось грубо, ${r} (по ${rp(n, 'попытке', 'попыткам', 'попыткам')})`,
     roughWord: 'грубо',
@@ -1380,8 +1379,10 @@ const ru = {
       'Работа принята harness и ждёт человека в источнике задач: проверьте и закройте или верните задачу там. Панель только показывает.',
     sourceReviewEscalation: (subject: string) =>
       `ждёт вашей проверки в источнике задач: ${subject}`,
+    sourceReviewTask: (key: string, column: string | undefined) =>
+      `${key} ждёт вашей проверки в источнике задач${column ? ` (колонка ${column})` : ''}.`,
     sourceReviewsClipped: (n: number) =>
-      `Ещё ${rp(n, 'задача', 'задачи', 'задач')} на проверке не показано (предел представления).`,
+      `Ещё ${rp(n, 'задача', 'задачи', 'задач')} на проверке не ${n % 10 === 1 && n % 100 !== 11 ? 'показана' : 'показаны'} (предел представления).`,
   },
 };
 
@@ -1427,8 +1428,8 @@ const en: Dict = {
     incompatible: 'The panel cannot show this data:',
     notFound: 'There is no such section.',
     readOnly: 'The panel only reads: it starts nothing and answers nothing for you.',
-    liveQuestions: (n: number, clipped: boolean) =>
-      `${ep(n, 'question waits', 'questions wait')} for your answer${clipped ? ' and possibly more (the list is clipped)' : ''}.`,
+    liveQuestions: (n: number, clipped: boolean, reviews = 0) =>
+      `${ep(n, 'question waits', 'questions wait')} for your answer${reviews ? `; ${ep(reviews, 'task waits', 'tasks wait')} for your check in the task source` : ''}${clipped ? ' and possibly more (the list is clipped)' : ''}.`,
     refusal: {
       NOT_A_VIEW: 'The data does not look like a harness view.',
       VIEW_VERSION_UNSUPPORTED: 'This panel does not know this view version.',
@@ -2331,7 +2332,6 @@ const en: Dict = {
     worksTitle: 'Readiness of unfinished work orders',
     worksClipped: (n: number) =>
       `${ep(n, 'more work order is', 'more work orders are')} not shown (view limit).`,
-    retry: { repair: 'fixing review findings', answer: 'going on after an answer' } as Labels,
     leftRough: (r: string, n: number) => `roughly ${r} left (from ${ep(n, 'attempt', 'attempts')})`,
     roughWord: 'rough',
     roughWhy:
@@ -2347,6 +2347,8 @@ const en: Dict = {
       'The harness accepted the work and it waits for a person in the task source: check it and close or return the task there. The panel only shows it.',
     sourceReviewEscalation: (subject: string) =>
       `waits for your check in the task source: ${subject}`,
+    sourceReviewTask: (key: string, column: string | undefined) =>
+      `${key} waits for your check in the task source${column ? ` (column ${column})` : ''}.`,
     sourceReviewsClipped: (n: number) =>
       `${ep(n, 'more task', 'more tasks')} waiting for a check not shown (view limit).`,
   },

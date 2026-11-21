@@ -115,7 +115,10 @@ export async function compatReport(o: {
         'Install the devcontour-harness-ui release for that view version, or a harness of the 0.1.x line.',
       ...(view ? { view } : {}),
     };
-  if (view && !view.ok && view.code !== 'VIEW_UNAVAILABLE')
+  // `--repository` (revision 5): before setup the harness answers with the
+  // setup document; any other failure of `harness view` there is a failed
+  // check, so a start script does not start a panel that only shows errors.
+  if (view && !view.ok && (view.code !== 'VIEW_UNAVAILABLE' || o.repository !== undefined))
     return {
       ...base,
       harness,

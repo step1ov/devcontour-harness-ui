@@ -12,6 +12,7 @@
 
 import {
   checkOverview,
+  checkWork,
   checkWorkDetail,
   type SetupCheck,
   type ViewCheck,
@@ -31,7 +32,10 @@ export interface ViewSource {
    */
   load(signal?: AbortSignal): Promise<(ViewCheck | SetupCheck) & Digested>;
   /** Work detail document or a typed refusal; absent = the host has no detail route. */
-  loadWork?(workId: string, signal?: AbortSignal): Promise<WorkDetailCheck & Digested>;
+  loadWork?(
+    workId: string,
+    signal?: AbortSignal,
+  ): Promise<(WorkDetailCheck | SetupCheck) & Digested>;
   /**
    * Optional push of changes; returns an unsubscribe function. `onChange()`
    * without an event means "something changed, load again". The standalone
@@ -200,8 +204,7 @@ export function httpViewSource(
   };
   return {
     load: (signal) => get(viewUrl, checkOverview, signal),
-    loadWork: (id, signal) =>
-      get(urlOf('api/work/' + encodeURIComponent(id)), checkWorkDetail, signal),
+    loadWork: (id, signal) => get(urlOf('api/work/' + encodeURIComponent(id)), checkWork, signal),
     ...(ES ? { subscribe } : {}),
   };
 }

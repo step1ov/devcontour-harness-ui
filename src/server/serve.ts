@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto';
 import { readFile, realpath, stat } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { extname, join, resolve, sep } from 'node:path';
-import { checkOverview, checkWorkDetail } from '../model/compat.ts';
+import { checkOverview, checkWork } from '../model/compat.ts';
 import { liveHub, MAX_STREAMS, type WatchSpec } from './live.ts';
 import {
   harnessView,
@@ -193,7 +193,8 @@ export const WORK_ID = /^[A-Za-z0-9_-]{1,80}$/;
 type Gate = (v: unknown) => { ok: true } | { ok: false; code: string; message: string };
 // The overview route also carries the setup document (revision 5).
 const viewGate: Gate = checkOverview;
-const detailGate: Gate = checkWorkDetail;
+// Before setup (`--repository`) the work route gets the setup document too.
+const detailGate: Gate = checkWork;
 
 type FileRead =
   | { ok: true; view: unknown; bytes: Buffer }

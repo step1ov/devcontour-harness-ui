@@ -14,7 +14,13 @@ import {
   scopeOf,
   taskName,
 } from '../model/scope.ts';
-import { nextSteps, workName, withWorkNames, type NextSteps } from '../model/steps.ts';
+import {
+  nextSteps,
+  sourceReviewOf,
+  workName,
+  withWorkNames,
+  type NextSteps,
+} from '../model/steps.ts';
 import {
   leadAnswers,
   taskCards,
@@ -206,6 +212,8 @@ function TaskCardView({
               ? k.next.queue
               : k.next.unknown;
   const titleText = w.title && w.title !== name ? w.title : undefined;
+  // Revision 5: accepted, and left in the task source for your check.
+  const review = sourceReviewOf(view, w.id);
   return (
     <Card as="li" data-testid={`task-${w.id}`} className="hui-task">
       <CardHeader>
@@ -222,6 +230,12 @@ function TaskCardView({
         <p data-testid="task-now" data-status={c.phase === 'accepted' ? 'accepted' : undefined}>
           {nowText}
         </p>
+        {review ? (
+          <p data-testid="task-source-review" data-status="blocked">
+            <Badge tone="info">{t.r5.kindSourceReview}</Badge>{' '}
+            {t.r5.sourceReviewTask(review.key ?? name, review.column)}
+          </p>
+        ) : null}
         {blockedEnv?.summary ? <Codes t={t} codes={[blockedEnv.summary]} /> : null}
         {c.waitsOn.length ? (
           <p data-testid="task-waits">
