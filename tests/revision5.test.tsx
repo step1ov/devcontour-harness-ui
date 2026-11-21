@@ -502,14 +502,18 @@ test('projectPaths watches the manifest, the policy and the state the manifest n
   });
 });
 
-test('probe: the setup branch of the view output schema means --repository works', async () => {
+test('probe: `repository` in the view input schema, or else the setup branch of its output schema, means --repository works', async () => {
   const fresh = fakeHarness({ view: true, lang: true, repository: true });
+  const listed = fakeHarness({ view: true, lang: true, repositoryArg: true, viewVersion: null });
   const old = fakeHarness({ view: true, lang: true });
   try {
     assert.equal((await probeHarness(fresh.bin)).repository, true);
+    // The catalog's input schema names the flag: no output schema needed.
+    assert.equal((await probeHarness(listed.bin)).repository, true);
     assert.equal((await probeHarness(old.bin)).repository, false);
   } finally {
     fresh.remove();
+    listed.remove();
     old.remove();
   }
 });

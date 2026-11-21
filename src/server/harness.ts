@@ -39,8 +39,8 @@ export interface HarnessSupport {
   /**
    * The `view` operation answers with the setup document before setup (its
    * output schema has the setup branch, harness 0.1.0-alpha.65): it takes
-   * `--repository <root>`. The catalog does not list that flag in the input
-   * schema, so the setup branch is the signal.
+   * `--repository <root>`. The final alpha.65 catalog lists `repository` in
+   * the input schema (the first signal); the setup branch is the fallback.
    */
   repository: boolean;
 }

@@ -45,6 +45,8 @@ export function fakeHarness(o: {
    * `<root>/.harness/project.json` exists (then with the overview).
    */
   repository?: boolean;
+  /** The `view` input schema lists `repository` (the final alpha.65 catalog). */
+  repositoryArg?: boolean;
 }): FakeHarness {
   const dir = mkdtempSync(join(tmpdir(), 'hui-fake-harness-'));
   const bin = join(dir, 'harness');
@@ -60,6 +62,7 @@ export function fakeHarness(o: {
           policy: {},
           ...(o.lang ? { lang: {} } : {}),
           ...(o.window ? { window: {} } : {}),
+          ...(o.repositoryArg ? { repository: {} } : {}),
         },
       },
       ...(declared !== null
