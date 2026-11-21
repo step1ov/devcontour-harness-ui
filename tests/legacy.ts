@@ -6,13 +6,39 @@
 type Json = Record<string, any>;
 
 /**
+ * Harness alpha.62 (revision 4): none of the revision 5 fields — no stage,
+ * no checks in the task source, no added tasks, per-work readiness, rough
+ * range, estimate or finish time, no uncounted runs.
+ */
+export function asAlpha62<T>(doc: T): T {
+  const d = structuredClone(doc) as Json;
+  if (typeof d.viewRevision === 'number' && d.viewRevision > 4) d.viewRevision = 4;
+  for (const k of ['stage', 'sourceReviews']) delete d[k];
+  d.escalations = d.escalations?.filter((e: Json) => e.code !== 'SOURCE_REVIEW');
+  if (d.escalations === undefined) delete d.escalations;
+  if (d.truncated) {
+    delete d.truncated.sourceReviews;
+    delete d.truncated.forecastWorks;
+    if (!Object.keys(d.truncated).length) delete d.truncated;
+  }
+  if (d.forecast) {
+    delete d.forecast.progress.added;
+    delete d.forecast.progress.works;
+    for (const k of ['rough', 'estimate', 'finishedAt']) delete d.forecast.time[k];
+  }
+  for (const w of [...(d.works ?? []), ...(d.work ? [d.work] : [])])
+    if (w.attempts) delete w.attempts.runs;
+  return d as T;
+}
+
+/**
  * Harness alpha.59 (revision 3): none of the revision 4 sections and fields —
  * no run slice, tracker questions, forecast or updates, no tracker health,
  * no queue runner, blocker order, failure class, answer location, question
  * options or rationale.
  */
 export function asAlpha59<T>(doc: T): T {
-  const d = structuredClone(doc) as Json;
+  const d = asAlpha62(doc) as Json;
   d.viewRevision = 3;
   for (const k of ['scope', 'scopeReason', 'sourceQuestions', 'forecast', 'updates']) delete d[k];
   if (d.truncated) {

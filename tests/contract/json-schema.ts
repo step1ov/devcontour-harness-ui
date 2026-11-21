@@ -11,6 +11,7 @@ const KNOWN = new Set([
   'description',
   'type',
   'const',
+  'minItems',
   'enum',
   'anyOf',
   'properties',
@@ -90,6 +91,8 @@ export function validate(schema: Schema, value: unknown, path = '$'): string[] {
   if (Array.isArray(value)) {
     if (schema.maxItems !== undefined && value.length > (schema.maxItems as number))
       err('too many items');
+    if (schema.minItems !== undefined && value.length < (schema.minItems as number))
+      err('too few items');
     if (schema.items)
       value.forEach((v, i) => out.push(...validate(schema.items as Schema, v, `${path}[${i}]`)));
   }
