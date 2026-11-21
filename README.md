@@ -15,10 +15,10 @@
 данные harness, а не пересказ агента: что ждёт вашего ответа, что идёт
 сейчас, как именно проверена работа и где лежит принятый результат.
 
-> Статус: `0.1.0-alpha.6`. Все экраны только для чтения: обзор, детали
+> Статус: `0.1.0-alpha.7`. Все экраны только для чтения: обзор, детали
 > работы, ревью, решения, кто что делал, настройки, история и здоровье, на
 > русском и английском. Данные — файл представления или живой
-> `harness view` (`--state`, harness `0.1.0-alpha.55` и новее). Схемой
+> `harness view` (`--state`, harness `0.1.0-alpha.55` и новее, или `--repository`, harness `0.1.0-alpha.65` и новее). Схемой
 > представления владеет harness; см. [предложения для harness](docs/harness-proposals.md).
 > С harness `0.1.0-alpha.56` (ревизия представления 1) панель показывает,
 > кто и почему ответил на вопрос, итоги окна истории и замечает изменения по
@@ -26,9 +26,14 @@
 > делал» и есть ли принятая работа в удалённой ветке (по копии ветки на этой
 > машине, без сети). С `0.1.0-alpha.59` (ревизия 3) — подготовку
 > зависимостей отдельным шагом со временем и неиспользуемое хранилище
-> зависимостей. С alpha.55–.58 всё прочее работает, как раньше.
+> зависимостей. С `0.1.0-alpha.65` (ревизия 5) панель можно запустить
+> вместе с трекером задач, до настройки harness (`--repository`): она
+> показывает «Идёт настройка harness» и сама переключается, когда проект
+> настроен; прогноз считает весь выпуск, с грубым сроком по первым попыткам,
+> а «Нужно от вас» называет задачи, ждущие вашей проверки в трекере.
+> С alpha.55–.58 всё прочее работает, как раньше.
 > [Дизайн](docs/design.md) описывает схему, экраны, безопасность и этапы;
-> изменения — в заметках к выпускам [0.1.0-alpha.6](docs/release-notes/0.1.0-alpha.6.md), [0.1.0-alpha.5](docs/release-notes/0.1.0-alpha.5.md), [0.1.0-alpha.4](docs/release-notes/0.1.0-alpha.4.md), [0.1.0-alpha.3](docs/release-notes/0.1.0-alpha.3.md), [0.1.0-alpha.2](docs/release-notes/0.1.0-alpha.2.md)
+> изменения — в заметках к выпускам [0.1.0-alpha.7](docs/release-notes/0.1.0-alpha.7.md), [0.1.0-alpha.6](docs/release-notes/0.1.0-alpha.6.md), [0.1.0-alpha.5](docs/release-notes/0.1.0-alpha.5.md), [0.1.0-alpha.4](docs/release-notes/0.1.0-alpha.4.md), [0.1.0-alpha.3](docs/release-notes/0.1.0-alpha.3.md), [0.1.0-alpha.2](docs/release-notes/0.1.0-alpha.2.md)
 > и [0.1.0-alpha.1](docs/release-notes/0.1.0-alpha.1.md).
 
 ## Язык
@@ -46,7 +51,7 @@
 версия, как и у harness):
 
 ```sh
-npm install --save-dev --save-exact devcontour-harness@0.1.0-alpha.62 devcontour-harness-ui@0.1.0-alpha.6
+npm install --save-dev --save-exact devcontour-harness@0.1.0-alpha.65 devcontour-harness-ui@0.1.0-alpha.7
 npx devcontour-harness-ui --demo --lang ru      # демонстрационные данные
 # → {"ok":true,"url":"http://127.0.0.1:4790/","port":4790,"readOnly":true,...}
 ```
@@ -62,6 +67,17 @@ HH:MM» и предупреждение, если обновить данные 
 ```sh
 npx devcontour-harness-ui --state <state> --policy .harness/policy.json \
   --harness node_modules/.bin/harness
+```
+
+Панель можно запустить и до настройки harness — например, вместе с трекером
+задач, — по корню репозитория. Каталог состояния и политику harness находит
+сам в `.harness/project.json` при каждой проверке (harness `0.1.0-alpha.65`
+и новее); пока проекта нет, страница показывает «Идёт настройка harness»,
+затем «Задач пока нет», и без перезагрузки переходит к обычным экранам:
+
+```sh
+npx devcontour-harness-ui --repository . --harness node_modules/.bin/harness
+npx devcontour-harness-ui --check --repository . --harness node_modules/.bin/harness  # выход 0 и до настройки
 ```
 
 Или запишите снимок и раздайте файл (деталей работ у снимка нет); при
@@ -80,19 +96,22 @@ hash-адреса: `#/` обзор, `#/tasks` задачи, `#/work/<id>` про
 
 Флаги CLI:
 
-- `--view <file>`, `--demo` или `--state <dir>` с `--policy <file>` и
+- `--view <file>`, `--demo`, `--state <dir>` с `--policy <file>` или
+  `--repository <dir>` (корень проекта; можно до настройки harness) и
   `--harness <bin>` (по умолчанию `harness` из PATH); harness без `view` —
-  отказ `HARNESS_VIEW_UNAVAILABLE`;
+  отказ `HARNESS_VIEW_UNAVAILABLE`, harness старше `0.1.0-alpha.65` с
+  `--repository` — тоже, с подсказкой про `--state`;
 - `--port N` (точный порт; занятый порт — ошибка). Без флага перебираются
   порты 4790–4809.
 - `--host`, только loopback: `127.0.0.1`, `::1` или `localhost`. Всё
   остальное отклоняется.
 - `--lang ru|en` — язык, когда страница не запросила свой (`?lang=`).
-- `--window 24h|7d` — окно истории для `--state` (по умолчанию окно harness,
-  24 ч).
-- `--check [--harness <bin>] [--state <dir> [--policy <file>]]` — печатает
-  `{harness, ui, viewVersion, compatible, fix?}`; выход 0 — совместимо, 3 —
-  нет.
+- `--window 24h|7d` — окно истории для `--state` и `--repository` (по
+  умолчанию окно harness, 24 ч).
+- `--check [--harness <bin>] [--state <dir> [--policy <file>] | --repository <dir>]`
+  — печатает `{harness, ui, viewVersion, compatible, fix?, view?}`; выход 0 —
+  совместимо, 3 — нет. До настройки harness `--repository` даёт `view.setup: "project"` и выход 0; отказ `harness view --repository` (например, `POLICY_REQUIRED`) —
+  выход 3.
 
 В stdout печатается одна строка JSON, подсказки идут в stderr. Коды
 выхода: 0, 2 (ввод), 3 (отказ) и 4 (инфраструктура).

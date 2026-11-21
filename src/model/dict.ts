@@ -421,8 +421,8 @@ const ru = {
     incompatible: 'Панель не может показать эти данные:',
     notFound: 'Такого раздела нет.',
     readOnly: 'Панель только читает: ничего не запускает и не отвечает за вас.',
-    liveQuestions: (n: number, clipped: boolean) =>
-      `Ждут вашего ответа: ${rp(n, 'вопрос', 'вопроса', 'вопросов')}${clipped ? ' и, возможно, ещё (список обрезан)' : ''}.`,
+    liveQuestions: (n: number, clipped: boolean, reviews = 0) =>
+      `Ждут вашего ответа: ${rp(n, 'вопрос', 'вопроса', 'вопросов')}${reviews ? `; вашей проверки в источнике задач: ${rp(reviews, 'задача', 'задачи', 'задач')}` : ''}${clipped ? ' и, возможно, ещё (список обрезан)' : ''}.`,
     refusal: {
       NOT_A_VIEW: 'Данные не похожи на представление harness.',
       VIEW_VERSION_UNSUPPORTED: 'Эта версия панели не знает такой версии представления.',
@@ -519,6 +519,7 @@ const ru = {
     stopped: (n: number) => `остановлено ${n}`,
     answer: (n: number) => `ответить на ${rp(n, 'вопрос', 'вопроса', 'вопросов')}`,
     decide: (n: number) => `принять ${rp(n, 'решение', 'решения', 'решений')}`,
+    review: (n: number) => `проверить ${rp(n, 'задачу', 'задачи', 'задач')} в источнике задач`,
     and: ' и ',
     maybeMore: ' и, возможно, ещё (список обрезан)',
     waiting: (n: number) =>
@@ -1346,6 +1347,43 @@ const ru = {
     state: (n: number) => `состояние: версия ${n}`,
     stalledWorks: 'Работы с зависшими или тихими попытками',
   },
+  // Revision 5 (harness 0.1.0-alpha.65): setup state, the whole-release forecast, reviews in the source.
+  r5: {
+    setupTitle: 'Идёт настройка harness',
+    noTasks: 'Задач пока нет',
+    waitProject:
+      'Панель ждёт файл проекта .harness/project.json и сама переключится на обычный вид, когда он появится.',
+    waitPolicy:
+      'Проект найден; панель ждёт политику (.harness/policy.json) или привязанное состояние и сама переключится, когда они появятся.',
+    waitOther: (w: string) =>
+      `Панель ждёт: ${w}; она сама переключится, когда настройка закончится.`,
+    waitAny: 'Панель сама переключится на обычный вид, когда появятся задачи.',
+    setupReadOnly: 'Панель только читает: настройку делает ведущий или harness setup.',
+    added: 'Добавлено в выпуск после начала:',
+    worksTitle: 'Готовность незаконченных работ',
+    worksClipped: (n: number) =>
+      `Ещё ${rp(n, 'работа', 'работы', 'работ')} не ${n % 10 === 1 && n % 100 !== 11 ? 'показана' : 'показаны'} (предел представления).`,
+    leftRough: (r: string, n: number) =>
+      `осталось грубо, ${r} (по ${rp(n, 'попытке', 'попыткам', 'попыткам')})`,
+    roughWord: 'грубо',
+    roughWhy:
+      'Оценка грубая: закончившихся попыток выпуска пока меньше пяти, поэтому это разброс от самой короткой до самой долгой попытки.',
+    finished: (at: string) => `выпуск закончен ${at}`,
+    finishedWord: 'закончен',
+    took: (d: string) => `занял ${d}`,
+    runs: (runs: number, used: number) => `запусков ${runs}, засчитано попыток ${used}`,
+    runsWhy:
+      'Незасчитанные запуски — вопрос исполнителя, отказ окружения или остановка: предел попыток они не расходуют.',
+    kindSourceReview: 'проверка в трекере',
+    sourceReviewHow:
+      'Работа принята harness и ждёт человека в источнике задач: проверьте и закройте или верните задачу там. Панель только показывает.',
+    sourceReviewEscalation: (subject: string) =>
+      `ждёт вашей проверки в источнике задач: ${subject}`,
+    sourceReviewTask: (key: string, column: string | undefined) =>
+      `${key} ждёт вашей проверки в источнике задач${column ? ` (колонка ${column})` : ''}.`,
+    sourceReviewsClipped: (n: number) =>
+      `Ещё ${rp(n, 'задача', 'задачи', 'задач')} на проверке не ${n % 10 === 1 && n % 100 !== 11 ? 'показана' : 'показаны'} (предел представления).`,
+  },
 };
 
 export type Dict = typeof ru;
@@ -1390,8 +1428,8 @@ const en: Dict = {
     incompatible: 'The panel cannot show this data:',
     notFound: 'There is no such section.',
     readOnly: 'The panel only reads: it starts nothing and answers nothing for you.',
-    liveQuestions: (n: number, clipped: boolean) =>
-      `${ep(n, 'question waits', 'questions wait')} for your answer${clipped ? ' and possibly more (the list is clipped)' : ''}.`,
+    liveQuestions: (n: number, clipped: boolean, reviews = 0) =>
+      `${ep(n, 'question waits', 'questions wait')} for your answer${reviews ? `; ${ep(reviews, 'task waits', 'tasks wait')} for your check in the task source` : ''}${clipped ? ' and possibly more (the list is clipped)' : ''}.`,
     refusal: {
       NOT_A_VIEW: 'The data does not look like a harness view.',
       VIEW_VERSION_UNSUPPORTED: 'This panel does not know this view version.',
@@ -1484,6 +1522,7 @@ const en: Dict = {
     stopped: (n: number) => `${n} stopped`,
     answer: (n: number) => `answer ${ep(n, 'question', 'questions')}`,
     decide: (n: number) => `take ${ep(n, 'decision', 'decisions')}`,
+    review: (n: number) => `check ${ep(n, 'task', 'tasks')} in the task source`,
     and: ' and ',
     maybeMore: ' and possibly more (the list is clipped)',
     waiting: (n: number) => `${n} work order${n === 1 ? ' waits' : 's wait'} for your action`,
@@ -2277,6 +2316,41 @@ const en: Dict = {
     view: (v: number, r: number) => `view: version ${v}, revision ${r}`,
     state: (n: number) => `state: version ${n}`,
     stalledWorks: 'Work orders with stalled or quiet attempts',
+  },
+  r5: {
+    setupTitle: 'Harness setup is in progress',
+    noTasks: 'No tasks yet',
+    waitProject:
+      'The panel waits for the project file .harness/project.json and switches to the usual view by itself once it appears.',
+    waitPolicy:
+      'The project is found; the panel waits for the policy (.harness/policy.json) or a bound state and switches by itself once they appear.',
+    waitOther: (w: string) =>
+      `The panel waits for: ${w}; it switches by itself once setup is done.`,
+    waitAny: 'The panel switches to the usual view by itself once there are tasks.',
+    setupReadOnly: 'The panel only reads: setup is done by the lead agent or harness setup.',
+    added: 'Added to the release after it started:',
+    worksTitle: 'Readiness of unfinished work orders',
+    worksClipped: (n: number) =>
+      `${ep(n, 'more work order is', 'more work orders are')} not shown (view limit).`,
+    leftRough: (r: string, n: number) => `roughly ${r} left (from ${ep(n, 'attempt', 'attempts')})`,
+    roughWord: 'rough',
+    roughWhy:
+      'A rough estimate: fewer than five attempts of the release have finished, so this is the spread from the shortest to the longest attempt.',
+    finished: (at: string) => `release finished at ${at}`,
+    finishedWord: 'finished',
+    took: (d: string) => `took ${d}`,
+    runs: (runs: number, used: number) => `${runs} runs, ${used} counted attempts`,
+    runsWhy:
+      'Uncounted runs are a writer question, an environment refusal or a stop: they use no attempt of the limit.',
+    kindSourceReview: 'check in the tracker',
+    sourceReviewHow:
+      'The harness accepted the work and it waits for a person in the task source: check it and close or return the task there. The panel only shows it.',
+    sourceReviewEscalation: (subject: string) =>
+      `waits for your check in the task source: ${subject}`,
+    sourceReviewTask: (key: string, column: string | undefined) =>
+      `${key} waits for your check in the task source${column ? ` (column ${column})` : ''}.`,
+    sourceReviewsClipped: (n: number) =>
+      `${ep(n, 'more task', 'more tasks')} waiting for a check not shown (view limit).`,
   },
 };
 

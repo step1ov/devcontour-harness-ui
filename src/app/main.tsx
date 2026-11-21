@@ -16,6 +16,7 @@ import { Alert } from '../components/ui/alert.tsx';
 import { Button } from '../components/ui/button.tsx';
 import { cn } from '../components/ui/cn.ts';
 import { WorkDetail } from '../components/WorkDetail.tsx';
+import { inSetup, SetupNote, SetupScreen } from '../components/Setup.tsx';
 import {
   dict,
   httpViewSource,
@@ -26,7 +27,9 @@ import {
   formatClock,
   pickLang,
   nextSteps,
+  sourceReviewItems,
   type OperatorView,
+  type SetupCheck,
   type ViewCheck,
   type WorkDetailCheck,
 } from '../model/index.ts';
@@ -521,7 +524,7 @@ function Note({ bad, children }: { bad?: boolean; children: ReactNode }) {
 }
 
 function WorkScreen({ id, anchor }: { id: string; anchor: string | undefined }) {
-  const { value, live } = useLive<WorkDetailCheck & Digested>(
+  const { value, live } = useLive<(WorkDetailCheck | SetupCheck) & Digested>(
     (signal) => source.loadWork!(id, signal),
     'work:' + id,
     id,
@@ -529,7 +532,7 @@ function WorkScreen({ id, anchor }: { id: string; anchor: string | undefined }) 
   const error = live.lost?.message;
   useEffect(() => {
     // The clicked link is gone after navigation: move focus to the target, not just the view.
-    const el = value?.ok && anchor ? document.getElementById(anchor) : null;
+    const el = value?.ok && !('setup' in value) && anchor ? document.getElementById(anchor) : null;
     if (!el) return;
     el.setAttribute('tabindex', '-1');
     el.scrollIntoView();
@@ -546,6 +549,12 @@ function WorkScreen({ id, anchor }: { id: string; anchor: string | undefined }) 
         <Note bad={Boolean(error)}>{error ? t.app.connectionLost(error) : t.app.loadingWork}</Note>
       ) : !value.ok ? (
         <Refusal head={t.work.detailUnavailable} r={value} />
+      ) : 'setup' in value ? (
+        // Revision 5: the harness is not set up yet; the page switches by itself.
+        <>
+          <Freshness generatedAt={value.setup.generatedAt} live={live} />
+          <SetupScreen view={value.setup} lang={lang} />
+        </>
       ) : (
         <>
           <Freshness generatedAt={value.detail.generatedAt} live={live} />
@@ -566,7 +575,7 @@ function App() {
     // An old link (`#/reviews`) lands where its content lives now.
     if (redirect) window.location.replace(redirect + (route.anchor ? '#' + route.anchor : ''));
   }, [redirect]);
-  const { value: check, live } = useLive<ViewCheck & Digested>(
+  const { value: check, live } = useLive<(ViewCheck | SetupCheck) & Digested>(
     (signal) => source.load(signal),
     'view',
     undefined,
@@ -590,6 +599,16 @@ function App() {
   else if (!check)
     body = <Note bad={Boolean(error)}>{error ? t.app.connectionLost(error) : t.app.loading}</Note>;
   else if (!check.ok) body = <Refusal head={t.app.incompatible} r={check} />;
+  else if ('setup' in check)
+    // Revision 5: the harness is not set up in the project yet. Not an error:
+    // the page keeps reading and switches to the screens once an overview comes.
+    body = (
+      <>
+        <Freshness generatedAt={check.setup.generatedAt} live={live} />
+        {check.newerRevision ? <Note>{t.app.newerRevision}</Note> : null}
+        <SetupScreen view={check.setup} lang={lang} />
+      </>
+    );
   else {
     const view = check.view;
     const common = { view, lang, now: Date.now(), workHref: workHash };
@@ -615,19 +634,26 @@ function App() {
     // Tracker questions to the owner (revision 4) are yours too.
     const waiting =
       splitQuestions(view, nextSteps(view)).yours.length + (view.sourceQuestions?.length ?? 0);
-    const clipped = Boolean(view.truncated?.questions || view.truncated?.sourceQuestions);
+    // Revision 5: tasks waiting for your check in the task source.
+    const reviews = sourceReviewItems(view).count;
+    const clipped = Boolean(
+      view.truncated?.questions || view.truncated?.sourceQuestions || view.truncated?.sourceReviews,
+    );
     body = (
       <>
         <Freshness generatedAt={view.generatedAt} live={live} />
         {check.newerRevision ? <Note>{t.app.newerRevision}</Note> : null}
         <UpdatesBanner updates={view.updates} lang={lang} />
-        {isEmpty(view) ? (
+        {inSetup(view) ? (
+          // Revision 5: a state without works — «Идёт настройка harness», «Задач пока нет».
+          <SetupNote view={view} lang={lang} />
+        ) : isEmpty(view) ? (
           <Note>
             {t.app.empty} <code>harness run</code>
           </Note>
         ) : null}
         <p className="hui-sr" aria-live="polite">
-          {t.app.liveQuestions(waiting, clipped)}
+          {t.app.liveQuestions(waiting, clipped, reviews)}
         </p>
         {navOf(route.screen) === 'journal' ? <JournalNav route={route} /> : null}
         {screen}

@@ -14,7 +14,13 @@ import {
   scopeOf,
   taskName,
 } from '../model/scope.ts';
-import { nextSteps, workName, withWorkNames, type NextSteps } from '../model/steps.ts';
+import {
+  nextSteps,
+  sourceReviewOf,
+  workName,
+  withWorkNames,
+  type NextSteps,
+} from '../model/steps.ts';
 import {
   leadAnswers,
   taskCards,
@@ -40,6 +46,7 @@ import { ReviewSubjectCard } from './Reviews.tsx';
 import { Badge, type Tone } from './ui/badge.tsx';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card.tsx';
 import { Progress } from './ui/progress.tsx';
+import { hasOverview, SetupScreen } from './Setup.tsx';
 
 export interface TasksProps extends ScreenProps {
   view: OperatorView;
@@ -58,6 +65,8 @@ const tones: Record<TaskPhase, Tone> = {
 
 export function Tasks({ view, lang = 'ru', now, onOpenWork, workHref, timeZone }: TasksProps) {
   const t = dict(lang);
+  // A document without the overview lists (revision 5 setup): the setup state, not a throw.
+  if (!hasOverview(view)) return <SetupScreen view={view} lang={lang} />;
   const k = t.tasks;
   const links = { onOpenWork, workHref };
   const clock = now ?? instantMs(view.generatedAt);
@@ -203,6 +212,8 @@ function TaskCardView({
               ? k.next.queue
               : k.next.unknown;
   const titleText = w.title && w.title !== name ? w.title : undefined;
+  // Revision 5: accepted, and left in the task source for your check.
+  const review = sourceReviewOf(view, w.id);
   return (
     <Card as="li" data-testid={`task-${w.id}`} className="hui-task">
       <CardHeader>
@@ -219,6 +230,12 @@ function TaskCardView({
         <p data-testid="task-now" data-status={c.phase === 'accepted' ? 'accepted' : undefined}>
           {nowText}
         </p>
+        {review ? (
+          <p data-testid="task-source-review" data-status="blocked">
+            <Badge tone="info">{t.r5.kindSourceReview}</Badge>{' '}
+            {t.r5.sourceReviewTask(review.key ?? name, review.column)}
+          </p>
+        ) : null}
         {blockedEnv?.summary ? <Codes t={t} codes={[blockedEnv.summary]} /> : null}
         {c.waitsOn.length ? (
           <p data-testid="task-waits">
@@ -237,7 +254,15 @@ function TaskCardView({
           <AcceptedLine w={w} lang={lang} linkProps={links} timeZone={timeZone} now={clock} />
         ) : null}
         <div className="hui:grid hui:gap-1" data-testid="task-attempts">
-          <span>{k.attempts(a.used, a.max, a.left)}</span>
+          <span>
+            {k.attempts(a.used, a.max, a.left)}
+            {a.runs !== undefined && a.runs !== a.used ? (
+              <span data-testid="attempt-runs" title={t.r5.runsWhy}>
+                {' '}
+                ({t.r5.runs(a.runs, a.used)})
+              </span>
+            ) : null}
+          </span>
           <Progress
             value={Math.min(a.used, a.max)}
             max={a.max}

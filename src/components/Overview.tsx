@@ -30,6 +30,7 @@ import {
   actorsOn,
   dependencyState,
   nextSteps,
+  sourceReviewItems,
   withWorkNames,
   workName,
   type DependencyWait,
@@ -48,6 +49,7 @@ import {
 } from '../model/scope.ts';
 import { HARNESS_STAGES, leadStopOf, splitQuestions } from '../model/tasks.ts';
 import { ForecastRings } from './Forecast.tsx';
+import { hasOverview, SetupScreen } from './Setup.tsx';
 import { Badge, type Tone } from './ui/badge.tsx';
 import { Card, CardContent } from './ui/card.tsx';
 import { Progress } from './ui/progress.tsx';
@@ -101,6 +103,9 @@ export function Overview({
   timeZone,
 }: OverviewProps) {
   const t = dict(lang);
+  // Revision 5: a setup document (or a host's document before the harness
+  // has a state) has no works, health or progress: the setup state, not a throw.
+  if (!hasOverview(view)) return <SetupScreen view={view} lang={lang} />;
   const o = t.overview;
   const clock = now ?? instantMs(view.generatedAt);
   const links = { onOpenWork, workHref };
@@ -115,7 +120,10 @@ export function Overview({
   const accepted = view.works.filter((w) => w.target !== undefined);
   // Owner questions the lead wrote in the task tracker (revision 4): answered there.
   const sourceQuestions = view.sourceQuestions ?? [];
-  const yours = asking.length + steps.operator.length + sourceQuestions.length;
+  // Accepted works waiting for your check in the task source (revision 5).
+  const reviewsInSource = sourceReviewItems(view);
+  const yours =
+    asking.length + steps.operator.length + sourceQuestions.length + reviewsInSource.count;
   // Works the harness counts as waiting for you that no item here names.
   const named = new Set([
     ...asking.map((q) => q.workId),
@@ -131,7 +139,10 @@ export function Overview({
     Object.hasOwn(progress.byStage, stage) ? Number(progress.byStage[stage]) || 0 : 0;
   // A tracker question list that was clipped or dropped (revision 4) makes the count a floor too.
   const clipped = Boolean(
-    view.truncated?.questions || view.truncated?.escalations || view.truncated?.sourceQuestions,
+    view.truncated?.questions ||
+    view.truncated?.escalations ||
+    view.truncated?.sourceQuestions ||
+    view.truncated?.sourceReviews,
   );
   const oddState = view.questions.some((q) => !KNOWN_QUESTION_STATES.has(String(q.state)));
   const leadOnlyWorks = new Set(
@@ -152,6 +163,7 @@ export function Overview({
       paused: progress.queue.paused,
       questions: asking.length + sourceQuestions.length,
       decisions: steps.operator.length,
+      reviews: reviewsInSource.count,
       afterLead:
         asking.length + sourceQuestions.length === 0 &&
         steps.operator.length > 0 &&
@@ -172,6 +184,12 @@ export function Overview({
   const unfinished = overall.total - overall.done - overall.cancelled;
   // Harness works only: tasks outside the harness are the lead's to hand over, not the queue's.
   const harnessLeft = progress.total - progress.done - overall.cancelled;
+  // The release totals: the forecast's (revision 5: the whole release) when
+  // the harness sends one, so the hero line and the ring say the same.
+  const fp = view.forecast?.progress;
+  const releaseTotal = fp ? fp.total : progress.total;
+  const releaseDone = fp ? fp.done : progress.done;
+  const releaseLeft = fp ? fp.left : harnessLeft;
   // With a forecast that has nothing left, a listed task without a work is
   // closed in the tracker, not waiting to be handed over.
   const outsideLeft = view.forecast?.progress.left === 0 ? 0 : (overall.outside ?? 0);
@@ -183,10 +201,14 @@ export function Overview({
   const standing =
     !progress.queue.paused &&
     !fresh &&
+    // A finished release does not stand: nobody has to start a run for it.
+    !(releaseTotal > 0 && releaseLeft <= 0) &&
     (runner !== undefined
       ? runner === 'not-running'
       : !health.controller.present && progress.running === 0 && harnessLeft > 0);
   const standingLine = progress.queue.line?.trim() || undefined;
+  // Every harness work is finished; tasks outside the harness may still be
+  // left (`outsideLeft`, from the forecast when there is one).
   const finished = progress.total > 0 && harnessLeft === 0;
   // Nothing accepted and everything cancelled is not «всё принято».
   const allDone = finished && progress.done > 0;
@@ -210,7 +232,14 @@ export function Overview({
       aria-label={o.label}
       lang={lang}
     >
-      {view.forecast ? <ForecastRings forecast={view.forecast} lang={lang} now={clock} /> : null}
+      {view.forecast ? (
+        <ForecastRings
+          forecast={view.forecast}
+          lang={lang}
+          now={clock}
+          truncatedWorks={view.truncated?.forecastWorks}
+        />
+      ) : null}
       <Card data-testid="hero" className="hui-hero">
         <CardContent className="hui:gap-2 hui:pt-4">
           <h2 className="hui:text-xl hui:leading-snug hui:font-semibold" data-testid="story">
@@ -281,7 +310,7 @@ export function Overview({
               </span>
             ) : null}
             <span className="hui:text-sm hui:text-muted-foreground">
-              {o.acceptedOf(progress.done, progress.total)}
+              {o.acceptedOf(releaseDone, releaseTotal)}
             </span>
           </div>
         </CardContent>
@@ -465,6 +494,25 @@ export function Overview({
                   now={clock}
                 />
               ))}
+              {reviewsInSource.groups.map((g) => (
+                <SourceReviewItem key={'r' + g.connector} g={g} t={t} />
+              ))}
+              {reviewsInSource.loose.map((e, i) => (
+                <li
+                  key={'re' + i}
+                  className="hui-item"
+                  data-kind="source-review"
+                  data-status="blocked"
+                >
+                  <Badge tone="info">{t.r5.kindSourceReview}</Badge>{' '}
+                  <strong>
+                    {t.r5.sourceReviewEscalation(
+                      e.subject ?? (e.workId ? workName(view, e.workId) : ''),
+                    )}
+                  </strong>
+                  <p className="hui-muted">{t.r5.sourceReviewHow}</p>
+                </li>
+              ))}
               {steps.operator.map((s, i) => (
                 <li key={'d' + i} className="hui-item" data-kind="decision" data-status="blocked">
                   <Badge tone="warn">{o.kindDecision}</Badge>{' '}
@@ -541,6 +589,9 @@ export function Overview({
           <Clipped n={view.truncated?.questions} t={t} />
           {view.truncated?.sourceQuestions ? (
             <p className="hui-muted">{t.r4.sourceClipped(view.truncated.sourceQuestions)}</p>
+          ) : null}
+          {view.truncated?.sourceReviews ? (
+            <p className="hui-muted">{t.r5.sourceReviewsClipped(view.truncated.sourceReviews)}</p>
           ) : null}
           {steps.operator.some((s) => s.action === 'reset-attempts') ? (
             <div className="hui-terms">
@@ -620,7 +671,15 @@ export function Overview({
                     {w.attempts.line ? (
                       <AttemptsText line={w.attempts.line} t={t} />
                     ) : (
-                      o.attemptsShort(w.attempts.used, w.attempts.max, w.attempts.left)
+                      <>
+                        {o.attemptsShort(w.attempts.used, w.attempts.max, w.attempts.left)}
+                        {w.attempts.runs !== undefined && w.attempts.runs !== w.attempts.used ? (
+                          <span data-testid="attempt-runs">
+                            {' '}
+                            ({t.r5.runs(w.attempts.runs, w.attempts.used)})
+                          </span>
+                        ) : null}
+                      </>
                     )}
                     {w.attempts.lastFailure
                       ? `; ${o.lastStopped(w.attempts.lastFailure.plain)}${countedWords(w, t)}`
@@ -852,6 +911,36 @@ export function Overview({
 function countedWords(w: WorkView, t: Dict): string {
   const c = w.attempts.lastFailure?.counted;
   return c === undefined ? '' : `; ${c ? t.r4.counted : t.r4.notCounted}`;
+}
+
+/**
+ * Accepted works left in the task source for a person's check (revision 5,
+ * `sourceReviews[]`): the harness line («ждут вашей проверки в Relay: WEB-1,
+ * WEB-2») and the tasks with their column.
+ */
+export function SourceReviewItem({
+  g,
+  t,
+}: {
+  g: NonNullable<OperatorView['sourceReviews']>[number];
+  t: Dict;
+}) {
+  return (
+    <li className="hui-item" data-kind="source-review" data-status="blocked">
+      <div className="hui:flex hui:flex-wrap hui:items-center hui:gap-2">
+        <Badge tone="info">{t.r5.kindSourceReview}</Badge>
+        <strong data-testid="source-review-line">{g.line}</strong>
+      </div>
+      <ul className="hui:mt-1 hui:grid hui:list-disc hui:gap-1 hui:ps-5 hui-muted">
+        {g.tasks.map((x) => (
+          <li key={x.taskId}>
+            {x.key ?? x.taskId} · {x.column}
+          </li>
+        ))}
+      </ul>
+      <p className="hui-muted">{t.r5.sourceReviewHow}</p>
+    </li>
+  );
 }
 
 /**

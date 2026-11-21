@@ -305,7 +305,13 @@ function mergeSame(steps: Step[], graphOf: (id: string) => string | undefined): 
 }
 
 /** Sort the view's reasons into who acts next (see the file comment). */
-export function nextSteps(view: OperatorView): NextSteps {
+export function nextSteps(source: OperatorView): NextSteps {
+  // Revision 5: a check in the task source is its own item («ждут вашей
+  // проверки в …», `sourceReviewItems`), not a decision step.
+  const view = {
+    ...source,
+    escalations: source.escalations.filter((e) => e.code !== SOURCE_REVIEW),
+  };
   const questions = view.questions.filter((q) => questionStatus(q).needsAnswer);
   const questionAfter = new Map<string, Step[]>();
   const answerOnly = new Set<string>();
@@ -558,4 +564,44 @@ export function dependencyState(
   if (steps.queue.some((q) => q.workId === id && !q.unexplained) || w.stage.name === 'queued')
     return { kind: 'queue' };
   return { kind: 'unknown', stage: w.stage.name };
+}
+
+/** Escalation code of a task waiting for a person's check in the task source (revision 5). */
+export const SOURCE_REVIEW = 'SOURCE_REVIEW';
+
+/**
+ * Checks in the task source (revision 5): the harness groups by connector
+ * (`sourceReviews[]`, with its line), and every task is also a
+ * `SOURCE_REVIEW` escalation. `loose` are escalations no group lists (a
+ * clipped list); `count` is the number of tasks named either way.
+ */
+export function sourceReviewItems(view: OperatorView): {
+  groups: NonNullable<OperatorView['sourceReviews']>;
+  loose: OperatorView['escalations'];
+  count: number;
+} {
+  const groups = view.sourceReviews ?? [];
+  const listed = new Set(groups.flatMap((g) => g.tasks.map((t) => t.workId)));
+  const loose = view.escalations.filter(
+    (e) => e.code === SOURCE_REVIEW && (e.workId === undefined || !listed.has(e.workId)),
+  );
+  const tasks = groups.reduce((n, g) => n + g.tasks.length, 0);
+  return { groups, loose, count: tasks + loose.length };
+}
+
+/**
+ * The check in the task source that waits on one work (revision 5), from
+ * `sourceReviews[]` or else its `SOURCE_REVIEW` escalation; `undefined` when
+ * none does. The Tasks card says it next to «принято».
+ */
+export function sourceReviewOf(
+  view: OperatorView,
+  workId: string,
+): { key?: string; column?: string; since: string } | undefined {
+  for (const g of view.sourceReviews ?? [])
+    for (const x of g.tasks)
+      if (x.workId === workId)
+        return { ...(x.key ? { key: x.key } : {}), column: x.column, since: x.since };
+  const e = view.escalations.find((x) => x.code === SOURCE_REVIEW && x.workId === workId);
+  return e ? { ...(e.subject ? { key: e.subject } : {}), since: e.since } : undefined;
 }

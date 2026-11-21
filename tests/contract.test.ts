@@ -1,28 +1,40 @@
 // Contract with devcontour-harness: the view schema is owned by the harness.
 // tests/contract/harness/*.schema.json are verbatim copies of the harness
 // schemas (schemas/operator-view.schema.json, schemas/work-detail-view.schema.json
-// of 0.1.0-alpha.62, view revision 4); empty-state.view.json is a real
-// `harness view --lang en` envelope of that version for a state that does not
-// exist yet (examples/two-vendors policy). tests/contract/harness-0.1.0-alpha.60/
-// keeps the same files of 0.1.0-alpha.60 (revision 4 without
-// `progress.queue.neverRun` and `scopeReason`), harness-0.1.0-alpha.59/
+// and schemas/setup-view.schema.json of 0.1.0-alpha.65, view revision 5);
+// empty-state.view.json is a real `harness view --lang en` envelope of that
+// version for a state that does not exist yet (examples/two-vendors policy),
+// setup-state.view.json a real `harness view --repository <empty dir> --lang en`
+// (the setup document). tests/contract/harness-0.1.0-alpha.62/ keeps the same
+// files of 0.1.0-alpha.62 (revision 4 with `neverRun` and `scopeReason`),
+// harness-0.1.0-alpha.60/ (revision 4 without them), harness-0.1.0-alpha.59/
 // (revision 3), harness-0.1.0-alpha.57/ (revision 2, also alpha.58),
 // harness-0.1.0-alpha.56/ and harness-0.1.0-alpha.55/ keep the same files of
 // 0.1.0-alpha.59, .57, .56 (revision 1) and .55 (revision 0): the panel
 // still supports those harnesses (peer >=0.1.0-alpha.55), so older-shaped
 // documents must pass their own and every newer schema and the gate. With
-// DEVCONTOUR_HARNESS_DIR pointing at a harness checkout the copies are
-// compared byte for byte and a live smoke runs that checkout's
-// `capabilities` and `view`.
+// DEVCONTOUR_HARNESS_DIR pointing at a harness checkout or an installed
+// package the copies are compared byte for byte and a live smoke runs its
+// `capabilities` and `view` (`--state` and, from revision 5, `--repository`).
 
 import { strict as assert } from 'node:assert';
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { test } from 'node:test';
 import {
+  checkOverview,
   checkView,
   checkWorkDetail,
+  isSetupDocument,
   type ActivityEntry,
   type AnswerBasis,
   type AttemptRow,
@@ -34,6 +46,8 @@ import {
   type ForecastView,
   type QuestionOption,
   type ScopeTaskView,
+  type SetupView,
+  type SourceReview,
   type SourceHealth,
   type SourceQuestion,
   type UpdatesView,
@@ -53,7 +67,7 @@ import {
   type WorkView,
 } from '../src/model/index.ts';
 import { validate } from './contract/json-schema.ts';
-import { asAlpha55, asAlpha56, asAlpha57, asAlpha59 } from './legacy.ts';
+import { asAlpha55, asAlpha56, asAlpha57, asAlpha59, asAlpha62 } from './legacy.ts';
 import { instantMs } from '../src/model/compat.ts';
 
 type Json = Record<string, any>;
@@ -65,6 +79,11 @@ const viewFixture = read('../fixtures/view.sample.json');
 const workFixture = read('../fixtures/work.sample.json');
 const acceptedFixture = read('../fixtures/work.accepted.sample.json');
 const harnessEmpty = read('./contract/harness/empty-state.view.json');
+const setupSchema = read('./contract/harness/setup-view.schema.json');
+const harnessSetup = read('./contract/harness/setup-state.view.json');
+const overviewSchema62 = read('./contract/harness-0.1.0-alpha.62/operator-view.schema.json');
+const detailSchema62 = read('./contract/harness-0.1.0-alpha.62/work-detail-view.schema.json');
+const harnessEmpty62 = read('./contract/harness-0.1.0-alpha.62/empty-state.view.json');
 const overviewSchema56 = read('./contract/harness-0.1.0-alpha.56/operator-view.schema.json');
 const detailSchema56 = read('./contract/harness-0.1.0-alpha.56/work-detail-view.schema.json');
 const harnessEmpty56 = read('./contract/harness-0.1.0-alpha.56/empty-state.view.json');
@@ -99,8 +118,13 @@ test('both fixtures and a real harness document are valid under the harness sche
   for (const f of ['work.sample.json', 'work.accepted.sample.json'])
     assert.deepEqual(validate(detailSchema, read('../fixtures/ru/' + f)), [], f);
   assert.equal(harnessEmpty.ok, true);
-  assert.equal(harnessEmpty.data.viewRevision, 4);
-  assert.equal(harnessEmpty.data.source.producerVersion, '0.1.0-alpha.62');
+  assert.equal(harnessEmpty.data.viewRevision, 5);
+  assert.equal(harnessEmpty.data.source.producerVersion, '0.1.0-alpha.65');
+  // Revision 5: a state without works says it is at the setup stage.
+  assert.deepEqual(harnessEmpty.data.stage, {
+    name: 'setup',
+    lines: ['Harness setup is in progress', 'No tasks yet'],
+  });
   // No state: no connector slice, no tracker questions, no forecast, no updates check.
   for (const k of ['scope', 'sourceQuestions', 'forecast', 'updates'])
     assert.equal(Object.hasOwn(harnessEmpty.data, k), false, k);
@@ -168,6 +192,91 @@ test('alpha.57/58 documents (revision 2) stay valid under the alpha.59 schemas a
     const c = schema === overviewSchema ? checkView(old) : checkWorkDetail(old);
     assert.equal(c.ok && c.newerRevision, false, name);
   }
+});
+
+test('the setup document of harness alpha.65 is valid, passes the setup gate and is not an overview', () => {
+  assert.equal(harnessSetup.ok, true);
+  const doc = harnessSetup.data;
+  assert.equal(doc.viewRevision, 5);
+  assert.equal(doc.source.producerVersion, '0.1.0-alpha.65');
+  assert.deepEqual(validate(setupSchema, doc), []);
+  // Neither an overview nor a work detail.
+  assert.notDeepEqual(validate(overviewSchema, doc), []);
+  assert.notDeepEqual(validate(detailSchema, doc), []);
+  assert.equal(isSetupDocument(doc), true);
+  const c = checkOverview(doc);
+  assert.equal(c.ok, true, c.ok ? '' : c.message);
+  assert.equal(c.ok && 'setup' in c && c.setup.setup.waitingFor, 'project');
+  assert.equal(c.ok && c.newerRevision, false);
+  // The overview gate alone refuses it: no screen reads works that are not there.
+  assert.equal(checkView(doc).ok, false);
+  // An overview at the setup stage stays an overview.
+  assert.equal(isSetupDocument(harnessEmpty.data), false);
+  const e = checkOverview(harnessEmpty.data);
+  assert.equal(e.ok && !('setup' in e), true);
+  // The setup gate checks its fields' types.
+  for (const bad of [
+    { ...doc, stage: { name: 'setup', lines: [1] } },
+    { ...doc, setup: { waitingFor: 3 } },
+    { ...doc, generatedAt: 'yesterday' },
+    { ...doc, viewVersion: 2 },
+  ])
+    assert.equal(checkOverview(bad).ok, false, JSON.stringify(bad).slice(0, 80));
+});
+
+test('alpha.62 documents (revision 4) stay valid under the alpha.65 schemas and pass the gate', () => {
+  assert.equal(harnessEmpty62.data.viewRevision, 4);
+  assert.equal(harnessEmpty62.data.source.producerVersion, '0.1.0-alpha.62');
+  assert.equal(Object.hasOwn(harnessEmpty62.data, 'stage'), false);
+  assert.deepEqual(validate(overviewSchema62, harnessEmpty62.data), []);
+  assert.deepEqual(validate(overviewSchema, harnessEmpty62.data), []);
+  const real = checkOverview(harnessEmpty62.data);
+  assert.equal(real.ok && !('setup' in real) && real.newerRevision, false);
+  // Fixtures without revision 5 fields are alpha.62 documents too.
+  for (const [name, doc, schema] of fixtures()) {
+    const old62 = schema === overviewSchema ? overviewSchema62 : detailSchema62;
+    assert.deepEqual(validate(old62, asAlpha62(doc)), [], name);
+    const c =
+      schema === overviewSchema ? checkView(asAlpha62(doc)) : checkWorkDetail(asAlpha62(doc));
+    assert.equal(c.ok, true, `${name}: ${c.ok ? '' : c.message}`);
+  }
+  // The alpha.65 empty state really carries `stage`: the alpha.62 schema refuses it.
+  assert.match(validate(overviewSchema62, harnessEmpty.data).join(), /unknown field stage/);
+  // Revision 5 fixtures carry the new fields, which the alpha.62 schema refuses.
+  for (const f of ['view.release.json', 'view.finished.json']) {
+    const doc = read('../fixtures/' + f);
+    assert.deepEqual(validate(overviewSchema, doc), [], f);
+    assert.notDeepEqual(validate(overviewSchema62, doc), [], f);
+    const c = checkView(doc);
+    assert.equal(c.ok, true, `${f}: ${c.ok ? '' : c.message}`);
+  }
+  const setupFixture = read('../fixtures/view.setup.json');
+  assert.deepEqual(validate(setupSchema, setupFixture), []);
+  assert.equal(checkOverview(setupFixture).ok, true);
+  // The gate checks the revision 5 fields' types.
+  const release = read('../fixtures/view.release.json');
+  for (const bad of [
+    { ...release, sourceReviews: [{ ...release.sourceReviews[0], tasks: 'WEB-1' }] },
+    { ...release, stage: { name: 'work', lines: 'x' } },
+    {
+      ...release,
+      forecast: {
+        ...release.forecast,
+        time: {
+          ...release.forecast.time,
+          rough: { loMs: -1, hiMs: 2, samples: 1, attemptsPerTask: 1 },
+        },
+      },
+    },
+    {
+      ...release,
+      forecast: {
+        ...release.forecast,
+        progress: { ...release.forecast.progress, added: [{ key: 'WEB-3' }] },
+      },
+    },
+  ])
+    assert.equal(checkView(bad).ok, false);
 });
 
 test('alpha.60 documents (revision 4 without neverRun/scopeReason) stay valid under the newer schemas and pass the gate', () => {
@@ -580,6 +689,8 @@ test('the validator really refuses what the harness schema refuses', () => {
   assert.match(validate(detailSchema, badRow).join(), /verification\[0\]\.phase: not in enum/);
   const badTruncated = { ...viewFixture, truncated: { works: 0 } };
   assert.match(validate(overviewSchema, badTruncated).join(), /exclusiveMinimum/);
+  const noLines = { ...harnessSetup.data, stage: { name: 'setup', lines: [] } };
+  assert.match(validate(setupSchema, noLines).join(), /stage\.lines: too few items/);
 });
 
 test('fixture verification rows follow the harness rules the JSON Schema cannot state', () => {
@@ -682,11 +793,57 @@ const shapes: [string, Json, Record<string, string>][] = [
       scope: 'opt:o',
       scopeReason: 'opt:s',
       sourceQuestions: 'opt:a<o>',
+      sourceReviews: 'opt:a<o>',
+      stage: 'opt:o',
       forecast: 'opt:o',
       updates: 'opt:o',
       truncated: 'opt:o',
     }),
   ],
+  [
+    'sourceReviews[]',
+    overviewSchema[ov].sourceReviews.items,
+    shape<SourceReview>({
+      connector: 'req:s',
+      provider: 'req:s',
+      tasks: 'req:a<o>',
+      line: 'req:s',
+    }),
+  ],
+  [
+    'sourceReviews[].tasks[]',
+    overviewSchema[ov].sourceReviews.items[ov].tasks.items,
+    shape<SourceReview['tasks'][number]>({
+      taskId: 'req:s',
+      key: 'opt:s',
+      workId: 'req:s',
+      column: 'req:s',
+      since: 'req:s',
+    }),
+  ],
+  [
+    'stage',
+    overviewSchema[ov].stage,
+    shape<NonNullable<OperatorView['stage']>>({ name: 'req:s', lines: 'req:a<s>' }),
+  ],
+  [
+    'SetupView',
+    setupSchema,
+    shape<SetupView>({
+      viewVersion: 'req:n',
+      viewRevision: 'req:n',
+      generatedAt: 'req:s',
+      source: 'req:o',
+      stage: 'req:o',
+      setup: 'req:o',
+    }),
+  ],
+  [
+    'SetupView.stage',
+    setupSchema[ov].stage,
+    shape<SetupView['stage']>({ name: 'req:s', lines: 'req:a<s>' }),
+  ],
+  ['SetupView.setup', setupSchema[ov].setup, shape<SetupView['setup']>({ waitingFor: 'req:s' })],
   [
     'source',
     overviewSchema[ov].source,
@@ -841,6 +998,7 @@ const shapes: [string, Json, Record<string, string>][] = [
       interrupted: 'req:n',
       rechecks: 'req:n',
       neutral: 'req:o',
+      runs: 'opt:n',
       line: 'opt:s',
       lastFailure: 'opt:o',
     }),
@@ -1164,6 +1322,40 @@ const shapes: [string, Json, Record<string, string>][] = [
       left: 'req:n',
       basis: 'req:s',
       line: 'req:s',
+      added: 'opt:a<o>',
+      works: 'opt:a<o>',
+    }),
+  ],
+  [
+    'forecast.progress.added[]',
+    overviewSchema[ov].forecast[ov].progress[ov].added.items,
+    shape<NonNullable<ForecastView['progress']['added']>[number]>({
+      key: 'req:s',
+      workId: 'opt:s',
+      at: 'req:s',
+      before: 'req:n',
+      after: 'req:n',
+      line: 'req:s',
+    }),
+  ],
+  [
+    'forecast.progress.works[]',
+    overviewSchema[ov].forecast[ov].progress[ov].works.items,
+    shape<NonNullable<ForecastView['progress']['works']>[number]>({
+      workId: 'req:s',
+      key: 'opt:s',
+      percent: 'req:n',
+      attempt: 'opt:o',
+      retry: 'opt:s',
+      line: 'req:s',
+    }),
+  ],
+  [
+    'forecast.progress.works[].attempt',
+    overviewSchema[ov].forecast[ov].progress[ov].works.items[ov].attempt,
+    shape<NonNullable<NonNullable<ForecastView['progress']['works']>[number]['attempt']>>({
+      n: 'req:n',
+      max: 'req:n',
     }),
   ],
   [
@@ -1172,9 +1364,22 @@ const shapes: [string, Json, Record<string, string>][] = [
     shape<ForecastView['time']>({
       startedAt: 'opt:s',
       elapsedMs: 'opt:n',
+      finishedAt: 'opt:s',
       remaining: 'opt:o',
+      rough: 'opt:o',
+      estimate: 'opt:s',
       humanWait: 'req:o',
       line: 'req:s',
+    }),
+  ],
+  [
+    'forecast.time.rough',
+    overviewSchema[ov].forecast[ov].time[ov].rough,
+    shape<NonNullable<ForecastView['time']['rough']>>({
+      loMs: 'req:n',
+      hiMs: 'req:n',
+      samples: 'req:n',
+      attemptsPerTask: 'req:n',
     }),
   ],
   [
@@ -1282,6 +1487,8 @@ const shapes: [string, Json, Record<string, string>][] = [
       sourceQuestions: 'opt:n',
       workFields: 'opt:n',
       whatsNew: 'opt:n',
+      sourceReviews: 'opt:n',
+      forecastWorks: 'opt:n',
     }),
   ],
   [
@@ -1549,6 +1756,34 @@ const vocabularies: [string, Json, string[]][] = [
     vocab<UpdatesView['mode']>()(['auto', 'notify', 'off']),
   ],
   [
+    'forecast.time.estimate',
+    overviewSchema[ov].forecast[ov].time[ov].estimate,
+    vocab<NonNullable<ForecastView['time']['estimate']>>()([
+      'precise',
+      'rough',
+      'unknown',
+      'nothing',
+    ]),
+  ],
+  [
+    'forecast.progress.works[].retry',
+    overviewSchema[ov].forecast[ov].progress[ov].works.items[ov].retry,
+    vocab<NonNullable<NonNullable<ForecastView['progress']['works']>[number]['retry']>>()([
+      'repair',
+      'answer',
+    ]),
+  ],
+  [
+    'stage.name',
+    overviewSchema[ov].stage[ov].name,
+    vocab<NonNullable<OperatorView['stage']>['name']>()(['setup', 'work']),
+  ],
+  [
+    'SetupView.setup.waitingFor',
+    setupSchema[ov].setup[ov].waitingFor,
+    vocab<SetupView['setup']['waitingFor']>()(['project', 'policy']),
+  ],
+  [
     'detail verification[].phase',
     detailSchema[ov].verification.items[ov].phase,
     vocab<NonNullable<VerificationRow['phase']>>()(['candidate', 'integration']),
@@ -1573,6 +1808,7 @@ test('closed vocabularies of the TS types equal the harness schema enums', () =>
   for (const [schema, label] of [
     [overviewSchema, 'overview'],
     [detailSchema, 'detail'],
+    [setupSchema, 'setup'],
   ] as const) {
     const found = new Map<string, unknown[]>();
     enumsIn(schema, label, found);
@@ -1599,7 +1835,11 @@ test(
   'copied schemas equal the harness checkout (DEVCONTOUR_HARNESS_DIR)',
   { skip: !harnessDir && 'DEVCONTOUR_HARNESS_DIR is not set' },
   () => {
-    for (const f of ['operator-view.schema.json', 'work-detail-view.schema.json']) {
+    for (const f of [
+      'operator-view.schema.json',
+      'work-detail-view.schema.json',
+      'setup-view.schema.json',
+    ]) {
       const theirs = join(harnessDir!, 'schemas', f);
       assert.ok(existsSync(theirs), theirs);
       assert.equal(
@@ -1620,10 +1860,15 @@ test(
     try {
       const bin = join(dir, 'harness');
       const src = resolve(harnessDir!);
+      // A checkout runs its sources with tsx; an installed package its built CLI.
+      const built = !existsSync(join(src, 'src', 'cli.ts'));
       writeFileSync(
         bin,
-        `#!/bin/sh\ncd ${JSON.stringify(src)} && exec ${JSON.stringify(process.execPath)} ` +
-          `--disable-warning=ExperimentalWarning --import tsx src/cli.ts "$@"\n`,
+        built
+          ? `#!/bin/sh\nexec ${JSON.stringify(process.execPath)} ` +
+              `--disable-warning=ExperimentalWarning ${JSON.stringify(join(src, 'lib', 'cli.js'))} "$@"\n`
+          : `#!/bin/sh\ncd ${JSON.stringify(src)} && exec ${JSON.stringify(process.execPath)} ` +
+              `--disable-warning=ExperimentalWarning --import tsx src/cli.ts "$@"\n`,
       );
       chmodSync(bin, 0o755);
       const support = await probeHarness(bin);
@@ -1645,6 +1890,19 @@ test(
       assert.equal(checkView(view).ok, true);
       assert.equal(view.health.warnings[0].code, 'STATE_NOT_FOUND');
       assert.equal(existsSync(state), false, 'harness view never creates the state');
+      // Revision 5: before setup `--repository` gives the setup document, not a refusal.
+      if (view.viewRevision >= 5) {
+        assert.equal(support.repository, true);
+        const repo = join(dir, 'not-set-up');
+        mkdirSync(repo);
+        const s = await harnessView({ bin, repository: repo, timeoutMs: 60_000 }, 'en');
+        assert.equal(s.ok, true, s.ok ? '' : s.message);
+        const doc = (s as { view: Json }).view;
+        assert.deepEqual(validate(setupSchema, doc), []);
+        const c = checkOverview(doc);
+        assert.equal(c.ok && 'setup' in c && c.setup.setup.waitingFor, 'project');
+        assert.equal(existsSync(join(repo, '.harness')), false, 'view never creates the project');
+      }
       // From revision 2 the harness keeps a feed: an absent state has an empty one.
       if (view.viewRevision >= 2) assert.deepEqual(view.activity, []);
       // From revision 1 the token is content-only: a second run over the same

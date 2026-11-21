@@ -6,6 +6,7 @@
 import { dict, label, type Dict } from '../model/dict.ts';
 import type { DecisionView, OperatorView } from '../model/view.ts';
 import { Clipped, Heading, WorkRef, actorLabel, clockOf, type ScreenProps } from './common.tsx';
+import { hasOverview, SetupScreen } from './Setup.tsx';
 
 export interface DecisionsProps extends ScreenProps {
   view: OperatorView;
@@ -62,6 +63,8 @@ export function Decisions({
   workHref,
 }: DecisionsProps) {
   const t = dict(lang);
+  // A document without the overview lists (revision 5 setup): the setup state, not a throw.
+  if (!hasOverview(view)) return <SetupScreen view={view} lang={lang} />;
   const v = t.decisions;
   const links = { onOpenWork, workHref };
   const item = (d: DecisionView) => (

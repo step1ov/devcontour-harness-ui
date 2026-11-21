@@ -12,6 +12,7 @@ import { dict, label, type Dict, type GlossaryId, type Lang } from '../model/dic
 import { formatDuration, formatUsd, formatWindow, usd } from '../model/format.ts';
 import type { HistoryTotals, OperatorView, ViewHistory } from '../model/view.ts';
 import { Heading, Term, clockOf, type ScreenProps } from './common.tsx';
+import { hasOverview, SetupScreen } from './Setup.tsx';
 
 export interface HistoryProps extends Pick<ScreenProps, 'lang' | 'timeZone' | 'now'> {
   view: OperatorView;
@@ -323,6 +324,8 @@ export function HistoryTotalsPanel({
 
 export function History({ view, lang = 'ru', timeZone, now: nowProp }: HistoryProps) {
   const t = dict(lang);
+  // A document without the overview lists (revision 5 setup): the setup state, not a throw.
+  if (!hasOverview(view)) return <SetupScreen view={view} lang={lang} />;
   // Clocks of another day than the view's carry a date, so a 24 h window reads unambiguously.
   const now = nowProp ?? instantMs(view.generatedAt);
   const v = t.history;

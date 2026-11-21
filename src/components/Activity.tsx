@@ -12,6 +12,7 @@ import { formatWhen } from '../model/i18n.ts';
 import type { OperatorView } from '../model/view.ts';
 import { workName } from '../model/steps.ts';
 import { Codes, Heading, Term, WorkRef, actorLabel, type ScreenProps } from './common.tsx';
+import { hasOverview, SetupScreen } from './Setup.tsx';
 
 export interface ActivityFilter {
   workId?: string;
@@ -46,6 +47,8 @@ export function Activity({
   filterHref,
 }: ActivityProps) {
   const t = dict(lang);
+  // A document without the overview lists (revision 5 setup): the setup state, not a throw.
+  if (!hasOverview(view)) return <SetupScreen view={view} lang={lang} />;
   const v = t.activity;
   const links = { onOpenWork, workHref };
   const clock = now ?? instantMs(view.generatedAt);

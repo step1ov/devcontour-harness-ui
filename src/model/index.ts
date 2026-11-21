@@ -3,9 +3,14 @@
 
 export * from './view.ts';
 export {
+  checkOverview,
+  checkSetup,
   checkView,
+  checkWork,
   checkWorkDetail,
+  isSetupDocument,
   KNOWN_VIEW_REVISION,
+  type SetupCheck,
   type ViewCheck,
   type WorkDetailCheck,
 } from './compat.ts';
@@ -58,6 +63,9 @@ export {
   actorsOn,
   attemptsLineParts,
   nextSteps,
+  SOURCE_REVIEW,
+  sourceReviewItems,
+  sourceReviewOf,
   withWorkNames,
   workName,
   type AttemptsPart,
