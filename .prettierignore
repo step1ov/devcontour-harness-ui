@@ -9,5 +9,6 @@ tests/contract/harness-0.1.0-alpha.57
 tests/contract/harness-0.1.0-alpha.59
 tests/contract/harness-0.1.0-alpha.60
 tests/contract/harness-0.1.0-alpha.62
+tests/contract/harness-0.1.0-alpha.65
 test-results
 playwright-report

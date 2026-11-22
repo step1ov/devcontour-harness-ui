@@ -1,6 +1,6 @@
 // Hash routes of the standalone app (design §5): `#/`, `#/tasks`,
 // `#/work/<id>`, `#/decisions`, `#/activity[?work=&actor=]`, `#/history`,
-// `#/health` (the last three form «Журнал»), `#/settings`. The old
+// `#/health`, `#/lead` (the last four form «Журнал»), `#/settings`. The old
 // `#/reviews` is kept as a redirect to `#/tasks` (`redirectOf`). A second `#` names an anchor inside the screen
 // (`#/work/<id>#verification`). Pure, so it is unit-tested.
 
@@ -14,6 +14,7 @@ export type Screen =
   | 'settings'
   | 'history'
   | 'health'
+  | 'lead'
   | 'unknown';
 
 export interface Route {
@@ -33,6 +34,7 @@ const simple: Record<string, Screen> = {
   '/settings': 'settings',
   '/history': 'history',
   '/health': 'health',
+  '/lead': 'lead',
 };
 
 const decode = (s: string): string | undefined => {

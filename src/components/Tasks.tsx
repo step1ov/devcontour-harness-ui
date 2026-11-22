@@ -25,6 +25,7 @@ import {
   leadAnswers,
   taskCards,
   leadStopOf,
+  plannedKeys,
   type TaskCard as Card_,
   type TaskPhase,
 } from '../model/tasks.ts';
@@ -47,6 +48,7 @@ import { Badge, type Tone } from './ui/badge.tsx';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card.tsx';
 import { Progress } from './ui/progress.tsx';
 import { hasOverview, SetupScreen } from './Setup.tsx';
+import { TrackLine } from './Track.tsx';
 
 export interface TasksProps extends ScreenProps {
   view: OperatorView;
@@ -60,6 +62,7 @@ const tones: Record<TaskPhase, Tone> = {
   stopped: 'warn',
   dependency: 'outline',
   queued: 'outline',
+  planned: 'outline',
   other: 'outline',
 };
 
@@ -73,7 +76,10 @@ export function Tasks({ view, lang = 'ru', now, onOpenWork, workHref, timeZone }
   const steps = nextSteps(view);
   const cards = taskCards(view, steps);
   const scope = scopeOf(view);
-  const outside = outsideHarness(scope);
+  // Revision 6: planned tasks get their own «ещё не утверждена» cards below.
+  const planned = view.planned ?? [];
+  const asPlanned = plannedKeys(view);
+  const outside = outsideHarness(scope).filter((x) => !asPlanned.has(x.connector + '\0' + x.id));
   const unlisted = overallProgress(view).outsideUnlisted;
   const other = view.reviews.filter((r) => r.workId === undefined);
   return (
@@ -105,6 +111,44 @@ export function Tasks({ view, lang = 'ru', now, onOpenWork, workHref, timeZone }
         ))}
       </ul>
       {view.truncated?.works ? <p className="hui-muted">{t.overview.planClipped}</p> : null}
+      {planned.length || view.truncated?.planned ? (
+        <Block
+          t={t}
+          title={t.r6.plannedTitle(planned.length + (view.truncated?.planned ?? 0))}
+          testid="tasks-planned"
+        >
+          <p className="hui-muted">{t.r6.plannedIntro}</p>
+          <ul className="hui:grid hui:list-none hui:gap-3 hui:lg:grid-cols-2">
+            {planned.map((p) => (
+              <Card as="li" key={p.connector + ':' + p.id} data-testid={`planned-${p.id}`}>
+                <CardHeader>
+                  <CardTitle>
+                    {p.key ? <span>{p.key}</span> : null}
+                    {p.key && p.title ? ' · ' : null}
+                    {p.title ?? (p.key ? null : <code>{p.id}</code>)}
+                  </CardTitle>
+                  <Badge tone="outline" data-testid="planned-badge">
+                    {t.r6.plannedBadge}
+                  </Badge>
+                </CardHeader>
+                <CardContent className="hui:gap-1 hui:text-sm">
+                  <p>{p.line}</p>
+                  <p className="hui-muted">{label(t.r6.plannedFrom, p.from)}</p>
+                  {p.dependsOn?.length ? (
+                    <p className="hui-muted">
+                      {t.r6.plannedAfter(p.dependsOn.map((id) => workName(view, id)).join(', '))}
+                    </p>
+                  ) : null}
+                  <Codes t={t} codes={[p.id, p.taskId, p.connector]} />
+                </CardContent>
+              </Card>
+            ))}
+          </ul>
+          {view.truncated?.planned ? (
+            <p className="hui-muted">{t.r6.plannedClipped(view.truncated.planned)}</p>
+          ) : null}
+        </Block>
+      ) : null}
       {scope ? (
         outside.length ? (
           <Block t={t} title={k.outside(outside.length)} testid="tasks-outside">
@@ -225,11 +269,18 @@ function TaskCardView({
         <Badge tone={tones[c.phase]} data-testid="task-phase">
           {label(k.phase, c.phase)}
         </Badge>
+        {w.planned && c.phase !== 'planned' ? (
+          <Badge tone="outline" data-testid="planned-badge">
+            {t.r6.plannedBadge}
+          </Badge>
+        ) : null}
       </CardHeader>
       <CardContent className="hui:gap-2 hui:text-sm">
         <p data-testid="task-now" data-status={c.phase === 'accepted' ? 'accepted' : undefined}>
           {nowText}
         </p>
+        {w.planned ? <p className="hui-muted">{t.r6.plannedWork}</p> : null}
+        {w.track ? <TrackLine track={w.track} lang={lang} name={titleText ?? name} /> : null}
         {review ? (
           <p data-testid="task-source-review" data-status="blocked">
             <Badge tone="info">{t.r5.kindSourceReview}</Badge>{' '}

@@ -272,10 +272,13 @@ test('work detail: no verification is "no data", an unknown method is not "check
 test('reviews: rounds against the cap, findings with who decided, escalation and vendor flag', () => {
   const ru = html(<Reviews view={view} lang="ru" />);
   assert.match(ru, /раунды 2 из 6/);
+  // The demo's one escalation is the lead's diagnosis (revision 6): without it, none waits.
+  assert.match(ru, /Разобрать причину повторных отказов|разобрать причину повторных отказов/);
+  const calm = html(<Reviews view={{ ...view, escalations: [] }} lang="ru" />);
   assert.match(ru, /открыто: блокирующих 0, заметок 0/);
   assert.match(ru, /F2.*принято как ограничение · кто решил: ведущий, раунд 2/s);
   assert.match(ru, /F1.*закрыто/s);
-  assert.match(ru, /Эскалаций и остановок, ждущих решения, нет\./);
+  assert.match(calm, /Эскалаций и остановок, ждущих решения, нет\./);
   const escalated: OperatorView = {
     ...view,
     reviews: [

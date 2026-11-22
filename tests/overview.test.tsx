@@ -23,7 +23,7 @@ const check2 = (rel: string): OperatorView => {
 test('overview shows the waiting question, the running work and health', () => {
   const html = renderToStaticMarkup(<Overview lang="en" view={view} />);
   assert.match(html, /Queue running/);
-  assert.match(html, /1 of 4 accepted/);
+  assert.match(html, /1 of 5 accepted/);
   assert.match(html, /Which delimiter should the CSV use\?/);
   assert.match(html, /Only you can answer this question\./);
   assert.match(html, /locale-format/);
@@ -139,10 +139,16 @@ test('unavailable drift checks are not shown as zero drift', () => {
 
 test('header sentence and footer: Russian first-class, English fallback', () => {
   const ru = renderToStaticMarkup(<Overview view={view} lang="ru" timeZone="UTC" />);
-  assert.match(ru, /Сейчас: в работе 1, в очереди 1\. От вас: ответить на 1 вопрос\./);
+  assert.match(
+    ru,
+    /Сейчас: в работе 1, в очереди 1, остановлено 1\. От вас: ответить на 1 вопрос\./,
+  );
   assert.match(ru, /Данные harness на 12:00; панель ничего не меняет\./);
   const en = renderToStaticMarkup(<Overview lang="en" view={view} timeZone="UTC" />);
-  assert.match(en, /Now: 1 working, 1 waiting in the queue\. From you: answer 1 question\./);
+  assert.match(
+    en,
+    /Now: 1 working, 1 waiting in the queue, 1 stopped\. From you: answer 1 question\./,
+  );
   assert.match(en, /Harness data as of 12:00; the panel changes nothing\./);
   const idle: OperatorView = {
     ...view,

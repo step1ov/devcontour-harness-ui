@@ -30,9 +30,9 @@ test('a different major view version is refused with a reason', () => {
   assert.equal(check.ok ? '' : check.code, 'VIEW_VERSION_UNSUPPORTED');
 });
 
-test('revision 5 (harness alpha.65) is known; revisions 4, 3, 2, 1 and 0 (alpha.60–.62, .59, .57, .56, .55) too; only later ones are newer', () => {
-  assert.equal(KNOWN_VIEW_REVISION, 5);
-  assert.equal(fixture.viewRevision, 4);
+test('revision 6 (harness alpha.66) is known; revisions 5, 4, 3, 2, 1 and 0 (alpha.65, .60–.62, .59, .57, .56, .55) too; only later ones are newer', () => {
+  assert.equal(KNOWN_VIEW_REVISION, 6);
+  assert.equal(fixture.viewRevision, 6);
   const c4now = checkView(fixture);
   assert.equal(c4now.ok && c4now.newerRevision, false);
   const c3 = checkView(asAlpha59(fixture));
@@ -59,7 +59,9 @@ test('revision 5 (harness alpha.65) is known; revisions 4, 3, 2, 1 and 0 (alpha.
   const c5 = checkView({ ...fixture, viewRevision: 5 });
   assert.equal(c5.ok && c5.newerRevision, false);
   const c6 = checkView({ ...fixture, viewRevision: 6 });
-  assert.equal(c6.ok && c6.newerRevision, true);
+  assert.equal(c6.ok && c6.newerRevision, false);
+  const c7 = checkView({ ...fixture, viewRevision: 7 });
+  assert.equal(c7.ok && c7.newerRevision, true);
 });
 
 test('the gate checks the revision 4 fields the panel renders', () => {

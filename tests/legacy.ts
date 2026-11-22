@@ -1,9 +1,37 @@
 // The same document as an older harness sends it, for the compatibility
 // tests: tests/contract.test.ts validates these shapes against the copied
-// alpha.55, alpha.56, alpha.57 and alpha.59 schemas, so the screen and live tests that use them
+// alpha.55, alpha.56, alpha.57, alpha.59, alpha.60, alpha.62 and alpha.65 schemas, so the screen and live tests that use them
 // really feed the panel an old document, not a new one with a lower number.
 
 type Json = Record<string, any>;
+
+/**
+ * Harness alpha.65 (revision 5): none of the revision 6 fields — no decision
+ * explanations, planned tasks, lead journal, «what is used», previews, work
+ * tracks, restored reworks, rework counters, and no forecast figures of the
+ * approved plan, the lead's share, the release state, the chain or lead time.
+ */
+export function asAlpha65<T>(doc: T): T {
+  const d = structuredClone(doc) as Json;
+  if (typeof d.viewRevision === 'number' && d.viewRevision > 5) d.viewRevision = 5;
+  for (const k of ['planned', 'lead', 'resources', 'previews']) delete d[k];
+  if (d.settings) delete d.settings.decisions;
+  if (d.truncated) {
+    for (const k of ['planned', 'leadNotes', 'resources', 'previews']) delete d.truncated[k];
+    if (!Object.keys(d.truncated).length) delete d.truncated;
+  }
+  if (d.forecast) {
+    for (const k of ['rework', 'planned', 'approved', 'lead', 'release'])
+      delete d.forecast.progress[k];
+    for (const w of d.forecast.progress.works ?? []) delete w.rework;
+    for (const k of ['chain', 'lead']) delete d.forecast.time[k];
+  }
+  for (const w of [...(d.works ?? []), ...(d.work ? [d.work] : [])]) {
+    for (const k of ['planned', 'restoredFrom', 'restoredLine', 'track']) delete w[k];
+    if (w.attempts) delete w.attempts.rework;
+  }
+  return d as T;
+}
 
 /**
  * Harness alpha.62 (revision 4): none of the revision 5 fields — no stage,
@@ -11,7 +39,7 @@ type Json = Record<string, any>;
  * range, estimate or finish time, no uncounted runs.
  */
 export function asAlpha62<T>(doc: T): T {
-  const d = structuredClone(doc) as Json;
+  const d = asAlpha65(doc) as Json;
   if (typeof d.viewRevision === 'number' && d.viewRevision > 4) d.viewRevision = 4;
   for (const k of ['stage', 'sourceReviews']) delete d[k];
   d.escalations = d.escalations?.filter((e: Json) => e.code !== 'SOURCE_REVIEW');

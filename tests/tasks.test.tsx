@@ -109,11 +109,11 @@ test('scope tasks not handed to the harness are listed with their state (harness
   assert.match(tasks, /Страница поиска не передана в harness/);
   assert.match(tasks, /Отзывы ждёт готовности критерии ещё не написаны/);
   const ov = html(<Overview view={scoped} lang="ru" />);
-  assert.match(shown(ov), /Сделано 1 из 6 · в работе 1 · ждут 2 · ещё не переданы в harness: 2/);
-  assert.match(ov, /aria-valuenow="1"[^>]*aria-valuetext="принято 1 из 6"/);
+  assert.match(shown(ov), /Сделано 1 из 7 · в работе 1 · ждут 3 · ещё не переданы в harness: 2/);
+  assert.match(ov, /aria-valuenow="1"[^>]*aria-valuetext="принято 1 из 7"/);
   assert.doesNotMatch(ov, /data-testid="scope-missing"/);
-  // Six works left (4 in harness − 1 accepted + 2 outside): 3 rounds of 2 to 5 in a row.
-  assert.match(shown(ov), /Осталось: 2,5–4,5 ч на 5 работ/);
+  // Six works left (5 in harness − 1 accepted + 2 outside): 3 rounds of 2 to 6 in a row.
+  assert.match(shown(ov), /Осталось: 2,5–5 ч на 6 работ/);
 });
 
 test('overview: one plain sentence first, the whole scope, problems on the way in plain words', () => {
@@ -123,10 +123,10 @@ test('overview: one plain sentence first, the whole scope, problems on the way i
     ru,
     /data-testid="story">Сейчас harness работает над locale-format \(этап «Проверки»\)\.</,
   );
-  assert.match(text, /Сделано 1 из 4 · в работе 1 · ждут 2/);
-  assert.match(text, /Осталось: 1,5–2,5 ч на 3 работы — если каждой хватит одной попытки/);
+  assert.match(text, /Сделано 1 из 5 · в работе 1 · ждут 3/);
+  assert.match(text, /Осталось: 1,5–3,5 ч на 4 работы — если каждой хватит одной попытки/);
   assert.match(text, /попытка в среднем длится 50 мин \(по 11 попыткам, начатым в окне истории\)/);
-  assert.match(text, /Проблемы по ходу \(2\)/);
+  assert.match(text, /Проблемы по ходу \(4\)/);
   assert.match(
     text,
     /locale-format : попытка 1 остановилась: проверка не прошла: lint нашёл лишний импорт/,
@@ -188,14 +188,14 @@ test('the queue stands when no controller runs: never «Очередь идёт�
   // Everything accepted: «Всё принято», nothing stands.
   const all: OperatorView = {
     ...view,
-    progress: { ...view.progress, done: 4, running: 0, byStage: { done: 4 } },
+    progress: { ...view.progress, done: 5, running: 0, byStage: { done: 5 } },
     works: view.works.filter((w) => w.id === 'add-greeting'),
     questions: [],
     health: { ...view.health, controller: { present: false } },
   };
   const done = html(<Overview view={all} lang="ru" />);
   assert.match(done, /data-testid="queue-state">Всё принято</);
-  assert.match(done, /Все работы приняты: 4 из 4\./);
+  assert.match(done, /Все работы приняты: 5 из 5\./);
 });
 
 test('settings: the appearance choice only when the host lets the viewer pick', () => {

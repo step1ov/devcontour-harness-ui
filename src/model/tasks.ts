@@ -26,7 +26,16 @@ export function splitQuestions(view: OperatorView, steps: NextSteps) {
 
 /** What a task card says the work is doing, as a kind the dictionary words. */
 export type TaskPhase =
-  'accepted' | 'cancelled' | 'running' | 'question' | 'stopped' | 'dependency' | 'queued' | 'other';
+  | 'accepted'
+  | 'cancelled'
+  | 'running'
+  | 'question'
+  | 'stopped'
+  | 'dependency'
+  | 'queued'
+  /** Revision 6: the plan of the work is not approved yet (`works[].planned`). */
+  | 'planned'
+  | 'other';
 
 export type NextActor =
   | { kind: 'nobody' }
@@ -79,12 +88,18 @@ export function taskCard(view: OperatorView, steps: NextSteps, w: WorkView): Tas
     const actors = actorsOn(steps, w.id, view);
     if (asking.length || steps.unlistedAnswers.includes(w.id)) phase = 'question';
     else if (dep) phase = 'dependency';
+    // Revision 6: nothing ran and the plan is not approved — «ещё не утверждена».
+    else if (w.planned === true) phase = 'planned';
     else if (w.stage.name === 'stopped' || w.stage.name === 'blocked') phase = 'stopped';
     else if (w.stage.name === 'queued') phase = 'queued';
     else phase = 'other';
     if (actors.length) next = { kind: 'actors', actors };
     else if (dep) next = { kind: 'dependency', on: dep.on };
-    else if (steps.queue.some((q) => q.workId === w.id && !q.unexplained) || phase === 'queued')
+    else if (
+      steps.queue.some((q) => q.workId === w.id && !q.unexplained) ||
+      phase === 'queued' ||
+      phase === 'planned'
+    )
       next = { kind: 'queue' };
     else next = { kind: 'unknown' };
     // A stopped work that only waits for its dependency reads as waiting for it.
@@ -107,6 +122,7 @@ const ORDER: TaskPhase[] = [
   'stopped',
   'dependency',
   'queued',
+  'planned',
   'other',
   'accepted',
   'cancelled',
@@ -354,4 +370,14 @@ export function writerEnvironmentStop(
   const s = leadStopOf(w, viewRevision);
   if (!s?.env) return undefined;
   return s.summary ? { summary: s.summary } : {};
+}
+
+/**
+ * Tasks of the run slice that the view lists as planned (`planned[]`,
+ * revision 6): the Tasks screen shows them as «ещё не утверждена» cards, so
+ * they are not repeated in the «not handed over» list. Keyed by connector
+ * and task id, as `scope.tasks[]` names them.
+ */
+export function plannedKeys(view: Pick<OperatorView, 'planned'>): Set<string> {
+  return new Set((view.planned ?? []).map((p) => p.connector + '\0' + p.taskId));
 }

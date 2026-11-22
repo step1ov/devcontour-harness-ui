@@ -73,6 +73,11 @@
   --hui-series-2: #b3261e;
   --hui-guide: #586170;
   --hui-focus: #2453c4;
+  /* Task path (revision 6): current step, lead decision, rework after acceptance. */
+  --hui-current: #16a34a;
+  --hui-decision: #2563eb;
+  --hui-rework: #7c3aed;
+  --hui-planned: #b8c0ca;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -98,6 +103,10 @@
     --hui-series-2: #ef6a62;
     --hui-guide: #a0a9b4;
     --hui-focus: #82a8ff;
+    --hui-current: #4ade80;
+    --hui-decision: #7aa7ff;
+    --hui-rework: #b79cff;
+    --hui-planned: #4a525d;
   }
 }
 :where(:root[data-theme='dark']) {
@@ -122,6 +131,10 @@
   --hui-series-2: #ef6a62;
   --hui-guide: #a0a9b4;
   --hui-focus: #82a8ff;
+  --hui-current: #4ade80;
+  --hui-decision: #7aa7ff;
+  --hui-rework: #b79cff;
+  --hui-planned: #4a525d;
 }
 
 /* Scoped reset: only inside the panel, never on the host page. */
@@ -618,5 +631,148 @@
   }
   .hui-badge.hui-ok {
     background: var(--hui-ok-bg);
+  }
+  /* Task path (revision 6): segments on the card, dots in the detail. */
+  .hui-track-line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .hui-track-group {
+    display: inline-flex;
+    align-items: center;
+  }
+  .hui-track-cells {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 2px 3px;
+    border-radius: 999px;
+    border: 1px solid transparent;
+  }
+  .hui-track-group[data-kind='attempt'] .hui-track-cells {
+    border-color: var(--hui-border);
+  }
+  .hui-track-group[data-rework] .hui-track-cells {
+    border-color: var(--hui-rework);
+    border-style: dashed;
+  }
+  .hui-track-more {
+    font-size: 11px;
+    color: var(--hui-muted);
+  }
+  .hui-dot {
+    display: inline-block;
+    flex: none;
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+    background: var(--hui-planned);
+  }
+  .hui-dot[data-shape='diamond'] {
+    border-radius: 1px;
+    transform: rotate(45deg) scale(0.85);
+  }
+  .hui-dot[data-shape='square'] {
+    border-radius: 2px;
+  }
+  .hui-dot[data-tone='passed'] {
+    background: var(--hui-ok);
+  }
+  .hui-dot[data-tone='current'] {
+    background: var(--hui-current);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--hui-current) 35%, transparent);
+    animation: hui-pulse 1.6s ease-in-out infinite;
+  }
+  .hui-dot[data-tone='failed'] {
+    background: var(--hui-bad);
+  }
+  .hui-dot[data-tone='waiting'] {
+    background: var(--hui-wait);
+  }
+  .hui-dot[data-tone='decision'] {
+    background: var(--hui-decision);
+  }
+  .hui-dot[data-tone='rework'] {
+    background: var(--hui-rework);
+  }
+  .hui-dot[data-tone='skipped'] {
+    background: transparent;
+    border: 1.5px solid var(--hui-planned);
+  }
+  .hui-dot[data-tone='planned'] {
+    background: var(--hui-planned);
+  }
+  .hui-track-rework {
+    color: var(--hui-rework);
+  }
+  /* Tooltip (no portal): shown on hover and on focus inside the trigger. */
+  .hui-tooltip-root {
+    position: relative;
+    display: inline-flex;
+  }
+  .hui-tooltip {
+    position: absolute;
+    z-index: 20;
+    left: 50%;
+    bottom: calc(100% + 6px);
+    transform: translateX(-50%);
+    width: max-content;
+    max-width: min(320px, 80vw);
+    padding: 6px 8px;
+    border-radius: var(--hui-radius);
+    background: var(--hui-text);
+    color: var(--hui-surface);
+    font-size: 12px;
+    line-height: 1.35;
+    white-space: normal;
+    pointer-events: none;
+    visibility: hidden;
+    opacity: 0;
+    transition: opacity 0.12s ease;
+  }
+  .hui-tooltip[data-side='bottom'] {
+    bottom: auto;
+    top: calc(100% + 6px);
+  }
+  .hui-tooltip-root:hover > .hui-tooltip,
+  .hui-tooltip-root:focus-within > .hui-tooltip {
+    visibility: visible;
+    opacity: 1;
+  }
+  .hui-table-wrap {
+    max-width: 100%;
+    overflow-x: auto;
+    border-radius: var(--hui-radius);
+  }
+  .hui-table-wrap:focus-visible {
+    outline: 2px solid var(--hui-focus);
+    outline-offset: 2px;
+  }
+  .hui-table-wrap tr[data-tone='current'] {
+    background: color-mix(in srgb, var(--hui-current) 10%, transparent);
+  }
+  .hui-table-wrap tr[data-tone='failed'] {
+    background: var(--hui-bad-bg);
+  }
+  .hui-table-wrap tr[data-tone='waiting'] {
+    background: var(--hui-warn-bg);
+  }
+  .hui-table-wrap tr[data-tone='planned'],
+  .hui-table-wrap tr[data-tone='skipped'] {
+    color: var(--hui-muted);
+  }
+  @keyframes hui-pulse {
+    0%,
+    100% {
+      box-shadow: 0 0 0 1px color-mix(in srgb, var(--hui-current) 45%, transparent);
+    }
+    50% {
+      box-shadow: 0 0 0 4px color-mix(in srgb, var(--hui-current) 15%, transparent);
+    }
   }
 }

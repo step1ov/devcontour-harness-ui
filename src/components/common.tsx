@@ -17,6 +17,7 @@ import type {
   OperatorView,
   WorkView,
 } from '../model/view.ts';
+import { Badge } from './ui/badge.tsx';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card.tsx';
 import { cn } from './ui/cn.ts';
 
@@ -152,7 +153,7 @@ export function AcceptedLine({
   now,
   explain = true,
 }: {
-  w: Pick<WorkView, 'id' | 'target' | 'resultSha'>;
+  w: Pick<WorkView, 'id' | 'target' | 'resultSha' | 'restoredFrom' | 'restoredLine'>;
   lang: Lang;
   linkProps: Pick<ScreenProps, 'onOpenWork' | 'workHref'>;
   /** In-page link to the rows (work detail); otherwise the work link with `#verification`. */
@@ -172,6 +173,12 @@ export function AcceptedLine({
   const fresh = w.target ? remoteFreshness(w.target, lang, timeZone, now) : undefined;
   return (
     <div data-status="accepted" className="hui-accepted">
+      {w.restoredFrom || w.restoredLine ? (
+        // Revision 6: a rework an older harness cancelled; the work stays accepted.
+        <span className="hui:me-1 hui:block" data-testid="restored-line">
+          <Badge tone="outline">{t.r6.restoredBadge}</Badge> {w.restoredLine ?? ''}
+        </span>
+      ) : null}
       <span data-testid="remote-line">{where}</span>{' '}
       {fresh ? (
         <span className="hui-muted" data-testid="remote-checked">

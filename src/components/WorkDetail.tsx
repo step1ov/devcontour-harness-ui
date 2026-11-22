@@ -33,6 +33,9 @@ import {
 import { ReviewSubjectCard } from './Reviews.tsx';
 import { Timeline } from './Timeline.tsx';
 import { timelineOf, timelines } from '../model/tasks.ts';
+import { trackAbsence } from '../model/track.ts';
+import { TrackTable } from './Track.tsx';
+import { Badge } from './ui/badge.tsx';
 
 export interface WorkDetailProps extends ScreenProps {
   detail: WorkDetailView;
@@ -156,6 +159,11 @@ export function WorkDetail({
             : w.nothingNext}
         </p>
         {work.stage.step ? <Codes t={t} codes={[work.stage.step]} /> : null}
+        {work.planned ? (
+          <p data-testid="work-planned">
+            <Badge tone="outline">{t.r6.plannedBadge}</Badge> {t.r6.plannedWork}
+          </p>
+        ) : null}
         {work.stage.needs ? (
           <p data-status="blocked">
             {w.needs(
@@ -174,6 +182,24 @@ export function WorkDetail({
             <Term id="typical" t={t} named />
           </div>
         ) : null}
+      </div>
+
+      <div className="hui-panel" data-testid="work-track">
+        <Heading t={t} term="attempt">
+          {t.r6.trackTitle}
+        </Heading>
+        {work.track ? (
+          <>
+            <p className="hui-muted">{t.r6.trackIntro}</p>
+            <TrackTable track={work.track} lang={lang} timeZone={timeZone} now={clock} />
+          </>
+        ) : (
+          <p className="hui-muted" data-testid="track-missing">
+            {trackAbsence(work, detail.viewRevision) === 'dropped'
+              ? t.r6.trackDropped
+              : t.r6.trackMissing}
+          </p>
+        )}
       </div>
 
       <div className="hui-panel" data-testid="work-stages">

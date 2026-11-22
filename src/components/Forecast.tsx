@@ -9,7 +9,8 @@
 
 import { useId, type ReactNode } from 'react';
 import type { ForecastView } from '../model/view.ts';
-import { dict, type Dict, type Lang } from '../model/dict.ts';
+import { dict, knownLabel, type Dict, type Lang } from '../model/dict.ts';
+import { Badge } from './ui/badge.tsx';
 import { formatRough } from '../model/format.ts';
 import { instantMs } from '../model/compat.ts';
 import { formatClock } from '../model/i18n.ts';
@@ -284,6 +285,10 @@ export function ForecastRings({
   const added = p.added ?? [];
   const works = p.works ?? [];
   const percent = Math.max(0, Math.min(100, Math.round(p.percent)));
+  // Revision 6: the release state, the approved-plan figure and the lead's share — as sent.
+  const release = p.release;
+  const num = (x: number) =>
+    new Intl.NumberFormat(lang === 'en' ? 'en' : 'ru', { maximumFractionDigits: 1 }).format(x);
   return (
     <Card data-testid="forecast" className="hui-forecast">
       <CardHeader>
@@ -296,13 +301,60 @@ export function ForecastRings({
             testid="ring-release"
             ring={<Ring share={percent / 100} tone="ok" />}
             center={f.percent(percent)}
-            sub={f.doneWord}
+            sub={release?.state === 'code-accepted' ? t.r6.codeAccepted : f.doneWord}
             valueNow={percent}
             valueText={f.releaseText(p.line)}
           >
             <p className="hui:font-medium" data-testid="release-line">
               {p.line}
             </p>
+            {p.approved ? (
+              <div className="hui:grid hui:gap-0.5" data-testid="forecast-figures">
+                <span className="hui-sr">{t.r6.twoFigures}: </span>
+                <span data-testid="figure-approved">{t.r6.approvedFigure(p.approved.percent)}</span>
+                <span data-testid="figure-planned">{t.r6.plannedFigure(p.percent)}</span>
+                {p.planned ? (
+                  <span className="hui:text-xs hui:text-muted-foreground">{p.planned.line}</span>
+                ) : null}
+              </div>
+            ) : null}
+            {release ? (
+              <p data-testid="forecast-release" data-release={release.state}>
+                <Badge
+                  tone={
+                    release.state === 'done'
+                      ? 'ok'
+                      : release.state === 'code-accepted'
+                        ? 'warn'
+                        : 'info'
+                  }
+                >
+                  {knownLabel(t.r6.releaseState, release.state) ?? release.state}
+                </Badge>{' '}
+                {release.line !== knownLabel(t.r6.releaseState, release.state) ? (
+                  <span className="hui:text-xs hui:text-muted-foreground">{release.line}</span>
+                ) : null}
+              </p>
+            ) : null}
+            {p.lead ? (
+              <details className="hui-term" data-testid="forecast-lead">
+                <summary>
+                  {t.r6.leadShare(
+                    `${num(p.lead.weighted * 100)} %`,
+                    `${num(p.lead.total * 100)} %`,
+                  )}
+                </summary>
+                <ul className="hui:mt-1 hui:grid hui:list-none hui:gap-0.5 hui:text-start">
+                  {p.lead.steps.map((x) => (
+                    <li key={x.step} data-done={x.done ? '' : undefined}>
+                      {x.done ? '✓ ' : '○ '}
+                      {knownLabel(t.r6.leadStep, x.step) ?? x.step} —{' '}
+                      {x.done ? t.r6.stepDone : t.r6.stepLeft}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            ) : null}
             <p className="hui:text-xs hui:text-muted-foreground">
               {p.basis === 'scope'
                 ? f.basisScope
@@ -335,6 +387,18 @@ export function ForecastRings({
             {time.kind !== 'unknown' && time.kind !== 'done' && time.rough ? (
               <p className="hui:text-xs hui:text-muted-foreground" data-testid="time-rough">
                 {t.r5.roughWhy}
+              </p>
+            ) : null}
+            {forecast.time.chain !== undefined &&
+            forecast.time.chain > 0 &&
+            time.kind !== 'done' ? (
+              <p className="hui:text-xs hui:text-muted-foreground" data-testid="time-chain">
+                {t.r6.chain(forecast.time.chain, num(forecast.time.chain))}
+              </p>
+            ) : null}
+            {forecast.time.lead ? (
+              <p className="hui:text-xs hui:text-muted-foreground" data-testid="time-lead">
+                {forecast.time.lead.line}
               </p>
             ) : null}
             {r && (time.kind === 'known' || time.kind === 'noElapsed') ? (

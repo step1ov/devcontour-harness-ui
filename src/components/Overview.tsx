@@ -49,6 +49,9 @@ import {
 } from '../model/scope.ts';
 import { HARNESS_STAGES, leadStopOf, splitQuestions } from '../model/tasks.ts';
 import { ForecastRings } from './Forecast.tsx';
+import { LeadSummary, hasLeadPanel } from './Lead.tsx';
+import { PreviewsPanel } from './Previews.tsx';
+import { ResourcesPanel } from './Resources.tsx';
 import { hasOverview, SetupScreen } from './Setup.tsx';
 import { Badge, type Tone } from './ui/badge.tsx';
 import { Card, CardContent } from './ui/card.tsx';
@@ -77,6 +80,8 @@ import {
 
 export interface OverviewProps extends ScreenProps {
   view: OperatorView;
+  /** Link to «Журнал → Ведущий» (revision 6); without it the lead panel has no link. */
+  leadHref?: string;
 }
 
 const severityOrder = ['exceeded', 'undetermined', 'within'];
@@ -101,6 +106,7 @@ export function Overview({
   workHref,
   lang = 'ru',
   timeZone,
+  leadHref,
 }: OverviewProps) {
   const t = dict(lang);
   // Revision 5: a setup document (or a host's document before the harness
@@ -316,6 +322,19 @@ export function Overview({
         </CardContent>
       </Card>
 
+      {hasLeadPanel(view) || view.previews?.length || view.viewRevision >= 6 ? (
+        <div className="hui:grid hui:gap-4 hui:lg:grid-cols-2">
+          <LeadSummary
+            view={view}
+            lang={lang}
+            timeZone={timeZone}
+            now={clock}
+            {...(leadHref ? { journalHref: leadHref } : {})}
+          />
+          <PreviewsPanel view={view} lang={lang} timeZone={timeZone} now={clock} {...links} />
+        </div>
+      ) : null}
+
       <Block t={t} title={o.scopeTitle} testid="scope" term="stage">
         <p className="hui:text-sm" data-testid="scope-counts">
           {view.forecast
@@ -405,6 +424,7 @@ export function Overview({
                   </span>
                 ) : null}
                 <StageStatus w={w} lang={lang} linkProps={links} />
+                {w.planned ? <Badge tone="outline">{t.r6.plannedBadge}</Badge> : null}
                 <WorkEta
                   w={w}
                   t={t}
@@ -850,6 +870,8 @@ export function Overview({
           ) : null}
         </Block>
       ) : null}
+
+      <ResourcesPanel view={view} lang={lang} timeZone={timeZone} now={clock} />
 
       <dl className="hui-grid hui-stats" data-testid="health">
         <div>

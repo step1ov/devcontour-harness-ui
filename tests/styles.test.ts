@@ -25,7 +25,10 @@ function built(): string {
 }
 
 const css = built();
-const noComments = css.replace(/\/\*[\s\S]*?\*\//g, '');
+const withKeyframes = css.replace(/\/\*[\s\S]*?\*\//g, '');
+/** `@keyframes` blocks: their `0%`/`50%` steps are not selectors. */
+const KEYFRAMES = /@keyframes\s+([\w-]+)\s*\{(?:[^{}]*\{[^{}]*\})*[^{}]*\}/g;
+const noComments = withKeyframes.replace(KEYFRAMES, '');
 
 /** Every style rule: its selector and its declarations (at-rule preludes are skipped). */
 function rules(text: string): { selector: string; body: string }[] {
@@ -103,6 +106,12 @@ test('every rule of the built stylesheet is scoped to the panel', () => {
   for (const { selector } of rules(noComments))
     for (const part of parts(selector))
       assert.doesNotMatch(part, /^\.hui[\w-]*\s*[~+](?!\s*\.hui)/, `reaches a sibling: ${part}`);
+  // Animations have panel names (the path's pulse), so they never collide with a host's.
+  const frames = [...withKeyframes.matchAll(KEYFRAMES)].map((m) => m[1]!);
+  for (const name of frames) assert.match(name, /^hui-[a-z-]+$/, `keyframes ${name}`);
+  assert.ok(frames.includes('hui-pulse'), 'the current step pulses');
+  // …and stops for a viewer who asked for less motion.
+  assert.match(withKeyframes, /prefers-reduced-motion: reduce\)[\s\S]*?animation: none !important/);
   // The only other global at-rule: Tailwind's `@property --tw-*` registrations.
   for (const m of noComments.matchAll(/@([a-z-]+)\s+([^{;]*)/g))
     assert.ok(

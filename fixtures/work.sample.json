@@ -1,6 +1,6 @@
 {
   "viewVersion": 1,
-  "viewRevision": 4,
+  "viewRevision": 6,
   "generatedAt": "2026-11-19T12:00:00.000Z",
   "source": {
     "producer": "fixture",
@@ -56,6 +56,118 @@
         "bound": "lower"
       },
       "durationMs": 1900000
+    },
+    "track": {
+      "steps": [
+        {
+          "kind": "code",
+          "attempt": 1,
+          "state": "passed",
+          "label": "code"
+        },
+        {
+          "kind": "checks",
+          "attempt": 1,
+          "state": "failed",
+          "label": "checks",
+          "at": "2026-11-19T11:40:30.000Z",
+          "reason": "checks failed"
+        },
+        {
+          "kind": "review",
+          "attempt": 1,
+          "state": "skipped",
+          "label": "review"
+        },
+        {
+          "kind": "integration",
+          "attempt": 1,
+          "state": "skipped",
+          "label": "integration"
+        },
+        {
+          "kind": "diagnosis",
+          "state": "decision",
+          "label": "lead diagnosis",
+          "at": "2026-11-19T11:40:50.000Z",
+          "reason": "D1: weak coverage"
+        },
+        {
+          "kind": "code",
+          "attempt": 2,
+          "state": "passed",
+          "label": "code"
+        },
+        {
+          "kind": "checks",
+          "attempt": 2,
+          "state": "current",
+          "label": "checks"
+        },
+        {
+          "kind": "review",
+          "attempt": 2,
+          "state": "skipped",
+          "label": "review"
+        },
+        {
+          "kind": "integration",
+          "attempt": 2,
+          "state": "skipped",
+          "label": "integration"
+        },
+        {
+          "kind": "code",
+          "attempt": 3,
+          "state": "planned",
+          "label": "code"
+        },
+        {
+          "kind": "checks",
+          "attempt": 3,
+          "state": "planned",
+          "label": "checks"
+        },
+        {
+          "kind": "review",
+          "attempt": 3,
+          "state": "planned",
+          "label": "review"
+        },
+        {
+          "kind": "integration",
+          "attempt": 3,
+          "state": "planned",
+          "label": "integration"
+        },
+        {
+          "kind": "diagnosis",
+          "state": "planned",
+          "label": "lead diagnosis"
+        },
+        {
+          "kind": "reset",
+          "state": "planned",
+          "label": "more attempts from the lead",
+          "reason": "reset 1 of 2"
+        },
+        {
+          "kind": "diagnosis",
+          "state": "planned",
+          "label": "lead diagnosis"
+        },
+        {
+          "kind": "reset",
+          "state": "planned",
+          "label": "more attempts from the lead",
+          "reason": "reset 2 of 2"
+        },
+        {
+          "kind": "accepted",
+          "state": "planned",
+          "label": "accepted"
+        }
+      ]
     }
   },
   "attempts": [

@@ -112,3 +112,16 @@ export {
   type TaskPhase,
   type TimelineStep,
 } from './tasks.ts';
+export {
+  DECISION_KINDS,
+  PHASE_KINDS,
+  drawnSteps,
+  knownTrackState,
+  trackAbsence,
+  trackGroups,
+  trackTone,
+  type DrawnStep,
+  type TrackGroup,
+  type TrackTone,
+} from './track.ts';
+export { plannedKeys } from './tasks.ts';

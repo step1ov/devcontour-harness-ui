@@ -1,6 +1,6 @@
 {
   "viewVersion": 1,
-  "viewRevision": 4,
+  "viewRevision": 6,
   "generatedAt": "2026-11-19T12:00:00.000Z",
   "source": {
     "producer": "fixture",
@@ -91,7 +91,60 @@
       "timeouts.leaseMs",
       "timeouts.runTimeoutMs",
       "timeouts.stall"
-    ]
+    ],
+    "decisions": {
+      "items": [
+        {
+          "key": "maxAttempts",
+          "value": 3,
+          "source": "policy",
+          "explain": {
+            "ru": "Сколько засчитанных попыток получает задача до решения, что делать дальше.",
+            "en": "How many counted attempts a task gets before someone decides what to do next."
+          }
+        },
+        {
+          "key": "recovery.mode",
+          "value": "lead",
+          "source": "derived",
+          "explain": {
+            "ru": "Кто решает после повторных отказов: lead — ведущий разбирает причину и сам даёт ещё попытки в пределах бюджета; user — исчерпание попыток решаете вы.",
+            "en": "Who decides after repeated failures: lead — the lead diagnoses the cause and grants more attempts within a budget; user — you decide when the attempts run out."
+          }
+        },
+        {
+          "key": "recovery.diagnoseAfter",
+          "value": 2,
+          "source": "derived",
+          "explain": {
+            "ru": "После скольких засчитанных отказов ведущий обязан разобрать причину до следующей попытки; не меньше предела попыток — разбор только при исчерпании.",
+            "en": "After how many counted failures the lead must diagnose the cause before the next attempt; at or above the attempt limit — only when the attempts run out."
+          }
+        },
+        {
+          "key": "recovery.leadResets",
+          "value": 2,
+          "source": "derived",
+          "explain": {
+            "ru": "Сколько раз ведущий может сам дать задаче новый предел попыток по свежему разбору; дальше решаете вы, 0 — сбрасываете только вы.",
+            "en": "How many times the lead may grant a task a new attempt limit after a fresh diagnosis; after that you decide, 0 means only you reset."
+          }
+        },
+        {
+          "key": "inputPolicy.leadAnswers.technical",
+          "value": true,
+          "source": "policy",
+          "explain": {
+            "ru": "Отвечает ли ведущий сам на технические вопросы исполнителя; вопросы о продукте всегда идут к вам.",
+            "en": "Whether the lead answers the writer technical questions itself; product questions always go to you."
+          }
+        }
+      ],
+      "summary": {
+        "ru": "после 2 отказов — разбор ведущего; ведущий может дать ещё попытки 2 раза; дальше — вы",
+        "en": "after 2 failures the lead diagnoses; the lead may grant more attempts 2 times; then you"
+      }
+    }
   },
   "works": [
     {
@@ -136,7 +189,81 @@
           "checkedAt": "2026-11-18T17:30:00.000Z",
           "line": "accepted locally; not yet on the remote branch origin/harness/accepted"
         }
-      }
+      },
+      "track": {
+        "steps": [
+          {
+            "kind": "code",
+            "attempt": 1,
+            "state": "passed",
+            "label": "code"
+          },
+          {
+            "kind": "checks",
+            "attempt": 1,
+            "state": "passed",
+            "label": "checks"
+          },
+          {
+            "kind": "review",
+            "attempt": 1,
+            "state": "passed",
+            "label": "review"
+          },
+          {
+            "kind": "integration",
+            "attempt": 1,
+            "state": "passed",
+            "label": "integration"
+          },
+          {
+            "kind": "accepted",
+            "attempt": 1,
+            "state": "passed",
+            "label": "accepted (earlier revision)",
+            "at": "2026-11-19T09:24:00.000Z"
+          },
+          {
+            "kind": "code",
+            "attempt": 2,
+            "state": "passed",
+            "label": "code",
+            "rework": 1
+          },
+          {
+            "kind": "checks",
+            "attempt": 2,
+            "state": "failed",
+            "label": "checks",
+            "at": "2026-11-19T10:05:00.000Z",
+            "reason": "checks failed",
+            "rework": 1
+          },
+          {
+            "kind": "review",
+            "attempt": 2,
+            "state": "skipped",
+            "label": "review",
+            "rework": 1
+          },
+          {
+            "kind": "integration",
+            "attempt": 2,
+            "state": "skipped",
+            "label": "integration",
+            "rework": 1
+          },
+          {
+            "kind": "accepted",
+            "state": "passed",
+            "label": "rework abandoned — the accepted revision",
+            "at": "2026-11-19T10:05:00.000Z",
+            "rework": 1
+          }
+        ]
+      },
+      "restoredFrom": "cancelled-rework",
+      "restoredLine": "accepted at 3b1f9e0; the rework was cancelled"
     },
     {
       "id": "locale-format",
@@ -186,6 +313,118 @@
           "bound": "lower"
         },
         "durationMs": 1900000
+      },
+      "track": {
+        "steps": [
+          {
+            "kind": "code",
+            "attempt": 1,
+            "state": "passed",
+            "label": "code"
+          },
+          {
+            "kind": "checks",
+            "attempt": 1,
+            "state": "failed",
+            "label": "checks",
+            "at": "2026-11-19T11:40:30.000Z",
+            "reason": "checks failed"
+          },
+          {
+            "kind": "review",
+            "attempt": 1,
+            "state": "skipped",
+            "label": "review"
+          },
+          {
+            "kind": "integration",
+            "attempt": 1,
+            "state": "skipped",
+            "label": "integration"
+          },
+          {
+            "kind": "diagnosis",
+            "state": "decision",
+            "label": "lead diagnosis",
+            "at": "2026-11-19T11:40:50.000Z",
+            "reason": "D1: weak coverage"
+          },
+          {
+            "kind": "code",
+            "attempt": 2,
+            "state": "passed",
+            "label": "code"
+          },
+          {
+            "kind": "checks",
+            "attempt": 2,
+            "state": "current",
+            "label": "checks"
+          },
+          {
+            "kind": "review",
+            "attempt": 2,
+            "state": "skipped",
+            "label": "review"
+          },
+          {
+            "kind": "integration",
+            "attempt": 2,
+            "state": "skipped",
+            "label": "integration"
+          },
+          {
+            "kind": "code",
+            "attempt": 3,
+            "state": "planned",
+            "label": "code"
+          },
+          {
+            "kind": "checks",
+            "attempt": 3,
+            "state": "planned",
+            "label": "checks"
+          },
+          {
+            "kind": "review",
+            "attempt": 3,
+            "state": "planned",
+            "label": "review"
+          },
+          {
+            "kind": "integration",
+            "attempt": 3,
+            "state": "planned",
+            "label": "integration"
+          },
+          {
+            "kind": "diagnosis",
+            "state": "planned",
+            "label": "lead diagnosis"
+          },
+          {
+            "kind": "reset",
+            "state": "planned",
+            "label": "more attempts from the lead",
+            "reason": "reset 1 of 2"
+          },
+          {
+            "kind": "diagnosis",
+            "state": "planned",
+            "label": "lead diagnosis"
+          },
+          {
+            "kind": "reset",
+            "state": "planned",
+            "label": "more attempts from the lead",
+            "reason": "reset 2 of 2"
+          },
+          {
+            "kind": "accepted",
+            "state": "planned",
+            "label": "accepted"
+          }
+        ]
       }
     },
     {
@@ -233,7 +472,282 @@
         },
         "durationMs": 420000
       },
-      "dependsOn": ["add-greeting"]
+      "dependsOn": ["add-greeting"],
+      "track": {
+        "steps": [
+          {
+            "kind": "code",
+            "attempt": 1,
+            "state": "failed",
+            "label": "code",
+            "at": "2026-11-19T11:40:00.000Z",
+            "reason": "writer question (not counted)"
+          },
+          {
+            "kind": "checks",
+            "attempt": 1,
+            "state": "skipped",
+            "label": "checks"
+          },
+          {
+            "kind": "review",
+            "attempt": 1,
+            "state": "skipped",
+            "label": "review"
+          },
+          {
+            "kind": "integration",
+            "attempt": 1,
+            "state": "skipped",
+            "label": "integration"
+          },
+          {
+            "kind": "question",
+            "state": "waiting",
+            "label": "writer question"
+          },
+          {
+            "kind": "code",
+            "attempt": 2,
+            "state": "planned",
+            "label": "code"
+          },
+          {
+            "kind": "checks",
+            "attempt": 2,
+            "state": "planned",
+            "label": "checks"
+          },
+          {
+            "kind": "review",
+            "attempt": 2,
+            "state": "planned",
+            "label": "review"
+          },
+          {
+            "kind": "integration",
+            "attempt": 2,
+            "state": "planned",
+            "label": "integration"
+          },
+          {
+            "kind": "code",
+            "attempt": 3,
+            "state": "planned",
+            "label": "code"
+          },
+          {
+            "kind": "checks",
+            "attempt": 3,
+            "state": "planned",
+            "label": "checks"
+          },
+          {
+            "kind": "review",
+            "attempt": 3,
+            "state": "planned",
+            "label": "review"
+          },
+          {
+            "kind": "integration",
+            "attempt": 3,
+            "state": "planned",
+            "label": "integration"
+          },
+          {
+            "kind": "diagnosis",
+            "state": "planned",
+            "label": "lead diagnosis"
+          },
+          {
+            "kind": "reset",
+            "state": "planned",
+            "label": "more attempts from the lead",
+            "reason": "reset 1 of 2"
+          },
+          {
+            "kind": "diagnosis",
+            "state": "planned",
+            "label": "lead diagnosis"
+          },
+          {
+            "kind": "reset",
+            "state": "planned",
+            "label": "more attempts from the lead",
+            "reason": "reset 2 of 2"
+          },
+          {
+            "kind": "accepted",
+            "state": "planned",
+            "label": "accepted"
+          }
+        ]
+      }
+    },
+    {
+      "id": "import-csv",
+      "graphId": "g1",
+      "title": "Import a report from CSV",
+      "status": "held",
+      "stage": {
+        "name": "stopped",
+        "since": "2026-11-19T11:35:00.000Z",
+        "next": ["writer", "gates", "review", "integration"],
+        "needs": {
+          "actor": "lead",
+          "action": "diagnose"
+        }
+      },
+      "attempts": {
+        "used": 2,
+        "max": 3,
+        "left": 1,
+        "failed": 2,
+        "interrupted": 0,
+        "rechecks": 0,
+        "neutral": {
+          "used": 0,
+          "max": 3
+        },
+        "line": "2 attempts: 2 failed (check, review); 1 left",
+        "lastFailure": {
+          "attempt": 2,
+          "bucket": "defect",
+          "plain": "review rejected: the parser drops line breaks inside quotes",
+          "at": "2026-11-19T11:35:00.000Z",
+          "kind": "review",
+          "counted": true
+        }
+      },
+      "runtime": "claude",
+      "model": "example-writer",
+      "blockers": [
+        {
+          "code": "DIAGNOSIS_REQUIRED",
+          "plain": "2 counted failures in a row: the lead diagnoses the cause before the next attempt",
+          "actor": "lead"
+        }
+      ],
+      "spend": {
+        "calls": 6,
+        "usd": {
+          "value": 2.1,
+          "bound": "exact"
+        },
+        "durationMs": 2700000
+      },
+      "track": {
+        "steps": [
+          {
+            "kind": "code",
+            "attempt": 1,
+            "state": "passed",
+            "label": "code"
+          },
+          {
+            "kind": "checks",
+            "attempt": 1,
+            "state": "failed",
+            "label": "checks",
+            "at": "2026-11-19T10:40:00.000Z",
+            "reason": "checks failed"
+          },
+          {
+            "kind": "review",
+            "attempt": 1,
+            "state": "skipped",
+            "label": "review"
+          },
+          {
+            "kind": "integration",
+            "attempt": 1,
+            "state": "skipped",
+            "label": "integration"
+          },
+          {
+            "kind": "code",
+            "attempt": 2,
+            "state": "passed",
+            "label": "code"
+          },
+          {
+            "kind": "checks",
+            "attempt": 2,
+            "state": "passed",
+            "label": "checks"
+          },
+          {
+            "kind": "review",
+            "attempt": 2,
+            "state": "failed",
+            "label": "review",
+            "at": "2026-11-19T11:35:00.000Z",
+            "reason": "review rejected"
+          },
+          {
+            "kind": "integration",
+            "attempt": 2,
+            "state": "skipped",
+            "label": "integration"
+          },
+          {
+            "kind": "diagnosis",
+            "state": "waiting",
+            "label": "lead diagnosis"
+          },
+          {
+            "kind": "code",
+            "attempt": 3,
+            "state": "planned",
+            "label": "code"
+          },
+          {
+            "kind": "checks",
+            "attempt": 3,
+            "state": "planned",
+            "label": "checks"
+          },
+          {
+            "kind": "review",
+            "attempt": 3,
+            "state": "planned",
+            "label": "review"
+          },
+          {
+            "kind": "integration",
+            "attempt": 3,
+            "state": "planned",
+            "label": "integration"
+          },
+          {
+            "kind": "diagnosis",
+            "state": "planned",
+            "label": "lead diagnosis"
+          },
+          {
+            "kind": "reset",
+            "state": "planned",
+            "label": "more attempts from the lead",
+            "reason": "reset 1 of 2"
+          },
+          {
+            "kind": "diagnosis",
+            "state": "planned",
+            "label": "lead diagnosis"
+          },
+          {
+            "kind": "reset",
+            "state": "planned",
+            "label": "more attempts from the lead",
+            "reason": "reset 2 of 2"
+          },
+          {
+            "kind": "accepted",
+            "state": "planned",
+            "label": "accepted"
+          }
+        ]
+      }
     },
     {
       "id": "docs-page",
@@ -271,7 +785,115 @@
         },
         "durationMs": 0
       },
-      "dependsOn": ["export-csv"]
+      "dependsOn": ["export-csv"],
+      "track": {
+        "steps": [
+          {
+            "kind": "code",
+            "attempt": 1,
+            "state": "planned",
+            "label": "code"
+          },
+          {
+            "kind": "checks",
+            "attempt": 1,
+            "state": "planned",
+            "label": "checks"
+          },
+          {
+            "kind": "review",
+            "attempt": 1,
+            "state": "planned",
+            "label": "review"
+          },
+          {
+            "kind": "integration",
+            "attempt": 1,
+            "state": "planned",
+            "label": "integration"
+          },
+          {
+            "kind": "code",
+            "attempt": 2,
+            "state": "planned",
+            "label": "code"
+          },
+          {
+            "kind": "checks",
+            "attempt": 2,
+            "state": "planned",
+            "label": "checks"
+          },
+          {
+            "kind": "review",
+            "attempt": 2,
+            "state": "planned",
+            "label": "review"
+          },
+          {
+            "kind": "integration",
+            "attempt": 2,
+            "state": "planned",
+            "label": "integration"
+          },
+          {
+            "kind": "diagnosis",
+            "state": "planned",
+            "label": "lead diagnosis"
+          },
+          {
+            "kind": "code",
+            "attempt": 3,
+            "state": "planned",
+            "label": "code"
+          },
+          {
+            "kind": "checks",
+            "attempt": 3,
+            "state": "planned",
+            "label": "checks"
+          },
+          {
+            "kind": "review",
+            "attempt": 3,
+            "state": "planned",
+            "label": "review"
+          },
+          {
+            "kind": "integration",
+            "attempt": 3,
+            "state": "planned",
+            "label": "integration"
+          },
+          {
+            "kind": "diagnosis",
+            "state": "planned",
+            "label": "lead diagnosis"
+          },
+          {
+            "kind": "reset",
+            "state": "planned",
+            "label": "more attempts from the lead",
+            "reason": "reset 1 of 2"
+          },
+          {
+            "kind": "diagnosis",
+            "state": "planned",
+            "label": "lead diagnosis"
+          },
+          {
+            "kind": "reset",
+            "state": "planned",
+            "label": "more attempts from the lead",
+            "reason": "reset 2 of 2"
+          },
+          {
+            "kind": "accepted",
+            "state": "planned",
+            "label": "accepted"
+          }
+        ]
+      }
     }
   ],
   "reviews": [
@@ -369,7 +991,15 @@
       "line": "the answer was passed to attempt 2"
     }
   ],
-  "escalations": [],
+  "escalations": [
+    {
+      "workId": "import-csv",
+      "code": "DIAGNOSIS_REQUIRED",
+      "actor": "lead",
+      "action": "diagnose",
+      "since": "2026-11-19T11:35:00.000Z"
+    }
+  ],
   "drift": [
     {
       "workId": "add-greeting",
@@ -382,11 +1012,12 @@
     }
   ],
   "progress": {
-    "total": 4,
+    "total": 5,
     "byStage": {
       "done": 1,
       "gates": 1,
       "input": 1,
+      "stopped": 1,
       "queued": 1
     },
     "running": 1,
@@ -684,8 +1315,8 @@
         "connector": "relay-main",
         "key": "DEMO-5",
         "title": "Import a report from CSV",
-        "state": "not-handed-over",
-        "plain": "not handed over to harness yet"
+        "state": "in-harness",
+        "workId": "import-csv"
       },
       {
         "id": "rt-demo-6",
@@ -722,7 +1353,50 @@
       "inWork": 1,
       "left": 5,
       "basis": "scope",
-      "line": "done ~23 %, 5 of 6 task(s) left, 1 in work"
+      "line": "done ~23 %, 5 of 6 task(s) left, 1 in work, planned (not approved): 1",
+      "planned": {
+        "count": 1,
+        "keys": ["DEMO-6"],
+        "line": "approved plan ~27 %, left ~1 h 15 min – 2 h 30 min; with planned (1 task(s), not approved: DEMO-6) ~23 %, left ~1 h 30 min – 3 h"
+      },
+      "approved": {
+        "percent": 27,
+        "total": 5,
+        "done": 1,
+        "left": 4,
+        "loMs": 4500000,
+        "hiMs": 9000000
+      },
+      "lead": {
+        "steps": [
+          {
+            "step": "plan",
+            "weight": 0.025,
+            "done": false
+          },
+          {
+            "step": "questions",
+            "weight": 0.025,
+            "done": false
+          },
+          {
+            "step": "delivery",
+            "weight": 0.025,
+            "done": false
+          },
+          {
+            "step": "report",
+            "weight": 0.025,
+            "done": false
+          }
+        ],
+        "weighted": 0,
+        "total": 0.1
+      },
+      "release": {
+        "state": "in-work",
+        "line": "code is in work"
+      }
     },
     "time": {
       "startedAt": "2026-11-19T09:10:00.000Z",
@@ -738,7 +1412,13 @@
         "ms": 1200000,
         "since": "2026-11-19T11:40:00.000Z"
       },
-      "line": "elapsed 2 h 50 min · left ~1 h 30 min – 3 h; waiting for people now: 1 work(s), up to 20 min — not in the estimate"
+      "line": "elapsed 2 h 50 min · left ~1 h 30 min – 3 h; waiting for people now: 1 work(s), up to 20 min — not in the estimate",
+      "chain": 2,
+      "lead": {
+        "ms": 1800000,
+        "samples": 3,
+        "line": "lead work ~30 min (from 3 gap(s) acceptance → next attempt)"
+      }
     },
     "assumptions": [
       "scope: all tasks of the run slice, including ones not handed over to harness (weight 0); done in the source without harness — 100 %, cancelled — out of scope",
@@ -765,5 +1445,191 @@
       "panel 0.1.0-alpha.6: forecast history on the History tab"
     ],
     "command": "harness update --apply --state .harness/state"
-  }
+  },
+  "planned": [
+    {
+      "id": "print-report",
+      "connector": "relay-main",
+      "taskId": "rt-demo-6",
+      "key": "DEMO-6",
+      "title": "Print the report",
+      "status": "planned",
+      "from": "read",
+      "dependsOn": ["export-csv"],
+      "line": "DEMO-6: not approved yet (read from the source, not in a plan yet)"
+    }
+  ],
+  "lead": {
+    "active": true,
+    "since": "2026-11-19T09:05:00.000Z",
+    "until": "2026-11-19T12:35:00.000Z",
+    "lastNote": {
+      "at": "2026-11-19T11:50:00.000Z",
+      "plain": "waiting for the CSV delimiter answer; meanwhile looking at the import failures"
+    },
+    "notes": [
+      {
+        "at": "2026-11-19T11:50:00.000Z",
+        "kind": "note",
+        "action": "lead.note",
+        "plain": "waiting for the CSV delimiter answer; meanwhile looking at the import failures"
+      },
+      {
+        "at": "2026-11-19T11:40:50.000Z",
+        "kind": "command",
+        "action": "lead.diagnose",
+        "workId": "locale-format",
+        "plain": "the lead diagnosed the failures of locale-format: D1, cause coverage; next — a new attempt"
+      },
+      {
+        "at": "2026-11-19T11:28:00.000Z",
+        "kind": "command",
+        "action": "lead.run",
+        "plain": "the lead started harness run"
+      },
+      {
+        "at": "2026-11-19T11:27:00.000Z",
+        "kind": "command",
+        "action": "lead.input-answer",
+        "workId": "locale-format",
+        "plain": "the lead answered the technical question q-12"
+      },
+      {
+        "at": "2026-11-19T09:12:00.000Z",
+        "kind": "command",
+        "action": "lead.approve",
+        "plain": "the lead approved the plan"
+      },
+      {
+        "at": "2026-11-19T09:06:00.000Z",
+        "kind": "note",
+        "action": "lead.note",
+        "plain": "started the release: 5 tasks from the tracker, DEMO-6 is not ready yet"
+      }
+    ],
+    "line": "the lead is working since 09:05 UTC: waiting for the CSV delimiter answer; meanwhile looking at the import failures"
+  },
+  "resources": {
+    "roles": [
+      {
+        "role": "developer",
+        "kind": "writer",
+        "runtime": "claude",
+        "vendor": "Anthropic",
+        "model": "example-writer",
+        "network": "domains",
+        "line": "developer writes the code: claude (Anthropic), example-writer; network: allowed domains only"
+      },
+      {
+        "role": "developer",
+        "kind": "reviewer",
+        "review": "code",
+        "runtime": "codex",
+        "vendor": "OpenAI",
+        "line": "code review: codex (OpenAI), checks the code of developer"
+      },
+      {
+        "role": "plan",
+        "kind": "reviewer",
+        "review": "plan",
+        "runtime": "codex",
+        "vendor": "OpenAI",
+        "line": "plan review: codex (OpenAI); spare: claude (Anthropic)"
+      },
+      {
+        "role": "lead",
+        "kind": "lead",
+        "runtime": "claude",
+        "vendor": "Anthropic",
+        "line": "the lead: claude (Anthropic)"
+      }
+    ],
+    "isolation": {
+      "sandbox": "os",
+      "writers": "domains",
+      "gates": "loopback",
+      "domains": 2,
+      "line": "OS sandbox; writers reach 2 allowed domains only, checks local addresses only"
+    },
+    "toolchain": {
+      "tools": [
+        {
+          "name": "node",
+          "version": "24.22.3"
+        },
+        {
+          "name": "pnpm",
+          "version": "10.4.1",
+          "repositoryId": "app"
+        }
+      ],
+      "line": "pinned tools: node 24.22.3 for every process, pnpm 10.4.1 in app"
+    },
+    "dependencyStore": {
+      "state": "on",
+      "repositories": [
+        {
+          "repositoryId": "app",
+          "manager": "pnpm",
+          "seeds": 2
+        }
+      ],
+      "line": "dependency store: on for app (pnpm, 2 ready sets)"
+    },
+    "services": [
+      {
+        "repositoryId": "app",
+        "name": "postgres",
+        "engine": "docker",
+        "scope": "attempt",
+        "running": 1,
+        "stopped": 3,
+        "leftover": 1,
+        "since": "2026-11-19T11:41:00.000Z",
+        "leftoverRuns": ["r-locale-format-1"],
+        "line": "postgres in docker, its own copy per attempt: 1 running since 11:41, 3 stopped, 1 left over after an attempt"
+      },
+      {
+        "repositoryId": "@workspace",
+        "name": "redis",
+        "engine": "docker",
+        "scope": "workspace",
+        "running": 0,
+        "stopped": 1,
+        "leftover": 0,
+        "line": "redis in docker for the joint check: not running now"
+      }
+    ],
+    "gates": {
+      "total": 5,
+      "workspace": 0,
+      "repositories": [
+        {
+          "repositoryId": "app",
+          "count": 5
+        }
+      ],
+      "line": "5 checks in app, no joint checks"
+    },
+    "lines": [
+      "writers: claude (Anthropic); reviewers: codex (OpenAI)",
+      "OS sandbox; network: allowed domains for writers, local only for checks",
+      "docker: postgres — 1 running, 1 left over after an attempt",
+      "5 checks; dependency store on"
+    ]
+  },
+  "previews": [
+    {
+      "id": "web",
+      "repositoryId": "app",
+      "title": "Website",
+      "url": "http://127.0.0.1:4791/",
+      "ref": "accepted",
+      "sha": "3b1f9e0c2a7d4e5f60718293a4b5c6d7e8f90123",
+      "workId": "add-greeting",
+      "startedAt": "2026-11-19T11:45:00.000Z",
+      "expiresAt": "2026-11-19T13:45:00.000Z",
+      "state": "running"
+    }
+  ]
 }

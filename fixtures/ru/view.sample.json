@@ -1,6 +1,6 @@
 {
   "viewVersion": 1,
-  "viewRevision": 4,
+  "viewRevision": 6,
   "generatedAt": "2026-11-19T12:00:00.000Z",
   "source": {
     "producer": "fixture",
@@ -91,7 +91,60 @@
       "timeouts.leaseMs",
       "timeouts.runTimeoutMs",
       "timeouts.stall"
-    ]
+    ],
+    "decisions": {
+      "items": [
+        {
+          "key": "maxAttempts",
+          "value": 3,
+          "source": "policy",
+          "explain": {
+            "ru": "Сколько засчитанных попыток получает задача до решения, что делать дальше.",
+            "en": "How many counted attempts a task gets before someone decides what to do next."
+          }
+        },
+        {
+          "key": "recovery.mode",
+          "value": "lead",
+          "source": "derived",
+          "explain": {
+            "ru": "Кто решает после повторных отказов: lead — ведущий разбирает причину и сам даёт ещё попытки в пределах бюджета; user — исчерпание попыток решаете вы.",
+            "en": "Who decides after repeated failures: lead — the lead diagnoses the cause and grants more attempts within a budget; user — you decide when the attempts run out."
+          }
+        },
+        {
+          "key": "recovery.diagnoseAfter",
+          "value": 2,
+          "source": "derived",
+          "explain": {
+            "ru": "После скольких засчитанных отказов ведущий обязан разобрать причину до следующей попытки; не меньше предела попыток — разбор только при исчерпании.",
+            "en": "After how many counted failures the lead must diagnose the cause before the next attempt; at or above the attempt limit — only when the attempts run out."
+          }
+        },
+        {
+          "key": "recovery.leadResets",
+          "value": 2,
+          "source": "derived",
+          "explain": {
+            "ru": "Сколько раз ведущий может сам дать задаче новый предел попыток по свежему разбору; дальше решаете вы, 0 — сбрасываете только вы.",
+            "en": "How many times the lead may grant a task a new attempt limit after a fresh diagnosis; after that you decide, 0 means only you reset."
+          }
+        },
+        {
+          "key": "inputPolicy.leadAnswers.technical",
+          "value": true,
+          "source": "policy",
+          "explain": {
+            "ru": "Отвечает ли ведущий сам на технические вопросы исполнителя; вопросы о продукте всегда идут к вам.",
+            "en": "Whether the lead answers the writer technical questions itself; product questions always go to you."
+          }
+        }
+      ],
+      "summary": {
+        "ru": "после 2 отказов — разбор ведущего; ведущий может дать ещё попытки 2 раза; дальше — вы",
+        "en": "after 2 failures the lead diagnoses; the lead may grant more attempts 2 times; then you"
+      }
+    }
   },
   "works": [
     {
@@ -136,7 +189,81 @@
           "checkedAt": "2026-11-18T17:30:00.000Z",
           "line": "принято локально; в удалённой ветке origin/harness/accepted ещё нет"
         }
-      }
+      },
+      "track": {
+        "steps": [
+          {
+            "kind": "code",
+            "attempt": 1,
+            "state": "passed",
+            "label": "код"
+          },
+          {
+            "kind": "checks",
+            "attempt": 1,
+            "state": "passed",
+            "label": "проверки"
+          },
+          {
+            "kind": "review",
+            "attempt": 1,
+            "state": "passed",
+            "label": "ревью"
+          },
+          {
+            "kind": "integration",
+            "attempt": 1,
+            "state": "passed",
+            "label": "интеграция"
+          },
+          {
+            "kind": "accepted",
+            "attempt": 1,
+            "state": "passed",
+            "label": "принято (прежняя редакция)",
+            "at": "2026-11-19T09:24:00.000Z"
+          },
+          {
+            "kind": "code",
+            "attempt": 2,
+            "state": "passed",
+            "label": "код",
+            "rework": 1
+          },
+          {
+            "kind": "checks",
+            "attempt": 2,
+            "state": "failed",
+            "label": "проверки",
+            "at": "2026-11-19T10:05:00.000Z",
+            "reason": "проверки не прошли",
+            "rework": 1
+          },
+          {
+            "kind": "review",
+            "attempt": 2,
+            "state": "skipped",
+            "label": "ревью",
+            "rework": 1
+          },
+          {
+            "kind": "integration",
+            "attempt": 2,
+            "state": "skipped",
+            "label": "интеграция",
+            "rework": 1
+          },
+          {
+            "kind": "accepted",
+            "state": "passed",
+            "label": "доработка оставлена — принятая редакция",
+            "at": "2026-11-19T10:05:00.000Z",
+            "rework": 1
+          }
+        ]
+      },
+      "restoredFrom": "cancelled-rework",
+      "restoredLine": "принято на 3b1f9e0; доработка отменена"
     },
     {
       "id": "locale-format",
@@ -186,6 +313,118 @@
           "bound": "lower"
         },
         "durationMs": 1900000
+      },
+      "track": {
+        "steps": [
+          {
+            "kind": "code",
+            "attempt": 1,
+            "state": "passed",
+            "label": "код"
+          },
+          {
+            "kind": "checks",
+            "attempt": 1,
+            "state": "failed",
+            "label": "проверки",
+            "at": "2026-11-19T11:40:30.000Z",
+            "reason": "проверки не прошли"
+          },
+          {
+            "kind": "review",
+            "attempt": 1,
+            "state": "skipped",
+            "label": "ревью"
+          },
+          {
+            "kind": "integration",
+            "attempt": 1,
+            "state": "skipped",
+            "label": "интеграция"
+          },
+          {
+            "kind": "diagnosis",
+            "state": "decision",
+            "label": "разбор ведущего",
+            "at": "2026-11-19T11:40:50.000Z",
+            "reason": "D1: слабое покрытие"
+          },
+          {
+            "kind": "code",
+            "attempt": 2,
+            "state": "passed",
+            "label": "код"
+          },
+          {
+            "kind": "checks",
+            "attempt": 2,
+            "state": "current",
+            "label": "проверки"
+          },
+          {
+            "kind": "review",
+            "attempt": 2,
+            "state": "skipped",
+            "label": "ревью"
+          },
+          {
+            "kind": "integration",
+            "attempt": 2,
+            "state": "skipped",
+            "label": "интеграция"
+          },
+          {
+            "kind": "code",
+            "attempt": 3,
+            "state": "planned",
+            "label": "код"
+          },
+          {
+            "kind": "checks",
+            "attempt": 3,
+            "state": "planned",
+            "label": "проверки"
+          },
+          {
+            "kind": "review",
+            "attempt": 3,
+            "state": "planned",
+            "label": "ревью"
+          },
+          {
+            "kind": "integration",
+            "attempt": 3,
+            "state": "planned",
+            "label": "интеграция"
+          },
+          {
+            "kind": "diagnosis",
+            "state": "planned",
+            "label": "разбор ведущего"
+          },
+          {
+            "kind": "reset",
+            "state": "planned",
+            "label": "ещё попытки от ведущего",
+            "reason": "сброс 1 из 2"
+          },
+          {
+            "kind": "diagnosis",
+            "state": "planned",
+            "label": "разбор ведущего"
+          },
+          {
+            "kind": "reset",
+            "state": "planned",
+            "label": "ещё попытки от ведущего",
+            "reason": "сброс 2 из 2"
+          },
+          {
+            "kind": "accepted",
+            "state": "planned",
+            "label": "принято"
+          }
+        ]
       }
     },
     {
@@ -233,7 +472,282 @@
         },
         "durationMs": 420000
       },
-      "dependsOn": ["add-greeting"]
+      "dependsOn": ["add-greeting"],
+      "track": {
+        "steps": [
+          {
+            "kind": "code",
+            "attempt": 1,
+            "state": "failed",
+            "label": "код",
+            "at": "2026-11-19T11:40:00.000Z",
+            "reason": "вопрос исполнителя (не засчитана)"
+          },
+          {
+            "kind": "checks",
+            "attempt": 1,
+            "state": "skipped",
+            "label": "проверки"
+          },
+          {
+            "kind": "review",
+            "attempt": 1,
+            "state": "skipped",
+            "label": "ревью"
+          },
+          {
+            "kind": "integration",
+            "attempt": 1,
+            "state": "skipped",
+            "label": "интеграция"
+          },
+          {
+            "kind": "question",
+            "state": "waiting",
+            "label": "вопрос исполнителя"
+          },
+          {
+            "kind": "code",
+            "attempt": 2,
+            "state": "planned",
+            "label": "код"
+          },
+          {
+            "kind": "checks",
+            "attempt": 2,
+            "state": "planned",
+            "label": "проверки"
+          },
+          {
+            "kind": "review",
+            "attempt": 2,
+            "state": "planned",
+            "label": "ревью"
+          },
+          {
+            "kind": "integration",
+            "attempt": 2,
+            "state": "planned",
+            "label": "интеграция"
+          },
+          {
+            "kind": "code",
+            "attempt": 3,
+            "state": "planned",
+            "label": "код"
+          },
+          {
+            "kind": "checks",
+            "attempt": 3,
+            "state": "planned",
+            "label": "проверки"
+          },
+          {
+            "kind": "review",
+            "attempt": 3,
+            "state": "planned",
+            "label": "ревью"
+          },
+          {
+            "kind": "integration",
+            "attempt": 3,
+            "state": "planned",
+            "label": "интеграция"
+          },
+          {
+            "kind": "diagnosis",
+            "state": "planned",
+            "label": "разбор ведущего"
+          },
+          {
+            "kind": "reset",
+            "state": "planned",
+            "label": "ещё попытки от ведущего",
+            "reason": "сброс 1 из 2"
+          },
+          {
+            "kind": "diagnosis",
+            "state": "planned",
+            "label": "разбор ведущего"
+          },
+          {
+            "kind": "reset",
+            "state": "planned",
+            "label": "ещё попытки от ведущего",
+            "reason": "сброс 2 из 2"
+          },
+          {
+            "kind": "accepted",
+            "state": "planned",
+            "label": "принято"
+          }
+        ]
+      }
+    },
+    {
+      "id": "import-csv",
+      "graphId": "g1",
+      "title": "Import a report from CSV",
+      "status": "held",
+      "stage": {
+        "name": "stopped",
+        "since": "2026-11-19T11:35:00.000Z",
+        "next": ["writer", "gates", "review", "integration"],
+        "needs": {
+          "actor": "lead",
+          "action": "diagnose"
+        }
+      },
+      "attempts": {
+        "used": 2,
+        "max": 3,
+        "left": 1,
+        "failed": 2,
+        "interrupted": 0,
+        "rechecks": 0,
+        "neutral": {
+          "used": 0,
+          "max": 3
+        },
+        "line": "2 попытки: 2 отказа (проверка, ревью); осталась 1",
+        "lastFailure": {
+          "attempt": 2,
+          "bucket": "defect",
+          "plain": "ревью отклонило: парсер теряет переводы строк внутри кавычек",
+          "at": "2026-11-19T11:35:00.000Z",
+          "kind": "review",
+          "counted": true
+        }
+      },
+      "runtime": "claude",
+      "model": "example-writer",
+      "blockers": [
+        {
+          "code": "DIAGNOSIS_REQUIRED",
+          "plain": "2 засчитанных отказа подряд: ведущий разбирает причину до следующей попытки",
+          "actor": "lead"
+        }
+      ],
+      "spend": {
+        "calls": 6,
+        "usd": {
+          "value": 2.1,
+          "bound": "exact"
+        },
+        "durationMs": 2700000
+      },
+      "track": {
+        "steps": [
+          {
+            "kind": "code",
+            "attempt": 1,
+            "state": "passed",
+            "label": "код"
+          },
+          {
+            "kind": "checks",
+            "attempt": 1,
+            "state": "failed",
+            "label": "проверки",
+            "at": "2026-11-19T10:40:00.000Z",
+            "reason": "проверки не прошли"
+          },
+          {
+            "kind": "review",
+            "attempt": 1,
+            "state": "skipped",
+            "label": "ревью"
+          },
+          {
+            "kind": "integration",
+            "attempt": 1,
+            "state": "skipped",
+            "label": "интеграция"
+          },
+          {
+            "kind": "code",
+            "attempt": 2,
+            "state": "passed",
+            "label": "код"
+          },
+          {
+            "kind": "checks",
+            "attempt": 2,
+            "state": "passed",
+            "label": "проверки"
+          },
+          {
+            "kind": "review",
+            "attempt": 2,
+            "state": "failed",
+            "label": "ревью",
+            "at": "2026-11-19T11:35:00.000Z",
+            "reason": "ревью отклонило"
+          },
+          {
+            "kind": "integration",
+            "attempt": 2,
+            "state": "skipped",
+            "label": "интеграция"
+          },
+          {
+            "kind": "diagnosis",
+            "state": "waiting",
+            "label": "разбор ведущего"
+          },
+          {
+            "kind": "code",
+            "attempt": 3,
+            "state": "planned",
+            "label": "код"
+          },
+          {
+            "kind": "checks",
+            "attempt": 3,
+            "state": "planned",
+            "label": "проверки"
+          },
+          {
+            "kind": "review",
+            "attempt": 3,
+            "state": "planned",
+            "label": "ревью"
+          },
+          {
+            "kind": "integration",
+            "attempt": 3,
+            "state": "planned",
+            "label": "интеграция"
+          },
+          {
+            "kind": "diagnosis",
+            "state": "planned",
+            "label": "разбор ведущего"
+          },
+          {
+            "kind": "reset",
+            "state": "planned",
+            "label": "ещё попытки от ведущего",
+            "reason": "сброс 1 из 2"
+          },
+          {
+            "kind": "diagnosis",
+            "state": "planned",
+            "label": "разбор ведущего"
+          },
+          {
+            "kind": "reset",
+            "state": "planned",
+            "label": "ещё попытки от ведущего",
+            "reason": "сброс 2 из 2"
+          },
+          {
+            "kind": "accepted",
+            "state": "planned",
+            "label": "принято"
+          }
+        ]
+      }
     },
     {
       "id": "docs-page",
@@ -271,7 +785,115 @@
         },
         "durationMs": 0
       },
-      "dependsOn": ["export-csv"]
+      "dependsOn": ["export-csv"],
+      "track": {
+        "steps": [
+          {
+            "kind": "code",
+            "attempt": 1,
+            "state": "planned",
+            "label": "код"
+          },
+          {
+            "kind": "checks",
+            "attempt": 1,
+            "state": "planned",
+            "label": "проверки"
+          },
+          {
+            "kind": "review",
+            "attempt": 1,
+            "state": "planned",
+            "label": "ревью"
+          },
+          {
+            "kind": "integration",
+            "attempt": 1,
+            "state": "planned",
+            "label": "интеграция"
+          },
+          {
+            "kind": "code",
+            "attempt": 2,
+            "state": "planned",
+            "label": "код"
+          },
+          {
+            "kind": "checks",
+            "attempt": 2,
+            "state": "planned",
+            "label": "проверки"
+          },
+          {
+            "kind": "review",
+            "attempt": 2,
+            "state": "planned",
+            "label": "ревью"
+          },
+          {
+            "kind": "integration",
+            "attempt": 2,
+            "state": "planned",
+            "label": "интеграция"
+          },
+          {
+            "kind": "diagnosis",
+            "state": "planned",
+            "label": "разбор ведущего"
+          },
+          {
+            "kind": "code",
+            "attempt": 3,
+            "state": "planned",
+            "label": "код"
+          },
+          {
+            "kind": "checks",
+            "attempt": 3,
+            "state": "planned",
+            "label": "проверки"
+          },
+          {
+            "kind": "review",
+            "attempt": 3,
+            "state": "planned",
+            "label": "ревью"
+          },
+          {
+            "kind": "integration",
+            "attempt": 3,
+            "state": "planned",
+            "label": "интеграция"
+          },
+          {
+            "kind": "diagnosis",
+            "state": "planned",
+            "label": "разбор ведущего"
+          },
+          {
+            "kind": "reset",
+            "state": "planned",
+            "label": "ещё попытки от ведущего",
+            "reason": "сброс 1 из 2"
+          },
+          {
+            "kind": "diagnosis",
+            "state": "planned",
+            "label": "разбор ведущего"
+          },
+          {
+            "kind": "reset",
+            "state": "planned",
+            "label": "ещё попытки от ведущего",
+            "reason": "сброс 2 из 2"
+          },
+          {
+            "kind": "accepted",
+            "state": "planned",
+            "label": "принято"
+          }
+        ]
+      }
     }
   ],
   "reviews": [
@@ -369,7 +991,15 @@
       "line": "ответ передан попытке 2"
     }
   ],
-  "escalations": [],
+  "escalations": [
+    {
+      "workId": "import-csv",
+      "code": "DIAGNOSIS_REQUIRED",
+      "actor": "lead",
+      "action": "diagnose",
+      "since": "2026-11-19T11:35:00.000Z"
+    }
+  ],
   "drift": [
     {
       "workId": "add-greeting",
@@ -382,11 +1012,12 @@
     }
   ],
   "progress": {
-    "total": 4,
+    "total": 5,
     "byStage": {
       "done": 1,
       "gates": 1,
       "input": 1,
+      "stopped": 1,
       "queued": 1
     },
     "running": 1,
@@ -684,8 +1315,8 @@
         "connector": "relay-main",
         "key": "DEMO-5",
         "title": "Импорт отчёта из CSV",
-        "state": "not-handed-over",
-        "plain": "ещё не передана в harness"
+        "state": "in-harness",
+        "workId": "import-csv"
       },
       {
         "id": "rt-demo-6",
@@ -722,7 +1353,50 @@
       "inWork": 1,
       "left": 5,
       "basis": "scope",
-      "line": "готово ~23 %, осталось задач: 5 из 6, в работе: 1"
+      "line": "готово ~23 %, осталось задач: 5 из 6, в работе: 1, планируемых (не утверждены): 1",
+      "planned": {
+        "count": 1,
+        "keys": ["DEMO-6"],
+        "line": "по утверждённому плану ~27 %, осталось ~1 ч 15 мин – 2 ч 30 мин; с планируемыми (1 задача, не утверждены: DEMO-6) ~23 %, осталось ~1 ч 30 мин – 3 ч"
+      },
+      "approved": {
+        "percent": 27,
+        "total": 5,
+        "done": 1,
+        "left": 4,
+        "loMs": 4500000,
+        "hiMs": 9000000
+      },
+      "lead": {
+        "steps": [
+          {
+            "step": "plan",
+            "weight": 0.025,
+            "done": false
+          },
+          {
+            "step": "questions",
+            "weight": 0.025,
+            "done": false
+          },
+          {
+            "step": "delivery",
+            "weight": 0.025,
+            "done": false
+          },
+          {
+            "step": "report",
+            "weight": 0.025,
+            "done": false
+          }
+        ],
+        "weighted": 0,
+        "total": 0.1
+      },
+      "release": {
+        "state": "in-work",
+        "line": "код в работе"
+      }
     },
     "time": {
       "startedAt": "2026-11-19T09:10:00.000Z",
@@ -738,7 +1412,13 @@
         "ms": 1200000,
         "since": "2026-11-19T11:40:00.000Z"
       },
-      "line": "прошло 2 ч 50 мин · осталось ~1 ч 30 мин – 3 ч; ждут людей сейчас: 1, до 20 мин — в прогноз не входит"
+      "line": "прошло 2 ч 50 мин · осталось ~1 ч 30 мин – 3 ч; ждут людей сейчас: 1, до 20 мин — в прогноз не входит",
+      "chain": 2,
+      "lead": {
+        "ms": 1800000,
+        "samples": 3,
+        "line": "работа ведущего ~30 мин (по 3 разрывам «приёмка → следующая попытка»)"
+      }
     },
     "assumptions": [
       "объём: все задачи среза прогона, в том числе не переданные в harness (вес 0); закрытая в источнике без harness — 100 %, отменённая — вне объёма",
@@ -765,5 +1445,191 @@
       "панель 0.1.0-alpha.6: история прогноза на вкладке «История»"
     ],
     "command": "harness update --apply --state .harness/state"
-  }
+  },
+  "planned": [
+    {
+      "id": "print-report",
+      "connector": "relay-main",
+      "taskId": "rt-demo-6",
+      "key": "DEMO-6",
+      "title": "Печать отчёта",
+      "status": "planned",
+      "from": "read",
+      "dependsOn": ["export-csv"],
+      "line": "DEMO-6: ещё не утверждена (прочитана из источника, в план ещё не входит)"
+    }
+  ],
+  "lead": {
+    "active": true,
+    "since": "2026-11-19T09:05:00.000Z",
+    "until": "2026-11-19T12:35:00.000Z",
+    "lastNote": {
+      "at": "2026-11-19T11:50:00.000Z",
+      "plain": "жду ответа про разделитель CSV; пока разбираю отказы импорта"
+    },
+    "notes": [
+      {
+        "at": "2026-11-19T11:50:00.000Z",
+        "kind": "note",
+        "action": "lead.note",
+        "plain": "жду ответа про разделитель CSV; пока разбираю отказы импорта"
+      },
+      {
+        "at": "2026-11-19T11:40:50.000Z",
+        "kind": "command",
+        "action": "lead.diagnose",
+        "workId": "locale-format",
+        "plain": "ведущий разобрал отказы locale-format: D1, причина coverage; дальше — новая попытка"
+      },
+      {
+        "at": "2026-11-19T11:28:00.000Z",
+        "kind": "command",
+        "action": "lead.run",
+        "plain": "ведущий запустил harness run"
+      },
+      {
+        "at": "2026-11-19T11:27:00.000Z",
+        "kind": "command",
+        "action": "lead.input-answer",
+        "workId": "locale-format",
+        "plain": "ведущий ответил на технический вопрос q-12"
+      },
+      {
+        "at": "2026-11-19T09:12:00.000Z",
+        "kind": "command",
+        "action": "lead.approve",
+        "plain": "ведущий согласовал план"
+      },
+      {
+        "at": "2026-11-19T09:06:00.000Z",
+        "kind": "note",
+        "action": "lead.note",
+        "plain": "начал выпуск: 5 задач из трекера, DEMO-6 ещё не готова"
+      }
+    ],
+    "line": "ведущий работает с 09:05 UTC: жду ответа про разделитель CSV; пока разбираю отказы импорта"
+  },
+  "resources": {
+    "roles": [
+      {
+        "role": "developer",
+        "kind": "writer",
+        "runtime": "claude",
+        "vendor": "Anthropic",
+        "model": "example-writer",
+        "network": "domains",
+        "line": "developer пишет код: claude (Anthropic), example-writer; сеть: только разрешённые домены"
+      },
+      {
+        "role": "developer",
+        "kind": "reviewer",
+        "review": "code",
+        "runtime": "codex",
+        "vendor": "OpenAI",
+        "line": "ревью кода: codex (OpenAI), проверяет код developer"
+      },
+      {
+        "role": "plan",
+        "kind": "reviewer",
+        "review": "plan",
+        "runtime": "codex",
+        "vendor": "OpenAI",
+        "line": "ревью плана: codex (OpenAI); запасной: claude (Anthropic)"
+      },
+      {
+        "role": "lead",
+        "kind": "lead",
+        "runtime": "claude",
+        "vendor": "Anthropic",
+        "line": "ведущий: claude (Anthropic)"
+      }
+    ],
+    "isolation": {
+      "sandbox": "os",
+      "writers": "domains",
+      "gates": "loopback",
+      "domains": 2,
+      "line": "песочница системы; исполнителям — только 2 разрешённых домена, проверкам — только локальные адреса"
+    },
+    "toolchain": {
+      "tools": [
+        {
+          "name": "node",
+          "version": "24.22.3"
+        },
+        {
+          "name": "pnpm",
+          "version": "10.4.1",
+          "repositoryId": "app"
+        }
+      ],
+      "line": "закреплены: node 24.22.3 для всех процессов, pnpm 10.4.1 в app"
+    },
+    "dependencyStore": {
+      "state": "on",
+      "repositories": [
+        {
+          "repositoryId": "app",
+          "manager": "pnpm",
+          "seeds": 2
+        }
+      ],
+      "line": "хранилище зависимостей: включено для app (pnpm, 2 готовых набора)"
+    },
+    "services": [
+      {
+        "repositoryId": "app",
+        "name": "postgres",
+        "engine": "docker",
+        "scope": "attempt",
+        "running": 1,
+        "stopped": 3,
+        "leftover": 1,
+        "since": "2026-11-19T11:41:00.000Z",
+        "leftoverRuns": ["r-locale-format-1"],
+        "line": "postgres в docker, своя копия у каждой попытки: 1 работает с 11:41, 3 остановлены, 1 осталась после попытки"
+      },
+      {
+        "repositoryId": "@workspace",
+        "name": "redis",
+        "engine": "docker",
+        "scope": "workspace",
+        "running": 0,
+        "stopped": 1,
+        "leftover": 0,
+        "line": "redis в docker для совместной проверки: сейчас не запущен"
+      }
+    ],
+    "gates": {
+      "total": 5,
+      "workspace": 0,
+      "repositories": [
+        {
+          "repositoryId": "app",
+          "count": 5
+        }
+      ],
+      "line": "5 проверок в app, совместных проверок нет"
+    },
+    "lines": [
+      "исполнители: claude (Anthropic); проверяющие: codex (OpenAI)",
+      "песочница системы; сеть: разрешённые домены у исполнителей, только локальная у проверок",
+      "docker: postgres — 1 работает, 1 осталась после попытки",
+      "5 проверок; хранилище зависимостей включено"
+    ]
+  },
+  "previews": [
+    {
+      "id": "web",
+      "repositoryId": "app",
+      "title": "Сайт",
+      "url": "http://127.0.0.1:4791/",
+      "ref": "accepted",
+      "sha": "3b1f9e0c2a7d4e5f60718293a4b5c6d7e8f90123",
+      "workId": "add-greeting",
+      "startedAt": "2026-11-19T11:45:00.000Z",
+      "expiresAt": "2026-11-19T13:45:00.000Z",
+      "state": "running"
+    }
+  ]
 }
