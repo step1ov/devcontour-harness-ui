@@ -1,11 +1,17 @@
 // Contract with devcontour-harness: the view schema is owned by the harness.
 // tests/contract/harness/*.schema.json are verbatim copies of the harness
 // schemas (schemas/operator-view.schema.json, schemas/work-detail-view.schema.json
-// and schemas/setup-view.schema.json of 0.1.0-alpha.66, view revision 6);
+// and schemas/setup-view.schema.json of 0.1.0-alpha.67, view revision 7);
 // empty-state.view.json is a real `harness view --lang en` envelope of that
 // version for a state that does not exist yet (examples/two-vendors policy),
 // setup-state.view.json a real `harness view --repository <empty dir> --lang en`
-// (the setup document). tests/contract/harness-0.1.0-alpha.65/ keeps the same
+// (the setup document) and setup-progress.view.json a real `harness view
+// --repository <dir> --lang en` right after `harness init` (an overview at the
+// setup stage with `stage.progress`). The alpha.67 copies come from the
+// release branch before its version bump, so they still name
+// producerVersion 0.1.0-alpha.66 with viewRevision 7; refresh them from the
+// released package. tests/contract/harness-0.1.0-alpha.66/ keeps the same
+// files of 0.1.0-alpha.66 (revision 6); tests/contract/harness-0.1.0-alpha.65/ keeps the same
 // files of 0.1.0-alpha.65 (revision 5); tests/contract/harness-0.1.0-alpha.62/ keeps the same
 // files of 0.1.0-alpha.62 (revision 4 with `neverRun` and `scopeReason`),
 // harness-0.1.0-alpha.60/ (revision 4 without them), harness-0.1.0-alpha.59/
@@ -56,6 +62,8 @@ import {
   type QuestionOption,
   type ScopeTaskView,
   type SetupView,
+  type SetupProgressView,
+  type SetupStepView,
   type SourceReview,
   type SourceHealth,
   type SourceQuestion,
@@ -76,7 +84,15 @@ import {
   type WorkView,
 } from '../src/model/index.ts';
 import { validate } from './contract/json-schema.ts';
-import { asAlpha55, asAlpha56, asAlpha57, asAlpha59, asAlpha62, asAlpha65 } from './legacy.ts';
+import {
+  asAlpha55,
+  asAlpha56,
+  asAlpha57,
+  asAlpha59,
+  asAlpha62,
+  asAlpha65,
+  asAlpha66,
+} from './legacy.ts';
 import { instantMs } from '../src/model/compat.ts';
 
 type Json = Record<string, any>;
@@ -90,6 +106,9 @@ const acceptedFixture = read('../fixtures/work.accepted.sample.json');
 const harnessEmpty = read('./contract/harness/empty-state.view.json');
 const setupSchema = read('./contract/harness/setup-view.schema.json');
 const harnessSetup = read('./contract/harness/setup-state.view.json');
+const harnessProgress = read('./contract/harness/setup-progress.view.json');
+/** The alpha.67 copies were taken before the harness bumped its version (see the header). */
+const ALPHA67 = /^0\.1\.0-alpha\.6[67]$/;
 const overviewSchema62 = read('./contract/harness-0.1.0-alpha.62/operator-view.schema.json');
 const detailSchema62 = read('./contract/harness-0.1.0-alpha.62/work-detail-view.schema.json');
 const harnessEmpty62 = read('./contract/harness-0.1.0-alpha.62/empty-state.view.json');
@@ -127,8 +146,8 @@ test('both fixtures and a real harness document are valid under the harness sche
   for (const f of ['work.sample.json', 'work.accepted.sample.json'])
     assert.deepEqual(validate(detailSchema, read('../fixtures/ru/' + f)), [], f);
   assert.equal(harnessEmpty.ok, true);
-  assert.equal(harnessEmpty.data.viewRevision, 6);
-  assert.equal(harnessEmpty.data.source.producerVersion, '0.1.0-alpha.66');
+  assert.equal(harnessEmpty.data.viewRevision, 7);
+  assert.match(harnessEmpty.data.source.producerVersion, ALPHA67);
   // Revision 6: who decides, with the harness's own words in both languages.
   assert.equal(harnessEmpty.data.settings.decisions.items[0].key, 'maxAttempts');
   assert.match(harnessEmpty.data.settings.decisions.summary.en, /you decide/);
@@ -210,11 +229,13 @@ test('alpha.57/58 documents (revision 2) stay valid under the alpha.59 schemas a
   }
 });
 
-test('the setup document of harness alpha.66 is valid, passes the setup gate and is not an overview', () => {
+test('the setup document of harness alpha.67 is valid, passes the setup gate and is not an overview', () => {
   assert.equal(harnessSetup.ok, true);
   const doc = harnessSetup.data;
-  assert.equal(doc.viewRevision, 6);
-  assert.equal(doc.source.producerVersion, '0.1.0-alpha.66');
+  assert.equal(doc.viewRevision, 7);
+  assert.match(doc.source.producerVersion, ALPHA67);
+  // An empty directory has no `.harness/`: no setup progress yet.
+  assert.equal(Object.hasOwn(doc.stage, 'progress'), false);
   assert.deepEqual(validate(setupSchema, doc), []);
   // Neither an overview nor a work detail.
   assert.notDeepEqual(validate(overviewSchema, doc), []);
@@ -238,6 +259,131 @@ test('the setup document of harness alpha.66 is valid, passes the setup gate and
     { ...doc, viewVersion: 2 },
   ])
     assert.equal(checkOverview(bad).ok, false, JSON.stringify(bad).slice(0, 80));
+});
+
+const overviewSchema66 = read('./contract/harness-0.1.0-alpha.66/operator-view.schema.json');
+const detailSchema66 = read('./contract/harness-0.1.0-alpha.66/work-detail-view.schema.json');
+const setupSchema66 = read('./contract/harness-0.1.0-alpha.66/setup-view.schema.json');
+const harnessEmpty66 = read('./contract/harness-0.1.0-alpha.66/empty-state.view.json');
+const harnessSetup66 = read('./contract/harness-0.1.0-alpha.66/setup-state.view.json');
+
+test('a real alpha.67 overview right after harness init carries the setup progress', () => {
+  assert.equal(harnessProgress.ok, true);
+  const doc = harnessProgress.data;
+  assert.equal(doc.viewRevision, 7);
+  assert.match(doc.source.producerVersion, ALPHA67);
+  assert.deepEqual(validate(overviewSchema, doc), []);
+  assert.deepEqual(doc.works, []);
+  assert.equal(doc.stage.name, 'setup');
+  const p = doc.stage.progress;
+  // The steps in the harness order, the soft budget of 30 min, both languages always.
+  assert.deepEqual(
+    p.steps.map((x: Json) => x.id),
+    ['profile', 'init', 'doctor', 'smoke', 'probe', 'gates', 'connector'],
+  );
+  assert.equal(p.budgetMs, 30 * 60_000);
+  assert.equal(p.overBudget, false);
+  assert.match(p.line, /^Настройка: готово 2 из 5 шагов/);
+  assert.match(p.lineEn, /^Setup: 2 of 5 steps done/);
+  // The progress line is not one of the stage lines: the panel shows it itself.
+  assert.equal(doc.stage.lines.includes(p.line), false);
+  assert.equal(doc.stage.lines.includes(p.lineEn), false);
+  const c = checkOverview(doc);
+  assert.equal(c.ok && !('setup' in c) && c.newerRevision, false);
+  // The alpha.66 schema refuses it: a real revision 7 field.
+  assert.match(validate(overviewSchema66, doc).join(), /unknown field progress/);
+});
+
+test('alpha.66 documents (revision 6) stay valid under the alpha.67 schemas and pass the gate', () => {
+  assert.equal(harnessEmpty66.data.viewRevision, 6);
+  assert.equal(harnessEmpty66.data.source.producerVersion, '0.1.0-alpha.66');
+  assert.deepEqual(validate(overviewSchema66, harnessEmpty66.data), []);
+  assert.deepEqual(validate(overviewSchema, harnessEmpty66.data), []);
+  const real = checkOverview(harnessEmpty66.data);
+  assert.equal(real.ok && !('setup' in real) && real.newerRevision, false);
+  assert.deepEqual(validate(setupSchema66, harnessSetup66.data), []);
+  assert.deepEqual(validate(setupSchema, harnessSetup66.data), []);
+  const setup = checkOverview(harnessSetup66.data);
+  assert.equal(setup.ok && 'setup' in setup, true);
+  const docs: [string, Json, Json, Json][] = [
+    ...fixtures().map(([name, doc, schema]): [string, Json, Json, Json] => [
+      name,
+      doc,
+      schema,
+      schema === overviewSchema ? overviewSchema66 : detailSchema66,
+    ]),
+    [
+      'view.setup-progress.json',
+      read('../fixtures/view.setup-progress.json'),
+      overviewSchema,
+      overviewSchema66,
+    ],
+    [
+      'ru/view.setup-progress.json',
+      read('../fixtures/ru/view.setup-progress.json'),
+      overviewSchema,
+      overviewSchema66,
+    ],
+  ];
+  for (const [name, doc, schema, old66] of docs) {
+    const old = asAlpha66(doc);
+    assert.deepEqual(validate(old66, old), [], name);
+    assert.deepEqual(validate(schema, old), [], name);
+    const c = schema === overviewSchema ? checkView(old) : checkWorkDetail(old);
+    assert.equal(c.ok, true, `${name}: ${c.ok ? '' : c.message}`);
+    assert.equal(c.ok && c.newerRevision, false, name);
+  }
+});
+
+test('the revision 7 fixtures are valid, carry the new fields, and the alpha.66 schema refuses them', () => {
+  for (const f of ['view.setup-progress.json', 'ru/view.setup-progress.json']) {
+    const doc = read('../fixtures/' + f);
+    assert.equal(doc.viewRevision, 7, f);
+    assert.deepEqual(validate(overviewSchema, doc), [], f);
+    assert.match(validate(overviewSchema66, doc).join(), /unknown field progress/, f);
+    const c = checkView(doc);
+    assert.equal(c.ok && c.newerRevision, false, f);
+    // Over budget, with a failed step, a recorded one, a skipped one and doctor unknown.
+    const p = doc.stage.progress;
+    assert.equal(p.overBudget, true, f);
+    assert.ok(p.elapsedMs > p.budgetMs, f);
+    assert.deepEqual(
+      p.steps.map((x: Json) => x.state),
+      ['done', 'done', 'unknown', 'done', 'failed', 'pending', 'skipped'],
+      f,
+    );
+  }
+  // An infrastructure work: the alpha.67 schemas take `kind: infra`, alpha.66 refuses it.
+  const infra = structuredClone(viewFixture);
+  infra.viewRevision = 7;
+  infra.works[0].kind = 'infra';
+  assert.deepEqual(validate(overviewSchema, infra), []);
+  assert.match(validate(overviewSchema66, infra).join(), /unknown field kind/);
+  assert.equal(checkView(infra).ok, true);
+  const detail = structuredClone(workFixture);
+  detail.work.kind = 'infra';
+  assert.deepEqual(validate(detailSchema, detail), []);
+  assert.equal(checkWorkDetail(detail).ok, true);
+  // Only `infra` is a kind; the gate checks the type.
+  assert.notDeepEqual(
+    validate(overviewSchema, { ...infra, works: [{ ...infra.works[0], kind: 'product' }] }),
+    [],
+  );
+  assert.equal(checkView({ ...infra, works: [{ ...infra.works[0], kind: 3 }] }).ok, false);
+  // The gate checks the progress types it reads, but no field of it is required.
+  const p = read('../fixtures/view.setup-progress.json');
+  const withProgress = (progress: unknown) => ({ ...p, stage: { ...p.stage, progress } });
+  assert.equal(checkView(withProgress({})).ok, true);
+  assert.equal(checkView(withProgress({ steps: [{ id: 'smoke' }] })).ok, true);
+  for (const bad of [
+    { overBudget: 'yes' },
+    { budgetMs: -1 },
+    { since: 'yesterday' },
+    { steps: [{ id: 3 }] },
+    { steps: [{ id: 'smoke', at: 'now' }] },
+    { line: 7 },
+  ])
+    assert.equal(checkView(withProgress(bad)).ok, false, JSON.stringify(bad));
 });
 
 const overviewSchema65 = read('./contract/harness-0.1.0-alpha.65/operator-view.schema.json');
@@ -947,7 +1093,36 @@ const shapes: [string, Json, Record<string, string>][] = [
   [
     'stage',
     overviewSchema[ov].stage,
-    shape<NonNullable<OperatorView['stage']>>({ name: 'req:s', lines: 'req:a<s>' }),
+    shape<NonNullable<OperatorView['stage']>>({
+      name: 'req:s',
+      lines: 'req:a<s>',
+      progress: 'opt:o',
+    }),
+  ],
+  [
+    'stage.progress',
+    overviewSchema[ov].stage[ov].progress,
+    shape<SetupProgressView>({
+      since: 'opt:s',
+      elapsedMs: 'opt:n',
+      budgetMs: 'req:n',
+      overBudget: 'req:b',
+      steps: 'req:a<o>',
+      line: 'req:s',
+      lineEn: 'req:s',
+    }),
+  ],
+  [
+    'stage.progress.steps[]',
+    overviewSchema[ov].stage[ov].progress[ov].steps.items,
+    shape<SetupStepView>({
+      id: 'req:s',
+      state: 'req:s',
+      at: 'opt:s',
+      elapsedMs: 'opt:n',
+      line: 'req:s',
+      lineEn: 'req:s',
+    }),
   ],
   [
     'SetupView',
@@ -964,7 +1139,7 @@ const shapes: [string, Json, Record<string, string>][] = [
   [
     'SetupView.stage',
     setupSchema[ov].stage,
-    shape<SetupView['stage']>({ name: 'req:s', lines: 'req:a<s>' }),
+    shape<SetupView['stage']>({ name: 'req:s', lines: 'req:a<s>', progress: 'opt:o' }),
   ],
   ['SetupView.setup', setupSchema[ov].setup, shape<SetupView['setup']>({ waitingFor: 'req:s' })],
   [
@@ -1108,6 +1283,7 @@ const shapes: [string, Json, Record<string, string>][] = [
       planned: 'opt:b',
       restoredFrom: 'opt:s',
       restoredLine: 'opt:s',
+      kind: 'opt:s',
       stage: 'req:o',
       attempts: 'req:o',
       liveness: 'opt:s',
@@ -2342,6 +2518,37 @@ const vocabularies: [string, Json, string[]][] = [
     'previews[].state',
     overviewSchema[ov].previews.items[ov].state,
     vocab<PreviewView['state']>()(['running']),
+  ],
+  [
+    'stage.progress.steps[].id',
+    overviewSchema[ov].stage[ov].progress[ov].steps.items[ov].id,
+    vocab<SetupStepView['id']>()([
+      'profile',
+      'init',
+      'doctor',
+      'smoke',
+      'probe',
+      'gates',
+      'connector',
+    ]),
+  ],
+  [
+    'stage.progress.steps[].state',
+    overviewSchema[ov].stage[ov].progress[ov].steps.items[ov].state,
+    vocab<SetupStepView['state']>()(['done', 'failed', 'pending', 'skipped', 'unknown']),
+  ],
+  [
+    'setup document stage.progress.steps[].id',
+    setupSchema[ov].stage[ov].progress[ov].steps.items[ov].id,
+    vocab<SetupStepView['id']>()([
+      'profile',
+      'init',
+      'doctor',
+      'smoke',
+      'probe',
+      'gates',
+      'connector',
+    ]),
   ],
   [
     'detail verification[].phase',
