@@ -1138,6 +1138,7 @@ const shapes: [string, Json, Record<string, string>][] = [
       at: 'opt:s',
       reason: 'opt:s',
       rework: 'opt:n',
+      actor: 'opt:s',
     }),
   ],
   [
@@ -2276,6 +2277,11 @@ const vocabularies: [string, Json, string[]][] = [
       'skipped',
       'decision',
     ]),
+  ],
+  [
+    'works[].track.steps[].actor',
+    overviewSchema[ov].works.items[ov].track[ov].steps.items[ov].actor,
+    vocab<NonNullable<TrackStep['actor']>>()(['lead', 'user', 'harness']),
   ],
   [
     'planned[].from',

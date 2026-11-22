@@ -163,6 +163,8 @@ test('track groups: one segment per attempt run, decisions and the end on their 
       ['attempt', 1, 4],
       ['attempt', 2, 4],
       ['single', null, 1],
+      // The held check (no attempt) is its own mark, not part of an attempt run.
+      ['single', null, 1],
       ['attempt', 3, 4],
       ['single', null, 1],
       ['single', null, 1],
@@ -832,4 +834,112 @@ test('planned tasks: the not-ready reason stays, who approves comes from the pol
     shown(html(<Tasks view={viewOf(p)} lang="ru" />)),
     /План этой работы ещё не согласован; попыток не было\./,
   );
+});
+
+test('track actor (final alpha.66): the sent actor wins; the kind/label fallback only without it', () => {
+  // Sent actor beats the label: a reset labelled as the lead's but sent by a person is human.
+  assert.equal(
+    trackTone({
+      kind: 'reset',
+      state: 'decision',
+      label: 'ещё попытки от ведущего',
+      actor: 'user',
+    }),
+    'human',
+  );
+  assert.equal(
+    trackTone({
+      kind: 'reset',
+      state: 'decision',
+      label: 'сброс попыток человеком',
+      actor: 'lead',
+    }),
+    'decision',
+  );
+  // Without it: the old fallback.
+  assert.equal(
+    trackTone({ kind: 'reset', state: 'decision', label: 'сброс попыток человеком' }),
+    'human',
+  );
+  // Every decision step of the demo carries the harness actor.
+  const steps = viewRu.works.flatMap((w) => w.track!.steps);
+  for (const x of steps.filter((y) => ['diagnosis', 'reset', 'user-decision'].includes(y.kind)))
+    assert.ok(x.actor, JSON.stringify(x));
+  // The demo human reset: a dark bar with words, in the card list and the table.
+  const human = steps.find((y) => y.kind === 'reset' && y.actor === 'user')!;
+  assert.equal(human.label, 'сброс попыток человеком');
+  const w = viewRu.works.find((x) => x.id === 'export-csv')!;
+  const card = html(<TrackLine track={w.track!} lang="ru" name="export-csv" />);
+  assert.match(card, /data-tone="human" data-shape="bar"|data-shape="bar"[^>]*data-tone="human"/);
+  assert.match(shown(card), /сброс попыток человеком — решение \(\+1\)/);
+  const table = shown(html(<TrackTable track={w.track!} lang="ru" timeZone={TZ} />));
+  assert.match(table, /— сброс попыток человеком решение 11:38 \+1/);
+});
+
+test('the held-check step: a lead wait (amber, «ждёт ведущего»), not a decision', () => {
+  const w = viewRu.works.find((x) => x.id === 'import-csv')!;
+  const d = drawnSteps(w.track!);
+  const held = d.find((x) => x.step.kind === 'checks' && x.step.attempt === undefined)!;
+  assert.equal(held.tone, 'waiting');
+  assert.equal(shapeOf(held), 'round');
+  assert.equal(decisionActor(held.step), undefined);
+  // Before the planned steps.
+  assert.ok(d.indexOf(held) < d.findIndex((x) => x.step.state === 'planned'));
+  const table = shown(html(<TrackTable track={w.track!} lang="ru" timeZone={TZ} />));
+  assert.match(table, /— ждёт ведущего: проверка e2e удержана ждёт ведущего —/);
+  const card = shown(html(<TrackLine track={w.track!} lang="ru" name="import-csv" />));
+  assert.match(card, /ждёт ведущего: проверка e2e удержана — ждёт ведущего/);
+  // A wait of a person says so.
+  const you = drawnSteps({
+    steps: [{ kind: 'user-decision', state: 'waiting', actor: 'user', label: 'решение человека' }],
+  });
+  assert.match(
+    shown(html(<TrackTable track={{ steps: you.map((x) => x.step) }} lang="ru" />)),
+    /решение человека ждёт вас/,
+  );
+});
+
+test('a held-gate holder whose lead budget is spent: the user resets, in «Нужно от вас»', () => {
+  const spent = structuredClone(ru);
+  const w = spent.works.find((x: Json) => x.id === 'import-csv');
+  w.blockers = [
+    {
+      code: 'ENVIRONMENT_GATE_HELD',
+      plain: 'gate e2e удержан; сбросы ведущего потрачены — новый предел попыток даёте вы',
+      actor: 'operator',
+    },
+  ];
+  w.stage.needs = { actor: 'operator', action: 'reset-attempts' };
+  spent.escalations = [
+    {
+      workId: 'import-csv',
+      code: 'ENVIRONMENT_GATE_HELD',
+      actor: 'operator',
+      action: 'reset-attempts',
+      since: '2026-11-19T11:35:00.000Z',
+    },
+  ];
+  const v = viewOf(spent);
+  const steps = nextSteps(v);
+  const mine = steps.operator.filter((x) => x.workIds.includes('import-csv'));
+  assert.equal(mine.length, 1, JSON.stringify(steps.operator));
+  assert.equal(mine[0]!.action, 'reset-attempts');
+  assert.equal(mine[0]!.code, 'ENVIRONMENT_GATE_HELD');
+  assert.equal(
+    steps.lead.some((x) => x.workIds.includes('import-csv')),
+    false,
+  );
+  // Without the escalation the blocker and the stage need are still one stop.
+  const bare = nextSteps(viewOf({ ...spent, escalations: [] })).operator.filter((x) =>
+    x.workIds.includes('import-csv'),
+  );
+  assert.equal(bare.length, 1, JSON.stringify(bare));
+  assert.equal(bare[0]!.action, 'reset-attempts');
+  const o = html(<Overview view={v} lang="ru" workHref={href} />);
+  const needs = shown(
+    o.slice(o.indexOf('data-testid="needs-you"'), o.indexOf('data-testid="problems"')),
+  );
+  assert.match(needs, /Сбросить попытки — import-csv/);
+  assert.match(needs, /сбросы ведущего потрачены — новый предел попыток даёте вы/);
+  assert.match(needs, /harness retry --state <state> --work import-csv --reset/);
 });

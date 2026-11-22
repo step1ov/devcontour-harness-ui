@@ -347,7 +347,8 @@
             "state": "decision",
             "label": "lead diagnosis",
             "at": "2026-11-19T11:40:50.000Z",
-            "reason": "D1: weak coverage"
+            "reason": "D1: weak coverage",
+            "actor": "lead"
           },
           {
             "kind": "code",
@@ -400,24 +401,28 @@
           {
             "kind": "diagnosis",
             "state": "planned",
-            "label": "lead diagnosis"
+            "label": "lead diagnosis",
+            "actor": "lead"
           },
           {
             "kind": "reset",
             "state": "planned",
             "label": "more attempts from the lead",
-            "reason": "reset 1 of 2"
+            "reason": "reset 1 of 2",
+            "actor": "lead"
           },
           {
             "kind": "diagnosis",
             "state": "planned",
-            "label": "lead diagnosis"
+            "label": "lead diagnosis",
+            "actor": "lead"
           },
           {
             "kind": "reset",
             "state": "planned",
             "label": "more attempts from the lead",
-            "reason": "reset 2 of 2"
+            "reason": "reset 2 of 2",
+            "actor": "lead"
           },
           {
             "kind": "accepted",
@@ -502,6 +507,14 @@
             "label": "integration"
           },
           {
+            "kind": "reset",
+            "state": "decision",
+            "actor": "user",
+            "label": "attempts reset by a human",
+            "at": "2026-11-19T11:38:00.000Z",
+            "reason": "+1"
+          },
+          {
             "kind": "question",
             "state": "waiting",
             "label": "writer question"
@@ -557,24 +570,28 @@
           {
             "kind": "diagnosis",
             "state": "planned",
-            "label": "lead diagnosis"
+            "label": "lead diagnosis",
+            "actor": "lead"
           },
           {
             "kind": "reset",
             "state": "planned",
             "label": "more attempts from the lead",
-            "reason": "reset 1 of 2"
+            "reason": "reset 1 of 2",
+            "actor": "lead"
           },
           {
             "kind": "diagnosis",
             "state": "planned",
-            "label": "lead diagnosis"
+            "label": "lead diagnosis",
+            "actor": "lead"
           },
           {
             "kind": "reset",
             "state": "planned",
             "label": "more attempts from the lead",
-            "reason": "reset 2 of 2"
+            "reason": "reset 2 of 2",
+            "actor": "lead"
           },
           {
             "kind": "accepted",
@@ -698,7 +715,14 @@
           {
             "kind": "diagnosis",
             "state": "waiting",
-            "label": "lead diagnosis"
+            "label": "lead diagnosis",
+            "actor": "lead"
+          },
+          {
+            "kind": "checks",
+            "state": "waiting",
+            "actor": "lead",
+            "label": "waits for the lead: check e2e is held"
           },
           {
             "kind": "code",
@@ -727,24 +751,28 @@
           {
             "kind": "diagnosis",
             "state": "planned",
-            "label": "lead diagnosis"
+            "label": "lead diagnosis",
+            "actor": "lead"
           },
           {
             "kind": "reset",
             "state": "planned",
             "label": "more attempts from the lead",
-            "reason": "reset 1 of 2"
+            "reason": "reset 1 of 2",
+            "actor": "lead"
           },
           {
             "kind": "diagnosis",
             "state": "planned",
-            "label": "lead diagnosis"
+            "label": "lead diagnosis",
+            "actor": "lead"
           },
           {
             "kind": "reset",
             "state": "planned",
             "label": "more attempts from the lead",
-            "reason": "reset 2 of 2"
+            "reason": "reset 2 of 2",
+            "actor": "lead"
           },
           {
             "kind": "accepted",
@@ -844,7 +872,8 @@
           {
             "kind": "diagnosis",
             "state": "planned",
-            "label": "lead diagnosis"
+            "label": "lead diagnosis",
+            "actor": "lead"
           },
           {
             "kind": "code",
@@ -873,24 +902,28 @@
           {
             "kind": "diagnosis",
             "state": "planned",
-            "label": "lead diagnosis"
+            "label": "lead diagnosis",
+            "actor": "lead"
           },
           {
             "kind": "reset",
             "state": "planned",
             "label": "more attempts from the lead",
-            "reason": "reset 1 of 2"
+            "reason": "reset 1 of 2",
+            "actor": "lead"
           },
           {
             "kind": "diagnosis",
             "state": "planned",
-            "label": "lead diagnosis"
+            "label": "lead diagnosis",
+            "actor": "lead"
           },
           {
             "kind": "reset",
             "state": "planned",
             "label": "more attempts from the lead",
-            "reason": "reset 2 of 2"
+            "reason": "reset 2 of 2",
+            "actor": "lead"
           },
           {
             "kind": "accepted",

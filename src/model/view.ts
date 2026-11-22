@@ -354,6 +354,11 @@ export interface TrackStep {
   reason?: string;
   /** A step of a rework after acceptance (the rework number). */
   rework?: number;
+  /**
+   * Who acts at a decision or wait step (harness alpha.66): the lead, a
+   * person (`user`) or the harness itself. Absent on attempt steps.
+   */
+  actor?: 'lead' | 'user' | 'harness';
 }
 
 /**

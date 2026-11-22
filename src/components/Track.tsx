@@ -30,8 +30,17 @@ export const shapeOf = (d: Pick<DrawnStep, 'step'>): DotShape => {
   return d.step.kind === 'accepted' ? 'square' : 'round';
 };
 
-/** The state word of a drawn step: the dictionary's, or the harness code as is. */
-export function stateWord(d: Pick<DrawnStep, 'state'>, t: Dict): string {
+/**
+ * The state word of a drawn step: the dictionary's, or the harness code as
+ * is. A wait says whom it waits for when the harness names it (`actor`):
+ * «ждёт ведущего» (a held check, a diagnosis), «ждёт вас».
+ */
+export function stateWord(
+  d: Pick<DrawnStep, 'state'> & { step?: Pick<DrawnStep['step'], 'actor'> },
+  t: Dict,
+): string {
+  if (d.state === 'waiting' && d.step?.actor === 'lead') return t.r6.trackWaitLead;
+  if (d.state === 'waiting' && d.step?.actor === 'user') return t.r6.trackWaitYou;
   return knownLabel(t.r6.trackState, d.state) ?? d.state;
 }
 

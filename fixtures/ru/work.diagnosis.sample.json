@@ -122,7 +122,14 @@
         {
           "kind": "diagnosis",
           "state": "waiting",
-          "label": "разбор ведущего"
+          "label": "разбор ведущего",
+          "actor": "lead"
+        },
+        {
+          "kind": "checks",
+          "state": "waiting",
+          "actor": "lead",
+          "label": "ждёт ведущего: проверка e2e удержана"
         },
         {
           "kind": "code",
@@ -151,24 +158,28 @@
         {
           "kind": "diagnosis",
           "state": "planned",
-          "label": "разбор ведущего"
+          "label": "разбор ведущего",
+          "actor": "lead"
         },
         {
           "kind": "reset",
           "state": "planned",
           "label": "ещё попытки от ведущего",
-          "reason": "сброс 1 из 2"
+          "reason": "сброс 1 из 2",
+          "actor": "lead"
         },
         {
           "kind": "diagnosis",
           "state": "planned",
-          "label": "разбор ведущего"
+          "label": "разбор ведущего",
+          "actor": "lead"
         },
         {
           "kind": "reset",
           "state": "planned",
           "label": "ещё попытки от ведущего",
-          "reason": "сброс 2 из 2"
+          "reason": "сброс 2 из 2",
+          "actor": "lead"
         },
         {
           "kind": "accepted",

@@ -1464,6 +1464,8 @@ const ru = {
     trackEarlier: (n: number) =>
       `${rp(n, 'ранний шаг', 'ранних шага', 'ранних шагов')} не ${n % 10 === 1 && n % 100 !== 11 ? 'показан' : 'показаны'} (предел пути)`,
     trackEnd: 'итог задачи',
+    trackWaitLead: 'ждёт ведущего',
+    trackWaitYou: 'ждёт вас',
     resourcesHeld: 'Удержанные проверки',
     leadBegin: 'Ведущий начинает сессию командой',
     trackMissing: 'Путь задачи передаёт harness 0.1.0-alpha.66 и новее.',
@@ -2588,6 +2590,8 @@ const en: Dict = {
     trackRework: (n: number) => `rework ${n}`,
     trackEarlier: (n: number) => `${ep(n, 'earlier step', 'earlier steps')} not shown (path limit)`,
     trackEnd: 'end of the task',
+    trackWaitLead: 'waits for the lead',
+    trackWaitYou: 'waits for you',
     resourcesHeld: 'Held checks',
     leadBegin: 'The lead starts a session with',
     trackMissing: 'The task path comes from harness 0.1.0-alpha.66 and newer.',

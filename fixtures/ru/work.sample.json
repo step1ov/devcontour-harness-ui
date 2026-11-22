@@ -90,7 +90,8 @@
           "state": "decision",
           "label": "разбор ведущего",
           "at": "2026-11-19T11:40:50.000Z",
-          "reason": "D1: слабое покрытие"
+          "reason": "D1: слабое покрытие",
+          "actor": "lead"
         },
         {
           "kind": "code",
@@ -143,24 +144,28 @@
         {
           "kind": "diagnosis",
           "state": "planned",
-          "label": "разбор ведущего"
+          "label": "разбор ведущего",
+          "actor": "lead"
         },
         {
           "kind": "reset",
           "state": "planned",
           "label": "ещё попытки от ведущего",
-          "reason": "сброс 1 из 2"
+          "reason": "сброс 1 из 2",
+          "actor": "lead"
         },
         {
           "kind": "diagnosis",
           "state": "planned",
-          "label": "разбор ведущего"
+          "label": "разбор ведущего",
+          "actor": "lead"
         },
         {
           "kind": "reset",
           "state": "planned",
           "label": "ещё попытки от ведущего",
-          "reason": "сброс 2 из 2"
+          "reason": "сброс 2 из 2",
+          "actor": "lead"
         },
         {
           "kind": "accepted",

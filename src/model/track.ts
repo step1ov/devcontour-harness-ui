@@ -41,9 +41,12 @@ const HUMAN_RESET_LABELS: ReadonlySet<string> = new Set([
  * own label tell it: `user-decision` and a reset by a person are human,
  * other diagnoses and resets are the lead's. `undefined` for other kinds.
  */
-export function decisionActor(step: Pick<TrackStep, 'kind' | 'label'>): DecisionActor | undefined {
+export function decisionActor(
+  step: Pick<TrackStep, 'kind' | 'label' | 'actor'>,
+): DecisionActor | undefined {
   if (!DECISION_KINDS.has(step.kind)) return undefined;
-  const sent = (step as { actor?: unknown }).actor;
+  // The harness names it (alpha.66): it wins; the fallback is for steps without it.
+  const sent = step.actor;
   if (sent === 'lead' || sent === 'user' || sent === 'harness') return sent;
   if (step.kind === 'user-decision') return 'user';
   if (step.kind === 'reset' && HUMAN_RESET_LABELS.has(step.label.trim().toLowerCase()))
@@ -96,7 +99,7 @@ export interface TrackGroup {
 
 /** The colour of a step, from its state (and the rework mark and who decided). */
 export function trackTone(
-  step: Pick<TrackStep, 'state' | 'kind' | 'rework'> & { label?: string },
+  step: Pick<TrackStep, 'state' | 'kind' | 'rework' | 'actor'> & { label?: string },
   state: string = step.state,
 ): TrackTone {
   if (state === 'failed') return 'failed';
