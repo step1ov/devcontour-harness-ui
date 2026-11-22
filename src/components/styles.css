@@ -731,9 +731,8 @@
     line-height: 1.35;
     white-space: normal;
     pointer-events: none;
-    visibility: hidden;
-    opacity: 0;
-    transition: opacity 0.12s ease;
+    /* Not laid out while hidden: an off-screen tooltip must not widen a narrow page. */
+    display: none;
   }
   .hui-tooltip[data-side='bottom'] {
     bottom: auto;
@@ -741,8 +740,7 @@
   }
   .hui-tooltip-root:hover > .hui-tooltip,
   .hui-tooltip-root:focus-within > .hui-tooltip {
-    visibility: visible;
-    opacity: 1;
+    display: block;
   }
   .hui-table-wrap {
     max-width: 100%;

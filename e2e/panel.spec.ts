@@ -12,14 +12,16 @@ const screens: [string, string, RegExp][] = [
   [
     'overview',
     '#/',
-    /Сейчас harness работает над locale-format[\s\S]*В harness: принято 1 из 4 · в работе 1 · ждут 2[\s\S]*Какой разделитель использовать в CSV\?[\s\S]*Проблемы по ходу/,
+    /Сейчас harness работает над locale-format[\s\S]*В harness: принято 1 из 5 · в работе 1 · ждут 3[\s\S]*Какой разделитель использовать в CSV\?[\s\S]*Проблемы по ходу/,
   ],
   [
     'tasks',
     '#/tasks',
     /Format dates by locale[^]*Попытки: израсходовано 2 из 3, осталось 1[^]*Дальше действует: harness[^]*Export report as CSV[^]*Дальше действует: вы[^]*раунды 2 из 6/,
   ],
-  ['work', '#/work/locale-format', /Что проверено/],
+  ['work', '#/work/locale-format', /Путь задачи[\s\S]*идёт сейчас[\s\S]*Что проверено/],
+  ['work-diagnosis', '#/work/import-csv', /разбор ведущего[\s\S]*ждёт/],
+  ['lead', '#/lead', /Журнал ведущего \(6\)[\s\S]*ведущий разобрал отказы locale-format/],
   [
     'work-accepted',
     '#/work/add-greeting',
@@ -27,7 +29,7 @@ const screens: [string, string, RegExp][] = [
   ],
   ['decisions', '#/decisions', /Временные \(1\)/],
   ['activity', '#/activity', /Кто что делал[\s\S]*контроллер[\s\S]*вчера 21:05/],
-  ['settings', '#/settings', /Технические вопросы решает ведущий: да/],
+  ['settings', '#/settings', /Кто принимает решения[\s\S]*Технические вопросы решает ведущий: да/],
   ['history', '#/history', /Наибольшая нагрузка за окно/],
   ['health', '#/health', /Контроллер работает/],
 ];
@@ -362,4 +364,56 @@ test('an open tab offers a reload when the panel server serves a new build (F-AF
     /Панель обновилась \(версия [^)]+\): на этой вкладке открыта прежняя сборка\./,
   );
   await expect(prompt.getByRole('button', { name: 'Обновить страницу' })).toBeVisible();
+});
+
+test('task path: a segment line on each card, the current step pulses unless motion is reduced', async ({
+  page,
+}) => {
+  await open(page, '#/tasks');
+  const card = page.getByTestId('task-locale-format');
+  const line = card.getByRole('list', { name: 'Путь задачи Format dates by locale' });
+  await expect(line).toBeVisible();
+  // Words for assistive technology on every segment, the colour only repeats them.
+  await expect(line).toContainText('попытка 2: код — пройдено; проверки — идёт сейчас');
+  await expect(line).toContainText('разбор ведущего — решение (D1: слабое покрытие)');
+  const dot = card.locator('.hui-dot[data-tone="current"]');
+  await expect(dot).toHaveCount(1);
+  expect(await dot.evaluate((el) => getComputedStyle(el).animationName)).toBe('hui-pulse');
+  // Hovering a segment shows its words.
+  const group = line.locator('.hui-track-group').nth(2);
+  await group.hover();
+  await expect(group.locator('.hui-tooltip')).toBeVisible();
+  // Each colour of the owner's palette is used in the demo.
+  for (const tone of ['passed', 'current', 'failed', 'waiting', 'decision', 'rework', 'planned'])
+    expect(await page.locator(`.hui-dot[data-tone="${tone}"]`).count(), tone).toBeGreaterThan(0);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  expect(await dot.evaluate((el) => getComputedStyle(el).animationName)).toBe('none');
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
+  expect(overflow, 'horizontal scroll').toBeLessThanOrEqual(0);
+});
+
+test('the lead tab and the home panels: lead, previews, what is used, planned tasks', async ({
+  page,
+}) => {
+  await page.clock.setFixedTime(new Date('2026-11-19T12:05:00Z'));
+  await open(page, '#/');
+  const lead = page.getByTestId('lead-summary');
+  await expect(lead).toContainText('работает');
+  await expect(lead).toContainText('Последняя заметка (14:50): жду ответа про разделитель CSV');
+  const preview = page.getByTestId('previews').getByRole('link', { name: 'Открыть Сайт' });
+  await expect(preview).toHaveAttribute('href', 'http://127.0.0.1:4791/');
+  await expect(preview).toHaveAttribute('target', '_blank');
+  await expect(page.getByTestId('resources')).toContainText('docker: postgres — 1 работает');
+  // The lead's diagnosis is not «нужно от вас».
+  await expect(page.getByTestId('needs-you')).not.toContainText('import-csv');
+  await expect(page.getByTestId('by-lead')).toContainText('Разобрать причину повторных отказов');
+  await lead.getByRole('link', { name: 'Журнал ведущего' }).click();
+  await expect(page).toHaveURL(/#\/lead$/);
+  const sub = page.getByRole('navigation', { name: 'Разделы журнала' });
+  await expect(sub.getByRole('link', { name: 'Ведущий' })).toHaveAttribute('aria-current', 'page');
+  await open(page, '#/tasks');
+  await expect(page.getByTestId('tasks-planned')).toContainText('DEMO-6 · Печать отчёта');
+  await expect(page.getByTestId('tasks-planned')).toContainText('ещё не утверждена');
 });
