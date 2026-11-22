@@ -6,13 +6,14 @@
 // that nothing happened in the window.
 
 import { instantMs } from '../model/compat.ts';
-import { dict, label, type GlossaryId } from '../model/dict.ts';
+import { dict, knownLabel, label, type GlossaryId } from '../model/dict.ts';
 import { formatWindow } from '../model/format.ts';
 import { formatWhen } from '../model/i18n.ts';
 import type { OperatorView } from '../model/view.ts';
 import { workName } from '../model/steps.ts';
 import { Codes, Heading, Term, WorkRef, actorLabel, type ScreenProps } from './common.tsx';
 import { hasOverview, SetupScreen } from './Setup.tsx';
+import { Badge } from './ui/badge.tsx';
 
 export interface ActivityFilter {
   workId?: string;
@@ -48,7 +49,8 @@ export function Activity({
 }: ActivityProps) {
   const t = dict(lang);
   // A document without the overview lists (revision 5 setup): the setup state, not a throw.
-  if (!hasOverview(view)) return <SetupScreen view={view} lang={lang} />;
+  if (!hasOverview(view))
+    return <SetupScreen view={view} lang={lang} now={now} timeZone={timeZone} />;
   const v = t.activity;
   const links = { onOpenWork, workHref };
   const clock = now ?? instantMs(view.generatedAt);
@@ -150,6 +152,14 @@ export function Activity({
                   <span className="hui-badge hui-actor" data-actor={String(e.actor)}>
                     {actorLabel(t, e.actor)}
                   </span>{' '}
+                  {knownLabel(t.r7.action, e.action) ? (
+                    // Harness alpha.67: an event the panel names (neutral, no tone of its own).
+                    <>
+                      <Badge tone="neutral" data-testid="event-kind" data-action={e.action}>
+                        {knownLabel(t.r7.action, e.action)}
+                      </Badge>{' '}
+                    </>
+                  ) : null}
                   <span className="hui-plain">{e.plain}</span>{' '}
                   {e.action === 'work.accepted' && e.workId ? (
                     // §5.9: an acceptance names where it is and links to its checks,

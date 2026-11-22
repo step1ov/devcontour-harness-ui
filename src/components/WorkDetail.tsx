@@ -18,6 +18,7 @@ import type { DriftView, VerificationRow, WorkDetailView } from '../model/view.t
 import {
   AcceptedLine,
   AttemptsText,
+  InfraBadge,
   AnswerBasisLine,
   QuestionExtras,
   BlockerLine,
@@ -131,6 +132,7 @@ export function WorkDetail({
           )}
         </h2>
         <StageStatus w={work} lang={lang} linkProps={links} verificationHref={verificationHref} />
+        <InfraBadge kind={work.kind} lang={lang} />
         {work.liveness ? (
           <span className={'hui-badge' + (work.liveness === 'active' ? '' : ' hui-warn')}>
             {label(t.liveness, work.liveness)}
@@ -159,6 +161,11 @@ export function WorkDetail({
             : w.nothingNext}
         </p>
         {work.stage.step ? <Codes t={t} codes={[work.stage.step]} /> : null}
+        {work.kind === 'infra' ? (
+          <p className="hui-muted" data-testid="work-infra">
+            {t.r7.infraWhy}
+          </p>
+        ) : null}
         {work.planned ? (
           <p data-testid="work-planned">
             <Badge tone="outline">{t.r6.plannedBadge}</Badge> {t.r6.plannedWork}

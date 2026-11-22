@@ -33,6 +33,7 @@ import {
 import type { OperatorView } from '../model/view.ts';
 import {
   AcceptedLine,
+  InfraBadge,
   AnswerBasisLine,
   AttemptsText,
   Block,
@@ -71,7 +72,8 @@ const tones: Record<TaskPhase, Tone> = {
 export function Tasks({ view, lang = 'ru', now, onOpenWork, workHref, timeZone }: TasksProps) {
   const t = dict(lang);
   // A document without the overview lists (revision 5 setup): the setup state, not a throw.
-  if (!hasOverview(view)) return <SetupScreen view={view} lang={lang} />;
+  if (!hasOverview(view))
+    return <SetupScreen view={view} lang={lang} now={now} timeZone={timeZone} />;
   const k = t.tasks;
   const links = { onOpenWork, workHref };
   const clock = now ?? instantMs(view.generatedAt);
@@ -243,6 +245,7 @@ function TaskCardView({
             {t.r6.plannedBadge}
           </Badge>
         ) : null}
+        <InfraBadge kind={w.kind} lang={lang} />
       </CardHeader>
       <CardContent className="hui:gap-2 hui:text-sm">
         <p data-testid="task-now" data-status={c.phase === 'accepted' ? 'accepted' : undefined}>

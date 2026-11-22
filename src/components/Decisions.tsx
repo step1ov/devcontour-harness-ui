@@ -64,7 +64,8 @@ export function Decisions({
 }: DecisionsProps) {
   const t = dict(lang);
   // A document without the overview lists (revision 5 setup): the setup state, not a throw.
-  if (!hasOverview(view)) return <SetupScreen view={view} lang={lang} />;
+  if (!hasOverview(view))
+    return <SetupScreen view={view} lang={lang} now={now} timeZone={timeZone} />;
   const v = t.decisions;
   const links = { onOpenWork, workHref };
   const item = (d: DecisionView) => (

@@ -15,7 +15,11 @@ export function StatusDot({
   shape = 'round',
   className,
   ...rest
-}: HTMLAttributes<HTMLSpanElement> & { tone: TrackTone; shape?: DotShape }) {
+}: HTMLAttributes<HTMLSpanElement> & {
+  /** A track tone, or `unknown` (a setup step without a recorded outcome: a thin ring). */
+  tone: TrackTone | 'unknown';
+  shape?: DotShape;
+}) {
   return (
     <span
       aria-hidden="true"

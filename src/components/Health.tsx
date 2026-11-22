@@ -28,7 +28,8 @@ export function Health({
 }: HealthProps) {
   const t = dict(lang);
   // A document without the overview lists (revision 5 setup): the setup state, not a throw.
-  if (!hasOverview(view)) return <SetupScreen view={view} lang={lang} />;
+  if (!hasOverview(view))
+    return <SetupScreen view={view} lang={lang} now={now} timeZone={timeZone} />;
   const v = t.health;
   const h = view.health;
   const links = { onOpenWork, workHref };

@@ -558,7 +558,7 @@ function WorkScreen({ id, anchor }: { id: string; anchor: string | undefined }) 
         // Revision 5: the harness is not set up yet; the page switches by itself.
         <>
           <Freshness generatedAt={value.setup.generatedAt} live={live} />
-          <SetupScreen view={value.setup} lang={lang} />
+          <SetupScreen view={value.setup} lang={lang} now={Date.now()} />
         </>
       ) : (
         <>
@@ -611,7 +611,7 @@ function App() {
       <>
         <Freshness generatedAt={check.setup.generatedAt} live={live} />
         {check.newerRevision ? <Note>{t.app.newerRevision}</Note> : null}
-        <SetupScreen view={check.setup} lang={lang} />
+        <SetupScreen view={check.setup} lang={lang} now={Date.now()} />
       </>
     );
   else {
@@ -653,7 +653,8 @@ function App() {
         <UpdatesBanner updates={view.updates} lang={lang} />
         {inSetup(view) ? (
           // Revision 5: a state without works — «Идёт настройка harness», «Задач пока нет».
-          <SetupNote view={view} lang={lang} />
+          // Revision 7: the setup steps on the home, the line and the time elsewhere.
+          <SetupNote view={view} lang={lang} now={Date.now()} steps={route.screen === 'overview'} />
         ) : isEmpty(view) ? (
           <Note>
             {t.app.empty} <code>harness run</code>
