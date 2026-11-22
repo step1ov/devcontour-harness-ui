@@ -5,7 +5,9 @@
 
 import { SLOT_STAGES, leadMayAnswer, questionStatus } from './format.ts';
 import { actorsOn, leadAnswers, type NextSteps, type StepActor } from './steps.ts';
+import { outsideHarness, type ScopeView } from './scope.ts';
 import type {
+  PlannedTaskView,
   AttemptRow,
   OperatorQuestion,
   OperatorView,
@@ -372,6 +374,34 @@ export function writerEnvironmentStop(
   return s.summary ? { summary: s.summary } : {};
 }
 
+/** A planned task with the readiness reason the run slice gives it (revision 6). */
+export interface PlannedItem {
+  task: PlannedTaskView;
+  /**
+   * The scope task's `plain` when it is `not-ready` there («у задачи нет
+   * критериев приёмки»): the reason stays with the planned card.
+   */
+  notReady?: string;
+}
+
+/**
+ * The planned tasks (`planned[]`) and the tasks outside the harness that are
+ * not among them — one split for the Tasks screen and the Overview, so both
+ * list each task once.
+ */
+export function plannedSplit(view: Pick<OperatorView, 'planned'>, scope: ScopeView | undefined) {
+  const keys = plannedKeys(view);
+  const byKey = new Map(
+    (scope?.tasks ?? []).map((t) => [(t.connector ?? '') + '\0' + t.id, t] as const),
+  );
+  const planned: PlannedItem[] = (view.planned ?? []).map((task) => {
+    const st = byKey.get(task.connector + '\0' + task.taskId);
+    return st?.state === 'not-ready' && st.plain?.trim() ? { task, notReady: st.plain } : { task };
+  });
+  const outside = outsideHarness(scope).filter((t) => !keys.has((t.connector ?? '') + '\0' + t.id));
+  return { planned, outside };
+}
+
 /**
  * Held gates of a work (`resources.gates.held`, harness alpha.66): the gates
  * whose refusal without a retry this work's attempt caused (`own`), and
@@ -380,10 +410,15 @@ export function writerEnvironmentStop(
 export function gateHoldsOf(
   view: Pick<OperatorView, 'resources'>,
   w: Pick<WorkView, 'id' | 'blockers'>,
-): { own: { repositoryId: string; gate: string }[]; waits: boolean } {
+): { own: { repositoryId: string; gate: string }[]; waits: boolean; plain?: string } {
   const own = (view.resources?.gates.held ?? []).filter((h) => h.workId === w.id);
-  const waits = w.blockers.some((b) => b.code === 'ENVIRONMENT_GATE_HELD');
-  return { own: own.map(({ repositoryId, gate }) => ({ repositoryId, gate })), waits };
+  const stop = w.blockers.find((b) => b.code === 'ENVIRONMENT_GATE_HELD');
+  const plain = stop?.plain?.trim();
+  return {
+    own: own.map(({ repositoryId, gate }) => ({ repositoryId, gate })),
+    waits: stop !== undefined,
+    ...(plain ? { plain } : {}),
+  };
 }
 
 /**

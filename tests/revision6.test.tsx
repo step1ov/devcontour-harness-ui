@@ -34,7 +34,10 @@ import {
   type WorkDetailView,
   type WorkTrack,
 } from '../src/index.ts';
-import { splitQuestions, taskCard } from '../src/model/tasks.ts';
+import { plannedSplit, splitQuestions, taskCard } from '../src/model/tasks.ts';
+import { decisionActor } from '../src/model/track.ts';
+import { shapeOf } from '../src/components/Track.tsx';
+import { scopeOf } from '../src/model/scope.ts';
 import { parseRoute } from '../src/app/route.ts';
 import { asAlpha65 } from './legacy.ts';
 
@@ -80,8 +83,31 @@ test('track tones: the harness state alone picks the colour; rework violet; unkn
   assert.equal(t('waiting'), 'waiting');
   assert.equal(t('skipped'), 'skipped');
   assert.equal(trackTone({ kind: 'diagnosis', state: 'decision' }), 'decision');
+  // Rework: passed solid violet, ahead a violet outline.
   assert.equal(t('passed', { rework: 1 }), 'rework');
-  assert.equal(t('planned', { rework: 1 }), 'rework');
+  assert.equal(t('planned', { rework: 1 }), 'rework-planned');
+  // A person's decision is not the lead's blue: by `actor`, else by kind or the harness label.
+  const d = (extra: Json) => trackTone({ state: 'decision', label: 'x', ...extra } as never);
+  assert.equal(d({ kind: 'diagnosis' }), 'decision');
+  assert.equal(d({ kind: 'reset', label: 'ещё попытки от ведущего' }), 'decision');
+  assert.equal(d({ kind: 'reset', label: 'сброс попыток человеком' }), 'human');
+  assert.equal(d({ kind: 'reset', label: 'attempts reset by a human' }), 'human');
+  assert.equal(d({ kind: 'user-decision', label: 'решение человека' }), 'human');
+  assert.equal(d({ kind: 'reset', label: 'ещё попытки от ведущего', actor: 'user' }), 'human');
+  assert.equal(d({ kind: 'user-decision', actor: 'lead' }), 'decision');
+  assert.equal(decisionActor({ kind: 'code', label: 'код' }), undefined);
+  assert.equal(
+    shapeOf({ step: { kind: 'reset', state: 'decision', label: 'сброс попыток человеком' } }),
+    'bar',
+  );
+  assert.equal(
+    shapeOf({ step: { kind: 'diagnosis', state: 'planned', label: 'разбор ведущего' } }),
+    'diamond',
+  );
+  assert.equal(
+    shapeOf({ step: { kind: 'accepted', state: 'planned', label: 'принято' } }),
+    'square',
+  );
   // A failed or running rework step keeps its own colour: red and green say more.
   assert.equal(t('failed', { rework: 1 }), 'failed');
   assert.equal(t('current', { rework: 1 }), 'current');
@@ -158,20 +184,28 @@ test('track groups: one segment per attempt run, decisions and the end on their 
   );
 });
 
-test('the card line: accessible words per segment, tooltips for the mouse, clipped steps said', () => {
+test('the card line: one focusable button, the step list in a tooltip tied to it, clipped steps said', () => {
   const w = view.works.find((x) => x.id === 'import-csv')!;
   const m = html(<TrackLine track={w.track!} lang="ru" name="import-csv" />);
-  assert.match(m, /<ol class="hui-track-line" aria-label="Путь задачи import-csv">/);
-  const t = shown(m);
+  // One tabbable trigger per line with a name; the dots are hidden from the tree.
+  assert.equal((m.match(/<button/g) ?? []).length, 1);
+  const button = /<button[^>]*>/.exec(m)![0];
+  assert.match(button, /type="button"/);
+  assert.match(button, /aria-label="Путь задачи import-csv"/);
+  assert.match(button, /aria-expanded="false"/);
+  const id = /aria-describedby="([^"]+)"/.exec(button)![1]!;
+  const tip = new RegExp(
+    `<span role="tooltip" id="${id.replace(/[:]/g, '\\:')}"[^>]*>([\\s\\S]*?)</span>`,
+  ).exec(m);
+  assert.ok(tip, 'the tooltip is tied to the button');
+  const words = shown(tip![1]!);
   assert.match(
-    t,
+    words,
     /попытка 2: code — пройдено; checks — пройдено; review — не прошло \(review rejected\)/,
   );
-  assert.match(t, /lead diagnosis — ждёт/);
-  // Every dot is decorative; the tooltip repeats the sr text and is hidden from the tree.
-  assert.doesNotMatch(m, /role="tooltip"/);
-  assert.match(m, /class="hui-tooltip" aria-hidden="true"|aria-hidden="true" class="hui-tooltip"/);
-  assert.match(m, /data-tone="current"|data-tone="waiting"/);
+  assert.match(words, /lead diagnosis — ждёт/);
+  assert.match(m, /class="hui-track-line" aria-hidden="true"/);
+  assert.match(m, /data-tone="waiting"/);
   assert.match(m, /data-shape="diamond"/);
   const clipped = html(
     <TrackLine track={{ steps: w.track!.steps.slice(-3), truncated: 15 }} lang="ru" name="x" />,
@@ -179,6 +213,32 @@ test('the card line: accessible words per segment, tooltips for the mouse, clipp
   assert.match(shown(clipped), /\+15 15 ранних шагов не показаны \(предел пути\)/);
   // A track without steps draws nothing.
   assert.equal(html(<TrackLine track={{ steps: [] }} lang="ru" name="x" />), '');
+});
+
+test('track marks differ by shape too: failed ✕, waiting ring, current ring, rework outline (CSS)', () => {
+  const css = readFileSync(new URL('../src/components/styles.css', import.meta.url), 'utf8');
+  const rule = (tone: string) =>
+    new RegExp(`\\.hui-dot\\[data-tone='${tone}'\\] \\{([^}]*)\\}`).exec(css)?.[1] ?? '';
+  assert.match(rule('failed'), /clip-path: polygon/);
+  assert.match(rule('waiting'), /background: transparent;[\s\S]*border: 2\.5px solid/);
+  assert.match(rule('current'), /box-shadow: 0 0 0 2\.5px[\s\S]*animation: hui-pulse/);
+  assert.match(rule('passed'), /background: var\(--hui-passed\)/);
+  assert.match(rule('rework'), /background: var\(--hui-rework\)/);
+  assert.match(
+    rule('rework-planned'),
+    /background: transparent;[\s\S]*border: 2px solid var\(--hui-rework\)/,
+  );
+  assert.match(rule('human'), /background: var\(--hui-human\)/);
+  assert.match(css, /\.hui-dot\[data-shape='bar'\]/);
+  // Dark mode: passed and current are different colours.
+  const dark = /:where\(:root\[data-theme='dark'\]\) \{([^}]*)\}/.exec(css)![1]!;
+  const tok = (name: string) => new RegExp(`--hui-${name}: (#[0-9a-f]+)`).exec(dark)![1];
+  assert.notEqual(tok('passed'), tok('current'));
+  // Reduced motion reaches a TrackLine rendered outside a .hui root.
+  assert.match(
+    css,
+    /@media \(prefers-reduced-motion: reduce\) \{\s*\.hui-dot \{\s*animation: none !important;/,
+  );
 });
 
 test('the detail rows: step, attempt, label, state, time, reason; a legend in words', () => {
@@ -194,7 +254,7 @@ test('the detail rows: step, attempt, label, state, time, reason; a legend in wo
   assert.match(t, /18 — принято \(итог задачи\) впереди/);
   assert.match(
     t,
-    /Обозначения: пройдено идёт сейчас не прошло ждёт решение ведущего доработка после приёмки впереди пропущено/,
+    /Обозначения: пройдено идёт сейчас не прошло ждёт решение ведущего решение человека доработка после приёмки доработка впереди впереди пропущено/,
   );
   // The table scrolls in its own focusable region, never the page.
   assert.match(m, /class="hui-table-wrap" role="region" aria-label="Путь задачи" tabindex="0"/);
@@ -214,10 +274,7 @@ test('work detail: the path panel, and an older or a size-cut document says why 
   assert.match(m, /Путь задачи/);
   assert.match(m, /разбор ведущего ждёт/);
   // The lead diagnoses: the detail says the lead acts, not you.
-  assert.match(
-    m,
-    /ведущий: разобрать причину повторных отказов|ведущий — разобрать причину повторных отказов|разобрать причину повторных отказов/,
-  );
+  assert.match(m, /Ждёт: ведущий — разобрать причину повторных отказов\./);
   const old = detailOf(asAlpha65(read('../fixtures/ru/work.sample.json')));
   assert.equal(trackAbsence(old.work, old.viewRevision), 'old');
   assert.match(
@@ -419,7 +476,7 @@ test('planned tasks: cards with «ещё не утверждена», not listed
   assert.match(t, /Ещё не утверждены \(1\)/);
   assert.match(
     t,
-    /DEMO-6 · Печать отчёта ещё не утверждена DEMO-6: ещё не утверждена \(прочитана из источника, в план ещё не входит\) прочитана из трекера, в план ещё не входит после: export-csv/,
+    /DEMO-6 · Печать отчёта ещё не утверждена DEMO-6: ещё не утверждена \(прочитана из источника, в план ещё не входит\) Не готова: у задачи нет критериев приёмки\. после: export-csv/,
   );
   const clipped = shown(
     html(<Tasks view={viewOf({ ...ru, truncated: { planned: 3 } })} lang="ru" />),
@@ -491,7 +548,10 @@ test('«Посмотреть результат»: only the harness loopback add
   );
   assert.match(t, /принятый результат, коммит 3b1f9e0 · add-greeting/);
   assert.match(t, /запущено 11:45 · остановится само 13:45/);
-  assert.match(t, /npx harness preview-stop --state <каталог состояния> --preview web/);
+  assert.match(
+    t,
+    /npx harness preview-stop --state <каталог состояния> --preview web --repository app/,
+  );
   assert.match(t, /npx harness preview-start --state <каталог состояния> --ref accepted --ttl 2h/);
   assert.doesNotMatch(m, /<button|<form/);
   // An odd address is text, not a link.
@@ -603,9 +663,19 @@ test('a held gate (ENVIRONMENT_GATE_HELD): the lead’s move, in «Что зад
   // The card of the work whose attempt failed says it in plain words.
   const t = html(<Tasks view={viewRu} lang="ru" />);
   const card = t.slice(t.indexOf('data-testid="task-import-csv"'));
+  // The harness's own words (the work's stop), not a panel-made cause.
   assert.match(
-    shown(card),
-    /Проверка app\/e2e удержана: она зовёт список процессов, а в песочнице проверок его нет\. Это ход ведущего/,
+    card,
+    /data-testid="task-gate-held">gate e2e удержан: зовёт ps, а в песочнице проверок список процессов недоступен; ход ведущего/,
+  );
+  // Without the stop's text: the held-gate line of «что задействовано».
+  const noPlain = structuredClone(ru);
+  for (const b of noPlain.works.find((x: Json) => x.id === 'import-csv').blockers)
+    if (b.code === 'ENVIRONMENT_GATE_HELD') delete b.plain;
+  const np = html(<Tasks view={viewOf(noPlain)} lang="ru" />);
+  assert.match(
+    np.slice(np.indexOf('data-testid="task-import-csv"')),
+    /data-testid="task-gate-held">Удержано: app\/e2e \(работа import-csv\)/,
   );
   // A work that only waits for a held gate.
   const waits = structuredClone(ru);
@@ -613,10 +683,11 @@ test('a held gate (ENVIRONMENT_GATE_HELD): the lead’s move, in «Что зад
     .find((x: Json) => x.id === 'docs-page')
     .blockers.push({ code: 'ENVIRONMENT_GATE_HELD', plain: 'gate e2e удержан', actor: 'lead' });
   const wt = html(<Tasks view={viewOf(waits)} lang="ru" />);
-  assert.match(
-    shown(wt.slice(wt.indexOf('data-testid="task-docs-page"'))),
-    /Ждёт удержанную проверку: её чинит ведущий/,
-  );
+  const docsCard = wt.slice(wt.indexOf('data-testid="task-docs-page"'));
+  // The stop is the card's «Сейчас» line already: said once, the lead acts next.
+  assert.match(shown(docsCard), /Сейчас: gate e2e удержан\./);
+  assert.doesNotMatch(docsCard.split('data-testid="task-')[1]!, /task-gate-held/);
+  assert.match(shown(docsCard), /Дальше действует: ведущий/);
   // Without the fields (revision 5, or no hold): nothing.
   assert.doesNotMatch(html(<Tasks view={viewOf(asAlpha65(ru))} lang="ru" />), /task-gate-held/);
   const none = structuredClone(ru);
@@ -638,4 +709,128 @@ test('every command the panel shows gives --ttl a unit', () => {
   const all = shown(pages.join('\n'));
   assert.match(all, /harness lead begin --state <каталог состояния> --ttl 30m/);
   for (const m of all.matchAll(/--ttl\s+(\S+)/g)) assert.match(m[1]!, /^\d+[smh]\b/, m[0]);
+});
+
+test('an expired lead lease is not «в сессии»: the harness line says it, on Home and in the journal', () => {
+  const expired = structuredClone(ru);
+  expired.lead = {
+    active: false,
+    since: '2026-11-19T09:05:00.000Z',
+    until: '2026-11-19T09:35:00.000Z',
+    lastNote: { at: '2026-11-19T09:20:00.000Z', plain: 'разбираю отказы импорта' },
+    notes: [],
+    line: 'ведущий давно не отмечался (срок сессии истёк)',
+  };
+  const v = viewOf(expired);
+  for (const m of [
+    shown(html(<LeadSummary view={v} lang="ru" timeZone={TZ} />)),
+    shown(html(<LeadJournal view={v} lang="ru" timeZone={TZ} />)),
+  ]) {
+    assert.match(m, /не в сессии/);
+    assert.doesNotMatch(m, /в сессии с/);
+    assert.doesNotMatch(m, /отметка действует до/);
+    assert.match(m, /ведущий давно не отмечался \(срок сессии истёк\)/);
+  }
+  // Home: the harness line always, and the last note as a second line.
+  const home = html(<LeadSummary view={v} lang="ru" timeZone={TZ} />);
+  assert.ok(home.indexOf('data-testid="lead-line"') < home.indexOf('data-testid="lead-last-note"'));
+  assert.match(
+    shown(home),
+    /срок сессии истёк\) Последняя заметка \(09:20\): разбираю отказы импорта/,
+  );
+  // An active session still says since when, and the harness line too.
+  const active = shown(html(<LeadSummary view={viewRu} lang="ru" timeZone={TZ} />));
+  assert.match(
+    active,
+    /работает в сессии с 09:05[^]*ведущий работает: жду ответа[^]*Последняя заметка/,
+  );
+});
+
+test('every lead journal kind the harness emits has words; unknown kinds stay as is', () => {
+  const kinds: [string, string, string][] = [
+    ['note', 'заметка', 'note'],
+    ['command', 'команда harness', 'harness command'],
+    ['begin', 'начало сессии', 'session start'],
+    ['end', 'конец сессии', 'session end'],
+    ['release-done', 'итог выпуска', 'release summary'],
+  ];
+  const j = structuredClone(ru);
+  j.lead.notes = [
+    ...kinds.map(([kind], i) => ({
+      at: `2026-11-19T10:0${i}:00.000Z`,
+      kind,
+      action: 'lead.' + kind,
+      plain: 'запись ' + kind,
+    })),
+    { at: '2026-11-19T10:09:00.000Z', kind: 'new-kind', action: 'lead.x', plain: 'запись new' },
+  ];
+  const ruText = shown(html(<LeadJournal view={viewOf(j)} lang="ru" timeZone={TZ} />));
+  const enText = shown(html(<LeadJournal view={viewOf(j)} lang="en" timeZone={TZ} />));
+  for (const [kind, r, e] of kinds) {
+    assert.match(ruText, new RegExp(`${r} запись ${kind}`), kind);
+    assert.match(enText, new RegExp(`${e} запись ${kind}`), kind);
+  }
+  assert.match(ruText, /new-kind запись new/);
+});
+
+test('a journal cut to nothing says only the cut: no «(N)», no «записей пока нет»', () => {
+  const j = structuredClone(ru);
+  j.lead.notes = [];
+  j.truncated = { leadNotes: 7 };
+  const t = shown(html(<LeadJournal view={viewOf(j)} lang="ru" />));
+  assert.match(t, /Журнал ведущего Ещё 7 записей журнала не показаны/);
+  assert.doesNotMatch(t, /Журнал ведущего \(/);
+  assert.doesNotMatch(t, /Записей в журнале пока нет/);
+  // A really empty journal says so.
+  const e = structuredClone(ru);
+  e.lead.notes = [];
+  assert.match(
+    shown(html(<LeadJournal view={viewOf(e)} lang="ru" />)),
+    /Записей в журнале пока нет\./,
+  );
+});
+
+test('Overview of a revision 6 view without lead and forecast says the lead has not started', () => {
+  const { lead: _l, forecast: _f, ...bare } = structuredClone(ru);
+  const o = html(<Overview view={viewOf(bare)} lang="ru" />);
+  assert.match(o, /data-testid="lead-summary"/);
+  assert.match(shown(o), /Ведущий ещё не начинал сессию и не вёл журнал\./);
+  // Revision 5: no panel.
+  assert.doesNotMatch(html(<Overview view={viewOf(asAlpha65(ru))} lang="ru" />), /lead-summary/);
+});
+
+test('planned tasks: the not-ready reason stays, who approves comes from the policy, both screens agree', () => {
+  const split = plannedSplit(viewRu, scopeOf(viewRu));
+  assert.deepEqual(
+    split.planned.map((p) => [p.task.key, p.notReady]),
+    [['DEMO-6', 'у задачи нет критериев приёмки']],
+  );
+  assert.equal(split.outside.length, 0);
+  const tasks = shown(html(<Tasks view={viewRu} lang="ru" />));
+  const over = shown(html(<Overview view={viewRu} lang="ru" />));
+  for (const m of [tasks, over]) {
+    assert.match(m, /Не готова: у задачи нет критериев приёмки\./);
+    // No blanket «nothing is needed»: the policy says who approves (agent mode — the lead).
+    assert.match(m, /попыток не было\. План по ним согласует ведущий \(так задано в политике\)\./);
+    assert.doesNotMatch(m, /попыток не было, от вас ничего не нужно/);
+    // Listed once: not under «не переданы».
+    assert.doesNotMatch(m, /Ещё не переданы в harness \(/);
+  }
+  // With operator approval the plan is yours.
+  const op = structuredClone(ru);
+  op.settings.approvalMode = 'operator';
+  assert.match(
+    shown(html(<Tasks view={viewOf(op)} lang="ru" />)),
+    /План по ним утверждаете вы \(в политике план согласует оператор\)\./,
+  );
+  // The harness line says where the task comes from; the panel does not repeat it.
+  assert.doesNotMatch(tasks, /прочитана из трекера, в план ещё не входит/);
+  // A planned work no longer claims nothing is needed.
+  const p = structuredClone(ru);
+  const docs = p.works.find((w: Json) => w.id === 'docs-page');
+  docs.planned = true;
+  assert.match(
+    shown(html(<Tasks view={viewOf(p)} lang="ru" />)),
+    /План этой работы ещё не согласован; попыток не было\./,
+  );
 });

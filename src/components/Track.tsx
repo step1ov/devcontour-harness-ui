@@ -2,12 +2,15 @@
 // line of segments on the task card and the full rows in the work detail.
 // Labels, reasons and times are the harness's; the panel only colours the
 // state the harness names (planned grey, current green and pulsing, failed
-// red, waiting amber, lead decision blue, rework violet, skipped muted) and
-// says the same in words. Pure render; no fetching, no writes.
+// red ✕, waiting amber ring, lead decision blue diamond, a person's decision
+// dark bar, rework solid violet / violet outline ahead, skipped muted) and
+// says the same in words. The card line is one focusable button: focus or a
+// tap opens the step list. No fetching, no writes.
 
+import { useId, useRef, useState } from 'react';
 import { dict, knownLabel, type Dict, type Lang } from '../model/dict.ts';
 import {
-  DECISION_KINDS,
+  decisionActor,
   drawnSteps,
   trackGroups,
   type DrawnStep,
@@ -17,11 +20,15 @@ import {
 import type { WorkTrack } from '../model/view.ts';
 import { StatusDot, type DotShape } from './ui/status-dot.tsx';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table.tsx';
-import { Tooltip } from './ui/tooltip.tsx';
 import { clockOf } from './common.tsx';
 
-const shapeOf = (d: DrawnStep): DotShape =>
-  DECISION_KINDS.has(d.step.kind) ? 'diamond' : d.step.kind === 'accepted' ? 'square' : 'round';
+/** Decision of the lead — diamond; of a person — bar; the end — square; a step — round. */
+export const shapeOf = (d: Pick<DrawnStep, 'step'>): DotShape => {
+  const who = decisionActor(d.step);
+  if (who === 'user') return 'bar';
+  if (who !== undefined) return 'diamond';
+  return d.step.kind === 'accepted' ? 'square' : 'round';
+};
 
 /** The state word of a drawn step: the dictionary's, or the harness code as is. */
 export function stateWord(d: Pick<DrawnStep, 'state'>, t: Dict): string {
@@ -61,8 +68,10 @@ const RANK: TrackTone[] = [
   'current',
   'waiting',
   'decision',
+  'human',
   'rework',
   'passed',
+  'rework-planned',
   'planned',
   'skipped',
 ];
@@ -71,8 +80,9 @@ const groupTone = (g: TrackGroup): TrackTone =>
 
 /**
  * The compact path on a task card: one segment per attempt (its steps as
- * cells) and one mark per decision or end. Every segment carries its words
- * for assistive technology; the tooltip repeats them for the mouse.
+ * cells) and one mark per decision or end, inside one button. Focus, a tap
+ * or hovering opens the step list (a tooltip tied with `aria-describedby`);
+ * Escape closes it.
  */
 export function TrackLine({
   track,
@@ -81,45 +91,71 @@ export function TrackLine({
 }: {
   track: WorkTrack;
   lang?: Lang;
-  /** The work's name, for the list label. */
+  /** The work's name, for the button label. */
   name: string;
 }) {
   const t = dict(lang);
+  const id = useId();
+  const [open, setOpen] = useState(false);
+  // The state before a tap: focus opens first, the click then must not close it.
+  const before = useRef<boolean | undefined>(undefined);
   const groups = trackGroups(track);
   if (!groups.length) return null;
   const dropped =
     Number.isSafeInteger(track.truncated) && track.truncated! > 0 ? track.truncated! : 0;
   return (
     <div className="hui-track" data-testid="task-track">
-      <ol className="hui-track-line" aria-label={t.r6.trackLabel(name)}>
-        {dropped ? (
-          <li className="hui-track-more" data-testid="track-earlier">
-            <span aria-hidden="true">+{dropped}</span>
-            <span className="hui-sr">{t.r6.trackEarlier(dropped)}</span>
-          </li>
-        ) : null}
-        {groups.map((g, i) => {
-          const words = groupWords(g, t);
-          return (
-            <li
-              key={i}
-              className="hui-track-group"
-              data-kind={g.kind}
-              data-tone={groupTone(g)}
-              data-rework={g.rework !== undefined ? '' : undefined}
-            >
-              <Tooltip content={words} decorative>
+      <span className="hui-track-root" data-open={open ? '' : undefined}>
+        <button
+          type="button"
+          className="hui-track-trigger"
+          aria-label={t.r6.trackLabel(name)}
+          aria-describedby={id}
+          aria-expanded={open}
+          onPointerDown={() => (before.current = open)}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setOpen(false)}
+          onClick={() => {
+            const was = before.current;
+            before.current = undefined;
+            setOpen(was === undefined ? (o) => !o : !was);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') setOpen(false);
+          }}
+        >
+          <span className="hui-track-line" aria-hidden="true">
+            {dropped ? (
+              <span className="hui-track-more" data-testid="track-earlier">
+                +{dropped}
+              </span>
+            ) : null}
+            {groups.map((g, i) => (
+              <span
+                key={i}
+                className="hui-track-group"
+                data-kind={g.kind}
+                data-tone={groupTone(g)}
+                data-rework={g.rework !== undefined ? '' : undefined}
+              >
                 <span className="hui-track-cells">
                   {g.steps.map((d, k) => (
                     <StatusDot key={k} tone={d.tone} shape={shapeOf(d)} data-state={d.state} />
                   ))}
                 </span>
-              </Tooltip>
-              <span className="hui-sr">{words}</span>
-            </li>
-          );
-        })}
-      </ol>
+              </span>
+            ))}
+          </span>
+        </button>
+        <span role="tooltip" id={id} className="hui-tooltip hui-track-tip" data-side="bottom">
+          <ol className="hui-track-steps">
+            {dropped ? <li>{t.r6.trackEarlier(dropped)}</li> : null}
+            {groups.map((g, i) => (
+              <li key={i}>{groupWords(g, t)}</li>
+            ))}
+          </ol>
+        </span>
+      </span>
     </div>
   );
 }
@@ -133,7 +169,9 @@ export function TrackLegend({ lang = 'ru' }: { lang?: Lang }) {
     ['failed', 'round'],
     ['waiting', 'round'],
     ['decision', 'diamond'],
+    ['human', 'bar'],
     ['rework', 'round'],
+    ['rework-planned', 'round'],
     ['planned', 'round'],
     ['skipped', 'round'],
   ];

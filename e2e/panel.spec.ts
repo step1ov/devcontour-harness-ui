@@ -366,23 +366,44 @@ test('an open tab offers a reload when the panel server serves a new build (F-AF
   await expect(prompt.getByRole('button', { name: 'Обновить страницу' })).toBeVisible();
 });
 
-test('task path: a segment line on each card, the current step pulses unless motion is reduced', async ({
+test('task path: one focusable line per card, focus or tap opens the steps, Escape closes', async ({
   page,
 }) => {
   await open(page, '#/tasks');
   const card = page.getByTestId('task-locale-format');
-  const line = card.getByRole('list', { name: 'Путь задачи Format dates by locale' });
-  await expect(line).toBeVisible();
-  // Words for assistive technology on every segment, the colour only repeats them.
-  await expect(line).toContainText('попытка 2: код — пройдено; проверки — идёт сейчас');
-  await expect(line).toContainText('разбор ведущего — решение (D1: слабое покрытие)');
+  const trigger = card.getByRole('button', { name: 'Путь задачи Format dates by locale' });
+  await expect(trigger).toBeVisible();
+  const tip = card.getByRole('tooltip');
+  await expect(tip).toBeHidden();
+  // The steps are the button's description for assistive technology.
+  await expect(trigger).toHaveAccessibleDescription(
+    /разбор ведущего — решение \(D1: слабое покрытие\)[\s\S]*попытка 2: код — пройдено; проверки — идёт сейчас/,
+  );
+  // Keyboard: Tab reaches it and the list opens; Escape closes it.
+  await trigger.focus();
+  await expect(tip).toBeVisible();
+  await expect(tip).toContainText('попытка 2: код — пройдено; проверки — идёт сейчас');
+  await page.keyboard.press('Escape');
+  await expect(tip).toBeHidden();
+  await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+  // A tap (click) opens it and a second tap closes it.
+  await page.mouse.move(0, 0);
+  await trigger.blur();
+  await trigger.click();
+  await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  await expect(tip).toBeVisible();
+  await trigger.click();
+  await expect(trigger).toHaveAttribute('aria-expanded', 'false');
   const dot = card.locator('.hui-dot[data-tone="current"]');
   await expect(dot).toHaveCount(1);
   expect(await dot.evaluate((el) => getComputedStyle(el).animationName)).toBe('hui-pulse');
-  // Hovering a segment shows its words.
-  const group = line.locator('.hui-track-group').nth(2);
-  await group.hover();
-  await expect(group.locator('.hui-tooltip')).toBeVisible();
+  // States differ by mark too: failed is a cross, waiting a ring.
+  const failed = page.locator('.hui-dot[data-tone="failed"]').first();
+  expect(await failed.evaluate((el) => getComputedStyle(el).clipPath)).toMatch(/polygon/);
+  const waiting = page.locator('.hui-dot[data-tone="waiting"]').first();
+  expect(await waiting.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe(
+    'rgba(0, 0, 0, 0)',
+  );
   // Each colour of the owner's palette is used in the demo.
   for (const tone of ['passed', 'current', 'failed', 'waiting', 'decision', 'rework', 'planned'])
     expect(await page.locator(`.hui-dot[data-tone="${tone}"]`).count(), tone).toBeGreaterThan(0);
@@ -421,6 +442,6 @@ test('the lead tab and the home panels: lead, previews, what is used, planned ta
   await expect(page.getByTestId('tasks-planned')).toContainText('DEMO-6 · Печать отчёта');
   await expect(page.getByTestId('tasks-planned')).toContainText('ещё не утверждена');
   await expect(page.getByTestId('task-import-csv').getByTestId('task-gate-held')).toContainText(
-    'Проверка app/e2e удержана',
+    'gate e2e удержан: зовёт ps',
   );
 });

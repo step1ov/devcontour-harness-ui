@@ -47,7 +47,8 @@ import {
   scopeOf,
   taskName,
 } from '../model/scope.ts';
-import { HARNESS_STAGES, leadStopOf, splitQuestions } from '../model/tasks.ts';
+import { HARNESS_STAGES, leadStopOf, plannedSplit, splitQuestions } from '../model/tasks.ts';
+import { PlannedBlock } from './Planned.tsx';
 import { ForecastRings } from './Forecast.tsx';
 import { LeadSummary, hasLeadPanel } from './Lead.tsx';
 import { PreviewsPanel } from './Previews.tsx';
@@ -184,7 +185,8 @@ export function Overview({
   );
   const overall = overallProgress(view);
   const scope = scopeOf(view);
-  const outside = outsideHarness(scope);
+  // Revision 6: planned tasks are listed apart, as on the Tasks screen (each task once).
+  const { planned, outside } = plannedSplit(view, scope);
   const left = scopeLeft(view);
   const average = attemptAverage(view);
   const unfinished = overall.total - overall.done - overall.cancelled;
@@ -443,6 +445,7 @@ export function Overview({
           </ol>
         ) : null}
         {view.truncated?.works ? <p className="hui-muted">{o.planClipped}</p> : null}
+        <PlannedBlock view={view} items={planned} lang={lang} compact testid="overview-planned" />
         {scope ? (
           outside.length || overall.outsideUnlisted ? (
             <>

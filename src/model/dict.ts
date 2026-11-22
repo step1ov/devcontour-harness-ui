@@ -1407,7 +1407,14 @@ const ru = {
     leadOld: 'Журнал ведущего передаёт harness 0.1.0-alpha.66 и новее.',
     leadOpen: 'Журнал ведущего',
     leadActivity: 'События ведущего в ленте «Кто что делал»',
-    noteKind: { note: 'заметка', command: 'команда harness', release: 'итог выпуска' } as Labels,
+    noteKind: {
+      note: 'заметка',
+      command: 'команда harness',
+      begin: 'начало сессии',
+      end: 'конец сессии',
+      'release-done': 'итог выпуска',
+    } as Labels,
+    leadJournalTitle: 'Журнал ведущего',
     releaseState: {
       'in-work': 'код в работе',
       'code-accepted': 'код принят, ведущий работает',
@@ -1437,11 +1444,10 @@ const ru = {
     plannedBadge: 'ещё не утверждена',
     plannedTitle: (n: number) => `Ещё не утверждены (${n})`,
     plannedIntro:
-      'Эти задачи есть в плане или в трекере, но план по ним ещё не согласован: попыток не было, от вас ничего не нужно.',
-    plannedFrom: {
-      validated: 'в проверенном, но не согласованном плане',
-      read: 'прочитана из трекера, в план ещё не входит',
-    } as Labels,
+      'Эти задачи есть в плане или в трекере, но план по ним ещё не согласован: попыток не было.',
+    plannedByOperator: 'План по ним утверждаете вы (в политике план согласует оператор).',
+    plannedByLead: 'План по ним согласует ведущий (так задано в политике).',
+    plannedNotReady: (why: string) => `Не готова: ${why}.`,
     plannedAfter: (w: string) => `после: ${w}`,
     plannedClipped: (n: number) =>
       `Ещё ${rp(n, 'задача', 'задачи', 'задач')} не ${n % 10 === 1 && n % 100 !== 11 ? 'показана' : 'показаны'} (предел представления).`,
@@ -1458,10 +1464,6 @@ const ru = {
     trackEarlier: (n: number) =>
       `${rp(n, 'ранний шаг', 'ранних шага', 'ранних шагов')} не ${n % 10 === 1 && n % 100 !== 11 ? 'показан' : 'показаны'} (предел пути)`,
     trackEnd: 'итог задачи',
-    gateHeld: (gates: string) =>
-      `Проверка ${gates} удержана: она зовёт список процессов, а в песочнице проверок его нет. Это ход ведущего — поменять проверку или тест; от вас ничего не нужно.`,
-    gateHeldWaits:
-      'Ждёт удержанную проверку: её чинит ведущий (поменять проверку или тест); от вас ничего не нужно.',
     resourcesHeld: 'Удержанные проверки',
     leadBegin: 'Ведущий начинает сессию командой',
     trackMissing: 'Путь задачи передаёт harness 0.1.0-alpha.66 и новее.',
@@ -1492,7 +1494,9 @@ const ru = {
       failed: 'не прошло',
       waiting: 'ждёт',
       decision: 'решение ведущего',
+      human: 'решение человека',
       rework: 'доработка после приёмки',
+      'rework-planned': 'доработка впереди',
       skipped: 'пропущено',
     } as Labels,
     // «Что задействовано».
@@ -2533,7 +2537,14 @@ const en: Dict = {
     leadOld: 'The lead journal comes from harness 0.1.0-alpha.66 and newer.',
     leadOpen: 'Lead journal',
     leadActivity: 'Lead events in «Who did what»',
-    noteKind: { note: 'note', command: 'harness command', release: 'release summary' },
+    noteKind: {
+      note: 'note',
+      command: 'harness command',
+      begin: 'session start',
+      end: 'session end',
+      'release-done': 'release summary',
+    },
+    leadJournalTitle: 'Lead journal',
     releaseState: {
       'in-work': 'code in work',
       'code-accepted': 'code accepted, the lead is working',
@@ -2561,11 +2572,10 @@ const en: Dict = {
     plannedBadge: 'not approved yet',
     plannedTitle: (n: number) => `Not approved yet (${n})`,
     plannedIntro:
-      'These tasks are in the plan or in the tracker, but their plan is not approved yet: nothing ran, nothing is needed from you.',
-    plannedFrom: {
-      validated: 'in a checked plan that is not approved',
-      read: 'read from the tracker, not in a plan yet',
-    },
+      'These tasks are in the plan or in the tracker, but their plan is not approved yet: nothing ran.',
+    plannedByOperator: 'You approve their plan (the policy has the operator approve plans).',
+    plannedByLead: 'The lead approves their plan (as the policy says).',
+    plannedNotReady: (why: string) => `Not ready: ${why}.`,
     plannedAfter: (w: string) => `after: ${w}`,
     plannedClipped: (n: number) => `${ep(n, 'more task', 'more tasks')} not shown (view limit).`,
     plannedWork: 'The plan of this work is not approved yet; nothing ran.',
@@ -2578,10 +2588,6 @@ const en: Dict = {
     trackRework: (n: number) => `rework ${n}`,
     trackEarlier: (n: number) => `${ep(n, 'earlier step', 'earlier steps')} not shown (path limit)`,
     trackEnd: 'end of the task',
-    gateHeld: (gates: string) =>
-      `Check ${gates} is held: it asks for the process list, and the check sandbox has none. This is the lead's move — change the check or the test; nothing is needed from you.`,
-    gateHeldWaits:
-      'Waits for a held check: the lead fixes it (changes the check or the test); nothing is needed from you.',
     resourcesHeld: 'Held checks',
     leadBegin: 'The lead starts a session with',
     trackMissing: 'The task path comes from harness 0.1.0-alpha.66 and newer.',
@@ -2612,7 +2618,9 @@ const en: Dict = {
       failed: 'failed',
       waiting: 'waiting',
       decision: 'lead decision',
+      human: 'human decision',
       rework: 'rework after acceptance',
+      'rework-planned': 'rework ahead',
       skipped: 'skipped',
     },
     resourcesTitle: 'What is used',

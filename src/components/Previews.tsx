@@ -83,7 +83,7 @@ export function PreviewsPanel({
                 <div className="hui:text-sm">
                   {k.previewStop}{' '}
                   <code data-testid="preview-stop">
-                    {`npx harness preview-stop --state ${k.stateDir} --preview ${p.id}`}
+                    {`npx harness preview-stop --state ${k.stateDir} --preview ${p.id} --repository ${p.repositoryId}`}
                   </code>
                 </div>
               </li>

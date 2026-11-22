@@ -8,12 +8,48 @@ import type { TrackStep, WorkTrack, WorkView } from './view.ts';
 
 /**
  * How a step is drawn. `planned` grey, `current` green and pulsing,
- * `passed` green, `failed` red, `waiting` amber, `decision` blue (a lead or
- * human decision: diagnosis, reset), `rework` violet (a passed or planned
- * step of a rework after acceptance), `skipped` muted.
+ * `passed` green, `failed` red, `waiting` amber, `decision` blue (a lead
+ * decision: diagnosis, the lead's reset), `human` dark neutral (a person's
+ * decision or reset), `rework` solid violet (a passed step of a rework after
+ * acceptance), `rework-planned` violet outline (a rework step still ahead),
+ * `skipped` muted.
  */
 export type TrackTone =
-  'planned' | 'current' | 'passed' | 'failed' | 'waiting' | 'decision' | 'rework' | 'skipped';
+  | 'planned'
+  | 'current'
+  | 'passed'
+  | 'failed'
+  | 'waiting'
+  | 'decision'
+  | 'human'
+  | 'rework'
+  | 'rework-planned'
+  | 'skipped';
+
+/** Who took a decision step: the lead (or the harness itself), or a person. */
+export type DecisionActor = 'lead' | 'user' | 'harness';
+
+/** The harness's labels of a reset by a person (`track.ts`, «сброс попыток человеком»). */
+const HUMAN_RESET_LABELS: ReadonlySet<string> = new Set([
+  'сброс попыток человеком',
+  'attempts reset by a human',
+]);
+
+/**
+ * Who decides a decision-type step (`diagnosis`, `reset`, `user-decision`).
+ * A newer harness names it (`actor`); until then the kind and the harness's
+ * own label tell it: `user-decision` and a reset by a person are human,
+ * other diagnoses and resets are the lead's. `undefined` for other kinds.
+ */
+export function decisionActor(step: Pick<TrackStep, 'kind' | 'label'>): DecisionActor | undefined {
+  if (!DECISION_KINDS.has(step.kind)) return undefined;
+  const sent = (step as { actor?: unknown }).actor;
+  if (sent === 'lead' || sent === 'user' || sent === 'harness') return sent;
+  if (step.kind === 'user-decision') return 'user';
+  if (step.kind === 'reset' && HUMAN_RESET_LABELS.has(step.label.trim().toLowerCase()))
+    return 'user';
+  return 'lead';
+}
 
 /** Steps of one attempt run (code → checks → review → integration). */
 export const PHASE_KINDS: ReadonlySet<string> = new Set([
@@ -58,17 +94,19 @@ export interface TrackGroup {
   steps: DrawnStep[];
 }
 
-/** The colour of a step, from its state alone (and the rework mark). */
+/** The colour of a step, from its state (and the rework mark and who decided). */
 export function trackTone(
-  step: Pick<TrackStep, 'state' | 'kind' | 'rework'>,
+  step: Pick<TrackStep, 'state' | 'kind' | 'rework'> & { label?: string },
   state: string = step.state,
 ): TrackTone {
   if (state === 'failed') return 'failed';
   if (state === 'current') return 'current';
   if (state === 'waiting') return 'waiting';
-  if (state === 'decision') return 'decision';
+  if (state === 'decision')
+    return decisionActor({ ...step, label: step.label ?? '' }) === 'user' ? 'human' : 'decision';
   if (state === 'skipped') return 'skipped';
-  if (step.rework !== undefined && (state === 'passed' || state === 'planned')) return 'rework';
+  if (step.rework !== undefined && state === 'passed') return 'rework';
+  if (step.rework !== undefined && state === 'planned') return 'rework-planned';
   if (state === 'passed') return 'passed';
   // `planned`, or a state this build does not know: grey, with its own word.
   return 'planned';

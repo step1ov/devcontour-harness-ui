@@ -42,7 +42,8 @@ function SessionLine({
       <Badge tone={l.active ? 'ok' : 'neutral'} data-testid="lead-active">
         {l.active ? t.r6.leadActive : t.r6.leadInactive}
       </Badge>
-      {l.since && !l.endedAt ? (
+      {/* «в сессии с …» only while the session holds: an expired lease is not a session. */}
+      {l.active && l.since ? (
         <span className="hui:text-sm">{t.r6.leadSince(clockOf(l.since, t, timeZone, now))}</span>
       ) : null}
       {l.endedAt ? (
@@ -86,13 +87,18 @@ export function LeadSummary({
   journalHref?: string;
 }) {
   const t = dict(lang);
-  if (!hasLeadPanel(view)) return null;
+  // Revision 6 without a lead record or a forecast still says the lead has not started.
+  if (!hasLeadPanel(view) && view.viewRevision < 6) return null;
   const l = view.lead;
   return (
     <Block t={t} title={t.r6.leadTitle} testid="lead-summary" term="lead">
       {l ? (
         <>
           <SessionLine view={view} lang={lang} timeZone={timeZone} now={now} />
+          {/* The harness line always (it says an expired lease); the last note as a second line. */}
+          <p className="hui:text-sm" data-testid="lead-line">
+            {l.line}
+          </p>
           {l.lastNote ? (
             <p className="hui:text-sm" data-testid="lead-last-note">
               <span className="hui:text-muted-foreground">
@@ -100,11 +106,7 @@ export function LeadSummary({
               </span>{' '}
               {l.lastNote.plain}
             </p>
-          ) : (
-            <p className="hui:text-sm" data-testid="lead-line">
-              {l.line}
-            </p>
-          )}
+          ) : null}
         </>
       ) : (
         <p className="hui-muted">{view.viewRevision >= 6 ? t.r6.leadNone : t.r6.leadOld}</p>
@@ -192,10 +194,15 @@ export function LeadJournal({
       {l ? (
         <div className="hui-panel" data-testid="lead-notes">
           <Heading t={t}>
-            {t.r6.leadJournal(l.notes.length + (view.truncated?.leadNotes ?? 0))}
+            {l.notes.length
+              ? t.r6.leadJournal(l.notes.length + (view.truncated?.leadNotes ?? 0))
+              : t.r6.leadJournalTitle}
           </Heading>
           {l.notes.length === 0 ? (
-            <p className="hui-muted">{t.r6.leadJournalEmpty}</p>
+            // Notes dropped by the view limit are not «no entries»: only the clipping is said.
+            view.truncated?.leadNotes ? null : (
+              <p className="hui-muted">{t.r6.leadJournalEmpty}</p>
+            )
           ) : (
             <ul className="hui-list">
               {l.notes.map((n, i) => (

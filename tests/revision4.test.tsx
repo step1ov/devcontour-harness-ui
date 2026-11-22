@@ -504,8 +504,15 @@ test('the run slice: tasks not handed to the harness in Tasks and the Overview, 
   const o = shown(overview(ru));
   // With a forecast the total of the release is the ring's; this line is the harness works only.
   assert.match(o, /В harness: принято 1 из 5 · в работе 1 · ждут 3 · ещё не переданы в harness: 1/);
-  assert.match(o, /Ещё не переданы в harness \(1\)/);
-  assert.match(o, /DEMO-6: Печать отчёта ждёт готовности у задачи нет критериев приёмки/);
+  // Revision 6: the same split as Tasks — DEMO-6 is listed as planned, with its not-ready reason.
+  assert.doesNotMatch(o, /Ещё не переданы в harness \(/);
+  assert.match(
+    o,
+    /Ещё не утверждены \(1\)[^]*DEMO-6 · Печать отчёта ещё не утверждена[^]*Не готова: у задачи нет критериев приёмки\./,
+  );
+  const oldO = shown(overview({ ...ru, planned: undefined }));
+  assert.match(oldO, /Ещё не переданы в harness \(1\)/);
+  assert.match(oldO, /DEMO-6: Печать отчёта ждёт готовности у задачи нет критериев приёмки/);
   const t = shown(html(<Tasks view={viewOf(ru)} lang="ru" />));
   // Revision 6: DEMO-6 is a planned task — its own «ещё не утверждена» card, not a second listing.
   assert.match(t, /Ещё не утверждены \(1\)/);
