@@ -1,11 +1,12 @@
 // Contract with devcontour-harness: the view schema is owned by the harness.
 // tests/contract/harness/*.schema.json are verbatim copies of the harness
 // schemas (schemas/operator-view.schema.json, schemas/work-detail-view.schema.json
-// and schemas/setup-view.schema.json of 0.1.0-alpha.65, view revision 5);
+// and schemas/setup-view.schema.json of 0.1.0-alpha.66, view revision 6);
 // empty-state.view.json is a real `harness view --lang en` envelope of that
 // version for a state that does not exist yet (examples/two-vendors policy),
 // setup-state.view.json a real `harness view --repository <empty dir> --lang en`
-// (the setup document). tests/contract/harness-0.1.0-alpha.62/ keeps the same
+// (the setup document). tests/contract/harness-0.1.0-alpha.65/ keeps the same
+// files of 0.1.0-alpha.65 (revision 5); tests/contract/harness-0.1.0-alpha.62/ keeps the same
 // files of 0.1.0-alpha.62 (revision 4 with `neverRun` and `scopeReason`),
 // harness-0.1.0-alpha.60/ (revision 4 without them), harness-0.1.0-alpha.59/
 // (revision 3), harness-0.1.0-alpha.57/ (revision 2, also alpha.58),
@@ -36,6 +37,14 @@ import {
   checkWorkDetail,
   isSetupDocument,
   type ActivityEntry,
+  type Bilingual,
+  type DecisionSettingsView,
+  type LeadView,
+  type PlannedTaskView,
+  type PreviewView,
+  type ResourcesView,
+  type TrackStep,
+  type WorkTrack,
   type AnswerBasis,
   type AttemptRow,
   type BlockerView,
@@ -67,7 +76,7 @@ import {
   type WorkView,
 } from '../src/model/index.ts';
 import { validate } from './contract/json-schema.ts';
-import { asAlpha55, asAlpha56, asAlpha57, asAlpha59, asAlpha62 } from './legacy.ts';
+import { asAlpha55, asAlpha56, asAlpha57, asAlpha59, asAlpha62, asAlpha65 } from './legacy.ts';
 import { instantMs } from '../src/model/compat.ts';
 
 type Json = Record<string, any>;
@@ -118,8 +127,15 @@ test('both fixtures and a real harness document are valid under the harness sche
   for (const f of ['work.sample.json', 'work.accepted.sample.json'])
     assert.deepEqual(validate(detailSchema, read('../fixtures/ru/' + f)), [], f);
   assert.equal(harnessEmpty.ok, true);
-  assert.equal(harnessEmpty.data.viewRevision, 5);
-  assert.equal(harnessEmpty.data.source.producerVersion, '0.1.0-alpha.65');
+  assert.equal(harnessEmpty.data.viewRevision, 6);
+  assert.equal(harnessEmpty.data.source.producerVersion, '0.1.0-alpha.66');
+  // Revision 6: who decides, with the harness's own words in both languages.
+  assert.equal(harnessEmpty.data.settings.decisions.items[0].key, 'maxAttempts');
+  assert.match(harnessEmpty.data.settings.decisions.summary.en, /you decide/);
+  assert.match(harnessEmpty.data.settings.decisions.summary.ru, /решаете вы/);
+  // No state: no lead session, no tracks, no previews, no planned tasks.
+  for (const k of ['lead', 'previews', 'planned', 'resources'])
+    assert.equal(Object.hasOwn(harnessEmpty.data, k), false, k);
   // Revision 5: a state without works says it is at the setup stage.
   assert.deepEqual(harnessEmpty.data.stage, {
     name: 'setup',
@@ -194,11 +210,11 @@ test('alpha.57/58 documents (revision 2) stay valid under the alpha.59 schemas a
   }
 });
 
-test('the setup document of harness alpha.65 is valid, passes the setup gate and is not an overview', () => {
+test('the setup document of harness alpha.66 is valid, passes the setup gate and is not an overview', () => {
   assert.equal(harnessSetup.ok, true);
   const doc = harnessSetup.data;
-  assert.equal(doc.viewRevision, 5);
-  assert.equal(doc.source.producerVersion, '0.1.0-alpha.65');
+  assert.equal(doc.viewRevision, 6);
+  assert.equal(doc.source.producerVersion, '0.1.0-alpha.66');
   assert.deepEqual(validate(setupSchema, doc), []);
   // Neither an overview nor a work detail.
   assert.notDeepEqual(validate(overviewSchema, doc), []);
@@ -222,6 +238,104 @@ test('the setup document of harness alpha.65 is valid, passes the setup gate and
     { ...doc, viewVersion: 2 },
   ])
     assert.equal(checkOverview(bad).ok, false, JSON.stringify(bad).slice(0, 80));
+});
+
+const overviewSchema65 = read('./contract/harness-0.1.0-alpha.65/operator-view.schema.json');
+const detailSchema65 = read('./contract/harness-0.1.0-alpha.65/work-detail-view.schema.json');
+const harnessEmpty65 = read('./contract/harness-0.1.0-alpha.65/empty-state.view.json');
+
+test('alpha.65 documents (revision 5) stay valid under the alpha.66 schemas and pass the gate', () => {
+  assert.equal(harnessEmpty65.data.viewRevision, 5);
+  assert.equal(harnessEmpty65.data.source.producerVersion, '0.1.0-alpha.65');
+  assert.equal(Object.hasOwn(harnessEmpty65.data.settings, 'decisions'), false);
+  assert.deepEqual(validate(overviewSchema65, harnessEmpty65.data), []);
+  assert.deepEqual(validate(overviewSchema, harnessEmpty65.data), []);
+  const real = checkOverview(harnessEmpty65.data);
+  assert.equal(real.ok && !('setup' in real) && real.newerRevision, false);
+  for (const [name, doc, schema] of fixtures()) {
+    const old = asAlpha65(doc);
+    const old65 = schema === overviewSchema ? overviewSchema65 : detailSchema65;
+    assert.deepEqual(validate(old65, old), [], name);
+    assert.deepEqual(validate(schema, old), [], name);
+    const c = schema === overviewSchema ? checkView(old) : checkWorkDetail(old);
+    assert.equal(c.ok, true, `${name}: ${c.ok ? '' : c.message}`);
+    assert.equal(c.ok && c.newerRevision, false, name);
+  }
+  // The alpha.66 empty state carries `settings.decisions`: the alpha.65 schema refuses it.
+  assert.match(validate(overviewSchema65, harnessEmpty.data).join(), /unknown field decisions/);
+});
+
+test('the demo fixtures really carry the revision 6 fields (the alpha.65 schema refuses them)', () => {
+  const docs: [string, Json][] = [
+    ['view.sample.json', viewFixture],
+    ['ru/view.sample.json', read('../fixtures/ru/view.sample.json')],
+  ];
+  for (const [name, doc] of docs) {
+    assert.equal(doc.viewRevision, 6, name);
+    const errors = validate(overviewSchema65, doc).join();
+    for (const k of [
+      'decisions',
+      'track',
+      'restoredFrom',
+      'planned',
+      'lead',
+      'resources',
+      'previews',
+      'approved',
+      'release',
+      'chain',
+    ])
+      assert.match(errors, new RegExp(`unknown field ${k}`), `${name}: ${k}`);
+    // A track with a lead decision, a waiting diagnosis, a running step and a rework.
+    const steps = doc.works.flatMap((w: Json) => w.track.steps);
+    assert.ok(
+      steps.some((x: Json) => x.kind === 'diagnosis' && x.state === 'decision'),
+      name,
+    );
+    assert.ok(
+      steps.some((x: Json) => x.kind === 'diagnosis' && x.state === 'waiting'),
+      name,
+    );
+    assert.ok(
+      steps.some((x: Json) => x.state === 'current'),
+      name,
+    );
+    assert.ok(
+      steps.some((x: Json) => x.rework !== undefined),
+      name,
+    );
+    // Harness 5496b33: the steps a running attempt has not reached are `planned`, not `skipped`.
+    for (const w of doc.works as Json[]) {
+      const st: Json[] = w.track.steps;
+      st.forEach((x, i) => {
+        if (x.state !== 'current') return;
+        for (const y of st.slice(i + 1).filter((y) => y.attempt === x.attempt))
+          assert.equal(y.state, 'planned', `${name}: ${w.id} attempt ${x.attempt}`);
+      });
+    }
+    // A held gate: the resources list and its line first, the lead's stop on the work.
+    assert.deepEqual(doc.resources.gates.held, [
+      { repositoryId: 'app', gate: 'e2e', workId: 'import-csv' },
+    ]);
+    assert.equal(doc.resources.lines[0], doc.resources.gates.heldLine);
+    assert.ok(
+      doc.works
+        .find((w: Json) => w.id === 'import-csv')
+        .blockers.some((b: Json) => b.code === 'ENVIRONMENT_GATE_HELD' && b.actor === 'lead'),
+    );
+    assert.doesNotMatch(doc.lead.line, /UTC|\d\d:\d\d/);
+    // The waiting diagnosis is the lead's move, never the operator's.
+    const diag = doc.works.find((w: Json) => w.id === 'import-csv');
+    assert.deepEqual(diag.stage.needs, { actor: 'lead', action: 'diagnose' });
+    assert.equal(diag.blockers[0].code, 'DIAGNOSIS_REQUIRED');
+    assert.equal(diag.blockers[0].actor, 'lead');
+  }
+  for (const f of ['work.diagnosis.sample.json', 'ru/work.diagnosis.sample.json']) {
+    const d = read('../fixtures/' + f);
+    assert.deepEqual(validate(detailSchema, d), [], f);
+    assert.notDeepEqual(validate(detailSchema65, d), [], f);
+    assert.equal(checkWorkDetail(d).ok, true, f);
+  }
 });
 
 test('alpha.62 documents (revision 4) stay valid under the alpha.65 schemas and pass the gate', () => {
@@ -304,10 +418,10 @@ test('alpha.60 documents (revision 4 without neverRun/scopeReason) stay valid un
     },
   ])
     assert.equal(checkView(bad).ok, false);
-  // The fixtures carry no alpha.62 field, so they are alpha.60 documents too.
+  // Without their revision 6 fields the fixtures carry no alpha.62 field: alpha.60 documents too.
   for (const [name, doc, schema] of fixtures()) {
     const old60 = schema === overviewSchema ? overviewSchema60 : detailSchema60;
-    assert.deepEqual(validate(old60, doc), [], name);
+    assert.deepEqual(validate(old60, asAlpha65(doc)), [], name);
   }
   // The alpha.62 empty state really carries the new fields: the alpha.60 schema refuses them.
   const errors = validate(overviewSchema60, harnessEmpty.data).join();
@@ -337,8 +451,12 @@ test('alpha.59 documents (revision 3) stay valid under the alpha.60 schemas and 
 
 test('the 60-shaped fixtures really carry the revision 4 fields (the alpha.59 schema refuses them)', () => {
   const stopped = read('../fixtures/view.stopped.json');
-  for (const doc of [viewFixture, read('../fixtures/ru/view.sample.json'), stopped]) {
-    assert.equal(doc.viewRevision, 4);
+  for (const doc of [
+    asAlpha65(viewFixture),
+    asAlpha65(read('../fixtures/ru/view.sample.json')),
+    stopped,
+  ]) {
+    assert.ok(doc.viewRevision >= 4);
     assert.deepEqual(validate(overviewSchema, doc), []);
     const errors = validate(overviewSchema59, doc).join();
     for (const k of ['forecast', 'runner'])
@@ -361,7 +479,7 @@ test('the 60-shaped fixtures really carry the revision 4 fields (the alpha.59 sc
 test('the 59-shaped detail fixtures carry an unused stage (the alpha.57 schema refuses it)', () => {
   for (const f of ['work.sample.json', 'ru/work.sample.json']) {
     const d = read('../fixtures/' + f);
-    assert.equal(d.viewRevision, 4, f);
+    assert.equal(d.viewRevision, 6, f);
     assert.ok(
       d.attempts[0].stages.some((s: Json) => s.unused === true),
       f,
@@ -373,7 +491,7 @@ test('the 59-shaped detail fixtures carry an unused stage (the alpha.57 schema r
 test('the 57-shaped fixtures really carry the revision 2 fields (the alpha.56 schema refuses them)', () => {
   let targets = 0;
   for (const [name, doc, schema] of fixtures()) {
-    assert.equal(doc.viewRevision, 4, name);
+    assert.equal(doc.viewRevision, 6, name);
     const works: Json[] = schema === overviewSchema ? doc.works : [doc.work];
     const remotes = works.filter((w) => w.target).map((w) => w.target.remote);
     if (schema === overviewSchema) assert.ok(doc.activity.length > 0, `${name}: a feed`);
@@ -758,8 +876,9 @@ const shape = <T>(s: Shape<T>) => s as Record<string, string>;
 function schemaKind(n: Json): string {
   if (n.anyOf) {
     const parts = (n.anyOf as Json[]).filter((x) => x.type !== 'null');
-    assert.equal(parts.length, 1, 'one non-null anyOf branch');
-    return schemaKind(parts[0]!) + (parts.length < n.anyOf.length ? '|null' : '');
+    // Several non-null branches (`settings.decisions.items[].value`): their kinds, sorted.
+    const kinds = parts.map((x) => schemaKind(x)).sort();
+    return kinds.join('|') + (parts.length < n.anyOf.length ? '|null' : '');
   }
   const k = { string: 's', number: 'n', integer: 'n', boolean: 'b', object: 'o' }[n.type as string];
   if (k) return k;
@@ -797,6 +916,10 @@ const shapes: [string, Json, Record<string, string>][] = [
       stage: 'opt:o',
       forecast: 'opt:o',
       updates: 'opt:o',
+      planned: 'opt:a<o>',
+      lead: 'opt:o',
+      resources: 'opt:o',
+      previews: 'opt:a<o>',
       truncated: 'opt:o',
     }),
   ],
@@ -870,7 +993,41 @@ const shapes: [string, Json, Record<string, string>][] = [
       timeouts: 'req:o',
       lean: 'req:o',
       defaulted: 'req:a<s>',
+      decisions: 'opt:o',
     }),
+  ],
+  [
+    'settings.decisions',
+    overviewSchema[ov].settings[ov].decisions,
+    shape<DecisionSettingsView>({ items: 'req:a<o>', summary: 'req:o', warning: 'opt:o' }),
+  ],
+  [
+    'settings.decisions.items[]',
+    overviewSchema[ov].settings[ov].decisions[ov].items.items,
+    {
+      ...shape<Omit<DecisionSettingsView['items'][number], 'value'>>({
+        key: 'req:s',
+        source: 'req:s',
+        explain: 'req:o',
+      }),
+      // A number, a boolean or a string: the TS union, three schema branches.
+      value: 'req:b|n|s',
+    },
+  ],
+  [
+    'settings.decisions.items[].explain',
+    overviewSchema[ov].settings[ov].decisions[ov].items.items[ov].explain,
+    shape<Bilingual>({ ru: 'req:s', en: 'req:s' }),
+  ],
+  [
+    'settings.decisions.summary',
+    overviewSchema[ov].settings[ov].decisions[ov].summary,
+    shape<Bilingual>({ ru: 'req:s', en: 'req:s' }),
+  ],
+  [
+    'settings.decisions.warning',
+    overviewSchema[ov].settings[ov].decisions[ov].warning,
+    shape<Bilingual>({ ru: 'req:s', en: 'req:s' }),
   ],
   [
     'settings.roles[]',
@@ -948,6 +1105,9 @@ const shapes: [string, Json, Record<string, string>][] = [
       graphId: 'req:s',
       title: 'opt:s',
       status: 'req:s',
+      planned: 'opt:b',
+      restoredFrom: 'opt:s',
+      restoredLine: 'opt:s',
       stage: 'req:o',
       attempts: 'req:o',
       liveness: 'opt:s',
@@ -959,6 +1119,36 @@ const shapes: [string, Json, Record<string, string>][] = [
       question: 'opt:o',
       spend: 'req:o',
       resultSha: 'opt:s',
+      track: 'opt:o',
+    }),
+  ],
+  [
+    'works[].track',
+    overviewSchema[ov].works.items[ov].track,
+    shape<WorkTrack>({ steps: 'req:a<o>', truncated: 'opt:n' }),
+  ],
+  [
+    'works[].track.steps[]',
+    overviewSchema[ov].works.items[ov].track[ov].steps.items,
+    shape<TrackStep>({
+      kind: 'req:s',
+      attempt: 'opt:n',
+      state: 'req:s',
+      label: 'req:s',
+      at: 'opt:s',
+      reason: 'opt:s',
+      rework: 'opt:n',
+      actor: 'opt:s',
+    }),
+  ],
+  [
+    'works[].attempts.rework',
+    overviewSchema[ov].works.items[ov].attempts[ov].rework,
+    shape<NonNullable<WorkView['attempts']['rework']>>({
+      revision: 'req:n',
+      fresh: 'req:b',
+      acceptedSha: 'req:s',
+      acceptedAt: 'opt:s',
     }),
   ],
   [
@@ -999,6 +1189,7 @@ const shapes: [string, Json, Record<string, string>][] = [
       rechecks: 'req:n',
       neutral: 'req:o',
       runs: 'opt:n',
+      rework: 'opt:o',
       line: 'opt:s',
       lastFailure: 'opt:o',
     }),
@@ -1324,6 +1515,259 @@ const shapes: [string, Json, Record<string, string>][] = [
       line: 'req:s',
       added: 'opt:a<o>',
       works: 'opt:a<o>',
+      rework: 'opt:n',
+      planned: 'opt:o',
+      approved: 'opt:o',
+      lead: 'opt:o',
+      release: 'opt:o',
+    }),
+  ],
+  [
+    'forecast.progress.planned',
+    overviewSchema[ov].forecast[ov].progress[ov].planned,
+    shape<NonNullable<ForecastView['progress']['planned']>>({
+      count: 'req:n',
+      keys: 'req:a<s>',
+      line: 'req:s',
+    }),
+  ],
+  [
+    'forecast.progress.approved',
+    overviewSchema[ov].forecast[ov].progress[ov].approved,
+    shape<NonNullable<ForecastView['progress']['approved']>>({
+      percent: 'req:n',
+      total: 'req:n',
+      done: 'req:n',
+      left: 'req:n',
+      loMs: 'opt:n',
+      hiMs: 'opt:n',
+    }),
+  ],
+  [
+    'forecast.progress.lead',
+    overviewSchema[ov].forecast[ov].progress[ov].lead,
+    shape<NonNullable<ForecastView['progress']['lead']>>({
+      steps: 'req:a<o>',
+      weighted: 'req:n',
+      total: 'req:n',
+    }),
+  ],
+  [
+    'forecast.progress.lead.steps[]',
+    overviewSchema[ov].forecast[ov].progress[ov].lead[ov].steps.items,
+    shape<NonNullable<ForecastView['progress']['lead']>['steps'][number]>({
+      step: 'req:s',
+      weight: 'req:n',
+      done: 'req:b',
+    }),
+  ],
+  [
+    'forecast.progress.release',
+    overviewSchema[ov].forecast[ov].progress[ov].release,
+    shape<NonNullable<ForecastView['progress']['release']>>({
+      state: 'req:s',
+      doneAt: 'opt:s',
+      summary: 'opt:s',
+      line: 'req:s',
+    }),
+  ],
+  [
+    'forecast.time.lead',
+    overviewSchema[ov].forecast[ov].time[ov].lead,
+    shape<NonNullable<ForecastView['time']['lead']>>({
+      ms: 'req:n',
+      samples: 'req:n',
+      line: 'req:s',
+    }),
+  ],
+  [
+    'planned[]',
+    overviewSchema[ov].planned.items,
+    shape<PlannedTaskView>({
+      id: 'req:s',
+      connector: 'req:s',
+      taskId: 'req:s',
+      key: 'opt:s',
+      title: 'opt:s',
+      status: 'req:s',
+      from: 'req:s',
+      graphId: 'opt:s',
+      dependsOn: 'opt:a<s>',
+      line: 'req:s',
+    }),
+  ],
+  [
+    'lead',
+    overviewSchema[ov].lead,
+    shape<LeadView>({
+      active: 'req:b',
+      since: 'opt:s',
+      until: 'opt:s',
+      endedAt: 'opt:s',
+      lastNote: 'opt:o',
+      notes: 'req:a<o>',
+      line: 'req:s',
+    }),
+  ],
+  [
+    'lead.lastNote',
+    overviewSchema[ov].lead[ov].lastNote,
+    shape<NonNullable<LeadView['lastNote']>>({ at: 'req:s', plain: 'req:s' }),
+  ],
+  [
+    'lead.notes[]',
+    overviewSchema[ov].lead[ov].notes.items,
+    shape<LeadView['notes'][number]>({
+      at: 'req:s',
+      kind: 'req:s',
+      action: 'req:s',
+      workId: 'opt:s',
+      plain: 'req:s',
+    }),
+  ],
+  [
+    'resources',
+    overviewSchema[ov].resources,
+    shape<ResourcesView>({
+      roles: 'req:a<o>',
+      isolation: 'req:o',
+      toolchain: 'req:o',
+      dependencyStore: 'req:o',
+      services: 'req:a<o>',
+      gates: 'req:o',
+      lines: 'req:a<s>',
+      truncated: 'opt:o',
+    }),
+  ],
+  [
+    'resources.roles[]',
+    overviewSchema[ov].resources[ov].roles.items,
+    shape<ResourcesView['roles'][number]>({
+      role: 'req:s',
+      kind: 'req:s',
+      review: 'opt:s',
+      alternate: 'opt:b',
+      runtime: 'req:s',
+      vendor: 'req:s',
+      model: 'opt:s',
+      effort: 'opt:s',
+      repositoryId: 'opt:s',
+      network: 'opt:s',
+      line: 'req:s',
+    }),
+  ],
+  [
+    'resources.isolation',
+    overviewSchema[ov].resources[ov].isolation,
+    shape<ResourcesView['isolation']>({
+      sandbox: 'req:s',
+      writers: 'req:s',
+      gates: 'req:s',
+      domains: 'req:n',
+      line: 'req:s',
+    }),
+  ],
+  [
+    'resources.toolchain',
+    overviewSchema[ov].resources[ov].toolchain,
+    shape<ResourcesView['toolchain']>({ tools: 'req:a<o>', line: 'req:s' }),
+  ],
+  [
+    'resources.toolchain.tools[]',
+    overviewSchema[ov].resources[ov].toolchain[ov].tools.items,
+    shape<ResourcesView['toolchain']['tools'][number]>({
+      name: 'req:s',
+      version: 'req:s',
+      repositoryId: 'opt:s',
+    }),
+  ],
+  [
+    'resources.dependencyStore',
+    overviewSchema[ov].resources[ov].dependencyStore,
+    shape<ResourcesView['dependencyStore']>({
+      state: 'req:s',
+      repositories: 'req:a<o>',
+      line: 'req:s',
+    }),
+  ],
+  [
+    'resources.dependencyStore.repositories[]',
+    overviewSchema[ov].resources[ov].dependencyStore[ov].repositories.items,
+    shape<ResourcesView['dependencyStore']['repositories'][number]>({
+      repositoryId: 'req:s',
+      manager: 'req:s',
+      seeds: 'opt:n',
+    }),
+  ],
+  [
+    'resources.services[]',
+    overviewSchema[ov].resources[ov].services.items,
+    shape<ResourcesView['services'][number]>({
+      repositoryId: 'req:s',
+      name: 'req:s',
+      engine: 'opt:s',
+      scope: 'req:s',
+      running: 'req:n',
+      stopped: 'req:n',
+      leftover: 'req:n',
+      since: 'opt:s',
+      leftoverRuns: 'opt:a<s>',
+      line: 'req:s',
+    }),
+  ],
+  [
+    'resources.gates',
+    overviewSchema[ov].resources[ov].gates,
+    shape<ResourcesView['gates']>({
+      total: 'req:n',
+      workspace: 'req:n',
+      repositories: 'req:a<o>',
+      line: 'req:s',
+      held: 'opt:a<o>',
+      heldLine: 'opt:s',
+    }),
+  ],
+  [
+    'resources.gates.held[]',
+    overviewSchema[ov].resources[ov].gates[ov].held.items,
+    shape<NonNullable<ResourcesView['gates']['held']>[number]>({
+      repositoryId: 'req:s',
+      gate: 'req:s',
+      workId: 'req:s',
+    }),
+  ],
+  [
+    'resources.gates.repositories[]',
+    overviewSchema[ov].resources[ov].gates[ov].repositories.items,
+    shape<ResourcesView['gates']['repositories'][number]>({
+      repositoryId: 'req:s',
+      count: 'req:n',
+    }),
+  ],
+  [
+    'resources.truncated',
+    overviewSchema[ov].resources[ov].truncated,
+    shape<NonNullable<ResourcesView['truncated']>>({
+      roles: 'opt:n',
+      tools: 'opt:n',
+      services: 'opt:n',
+      receipts: 'opt:n',
+    }),
+  ],
+  [
+    'previews[]',
+    overviewSchema[ov].previews.items,
+    shape<PreviewView>({
+      id: 'req:s',
+      repositoryId: 'req:s',
+      title: 'opt:s',
+      url: 'req:s',
+      ref: 'req:s',
+      sha: 'req:s',
+      workId: 'opt:s',
+      startedAt: 'req:s',
+      expiresAt: 'req:s',
+      state: 'req:s',
     }),
   ],
   [
@@ -1347,6 +1791,7 @@ const shapes: [string, Json, Record<string, string>][] = [
       percent: 'req:n',
       attempt: 'opt:o',
       retry: 'opt:s',
+      rework: 'opt:b',
       line: 'req:s',
     }),
   ],
@@ -1368,6 +1813,8 @@ const shapes: [string, Json, Record<string, string>][] = [
       remaining: 'opt:o',
       rough: 'opt:o',
       estimate: 'opt:s',
+      chain: 'opt:n',
+      lead: 'opt:o',
       humanWait: 'req:o',
       line: 'req:s',
     }),
@@ -1489,6 +1936,10 @@ const shapes: [string, Json, Record<string, string>][] = [
       whatsNew: 'opt:n',
       sourceReviews: 'opt:n',
       forecastWorks: 'opt:n',
+      planned: 'opt:n',
+      leadNotes: 'opt:n',
+      resources: 'opt:n',
+      previews: 'opt:n',
     }),
   ],
   [
@@ -1782,6 +2233,115 @@ const vocabularies: [string, Json, string[]][] = [
     'SetupView.setup.waitingFor',
     setupSchema[ov].setup[ov].waitingFor,
     vocab<SetupView['setup']['waitingFor']>()(['project', 'policy']),
+  ],
+  [
+    'settings.decisions.items[].key',
+    overviewSchema[ov].settings[ov].decisions[ov].items.items[ov].key,
+    vocab<DecisionSettingsView['items'][number]['key']>()([
+      'maxAttempts',
+      'recovery.mode',
+      'recovery.diagnoseAfter',
+      'recovery.leadResets',
+      'inputPolicy.leadAnswers.technical',
+    ]),
+  ],
+  [
+    'settings.decisions.items[].source',
+    overviewSchema[ov].settings[ov].decisions[ov].items.items[ov].source,
+    vocab<DecisionSettingsView['items'][number]['source']>()(['policy', 'derived', 'default']),
+  ],
+  [
+    'works[].track.steps[].kind',
+    overviewSchema[ov].works.items[ov].track[ov].steps.items[ov].kind,
+    vocab<TrackStep['kind']>()([
+      'code',
+      'checks',
+      'review',
+      'integration',
+      'question',
+      'diagnosis',
+      'reset',
+      'user-decision',
+      'accepted',
+    ]),
+  ],
+  [
+    'works[].track.steps[].state',
+    overviewSchema[ov].works.items[ov].track[ov].steps.items[ov].state,
+    vocab<TrackStep['state']>()([
+      'planned',
+      'current',
+      'passed',
+      'failed',
+      'waiting',
+      'skipped',
+      'decision',
+    ]),
+  ],
+  [
+    'works[].track.steps[].actor',
+    overviewSchema[ov].works.items[ov].track[ov].steps.items[ov].actor,
+    vocab<NonNullable<TrackStep['actor']>>()(['lead', 'user', 'harness']),
+  ],
+  [
+    'planned[].from',
+    overviewSchema[ov].planned.items[ov].from,
+    vocab<PlannedTaskView['from']>()(['validated', 'read']),
+  ],
+  [
+    'forecast.progress.lead.steps[].step',
+    overviewSchema[ov].forecast[ov].progress[ov].lead[ov].steps.items[ov].step,
+    vocab<NonNullable<ForecastView['progress']['lead']>['steps'][number]['step']>()([
+      'plan',
+      'questions',
+      'delivery',
+      'report',
+    ]),
+  ],
+  [
+    'forecast.progress.release.state',
+    overviewSchema[ov].forecast[ov].progress[ov].release[ov].state,
+    vocab<NonNullable<ForecastView['progress']['release']>['state']>()([
+      'in-work',
+      'code-accepted',
+      'done',
+    ]),
+  ],
+  [
+    'resources.roles[].kind',
+    overviewSchema[ov].resources[ov].roles.items[ov].kind,
+    vocab<ResourcesView['roles'][number]['kind']>()(['writer', 'reviewer', 'lead']),
+  ],
+  [
+    'resources.roles[].network',
+    overviewSchema[ov].resources[ov].roles.items[ov].network,
+    vocab<NonNullable<ResourcesView['roles'][number]['network']>>()([
+      'closed',
+      'loopback',
+      'domains',
+      'open',
+      'mixed',
+    ]),
+  ],
+  [
+    'resources.isolation.sandbox',
+    overviewSchema[ov].resources[ov].isolation[ov].sandbox,
+    vocab<ResourcesView['isolation']['sandbox']>()(['os', 'none']),
+  ],
+  [
+    'resources.dependencyStore.state',
+    overviewSchema[ov].resources[ov].dependencyStore[ov].state,
+    vocab<ResourcesView['dependencyStore']['state']>()(['on', 'off', 'partial']),
+  ],
+  [
+    'resources.services[].scope',
+    overviewSchema[ov].resources[ov].services.items[ov].scope,
+    vocab<ResourcesView['services'][number]['scope']>()(['attempt', 'workspace']),
+  ],
+  [
+    'previews[].state',
+    overviewSchema[ov].previews.items[ov].state,
+    vocab<PreviewView['state']>()(['running']),
   ],
   [
     'detail verification[].phase',

@@ -217,6 +217,7 @@ async function main() {
         workFiles: {
           'locale-format': join(dir, 'work.sample.json'),
           'add-greeting': join(dir, 'work.accepted.sample.json'),
+          'import-csv': join(dir, 'work.diagnosis.sample.json'),
         },
       });
       source = { ...files(demo), localized: { ru: files(join(demo, 'ru')) } };

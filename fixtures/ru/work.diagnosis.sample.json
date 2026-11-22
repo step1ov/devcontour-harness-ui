@@ -1,0 +1,285 @@
+{
+  "viewVersion": 1,
+  "viewRevision": 6,
+  "generatedAt": "2026-11-19T12:00:00.000Z",
+  "source": {
+    "producer": "fixture",
+    "producerVersion": "0.0.0",
+    "stateVersion": 1,
+    "token": "fixture-1"
+  },
+  "work": {
+    "id": "import-csv",
+    "graphId": "g1",
+    "title": "Import a report from CSV",
+    "status": "held",
+    "stage": {
+      "name": "stopped",
+      "since": "2026-11-19T11:35:00.000Z",
+      "next": ["writer", "gates", "review", "integration"],
+      "needs": {
+        "actor": "lead",
+        "action": "diagnose"
+      }
+    },
+    "attempts": {
+      "used": 2,
+      "max": 3,
+      "left": 1,
+      "failed": 2,
+      "interrupted": 0,
+      "rechecks": 0,
+      "neutral": {
+        "used": 0,
+        "max": 3
+      },
+      "line": "2 попытки: 2 отказа (проверка, ревью); осталась 1",
+      "lastFailure": {
+        "attempt": 2,
+        "bucket": "defect",
+        "plain": "ревью отклонило: парсер теряет переводы строк внутри кавычек",
+        "at": "2026-11-19T11:35:00.000Z",
+        "kind": "review",
+        "counted": true
+      }
+    },
+    "runtime": "claude",
+    "model": "example-writer",
+    "blockers": [
+      {
+        "code": "DIAGNOSIS_REQUIRED",
+        "plain": "2 засчитанных отказа подряд: ведущий разбирает причину до следующей попытки",
+        "actor": "lead"
+      },
+      {
+        "code": "ENVIRONMENT_GATE_HELD",
+        "plain": "gate e2e удержан: зовёт ps, а в песочнице проверок список процессов недоступен; ход ведущего — поменять gate или команду либо исправить тест и повторить import-",
+        "actor": "lead"
+      }
+    ],
+    "spend": {
+      "calls": 6,
+      "usd": {
+        "value": 2.1,
+        "bound": "exact"
+      },
+      "durationMs": 2700000
+    },
+    "track": {
+      "steps": [
+        {
+          "kind": "code",
+          "attempt": 1,
+          "state": "passed",
+          "label": "код"
+        },
+        {
+          "kind": "checks",
+          "attempt": 1,
+          "state": "failed",
+          "label": "проверки",
+          "at": "2026-11-19T10:40:00.000Z",
+          "reason": "проверки не прошли"
+        },
+        {
+          "kind": "review",
+          "attempt": 1,
+          "state": "skipped",
+          "label": "ревью"
+        },
+        {
+          "kind": "integration",
+          "attempt": 1,
+          "state": "skipped",
+          "label": "интеграция"
+        },
+        {
+          "kind": "code",
+          "attempt": 2,
+          "state": "passed",
+          "label": "код"
+        },
+        {
+          "kind": "checks",
+          "attempt": 2,
+          "state": "passed",
+          "label": "проверки"
+        },
+        {
+          "kind": "review",
+          "attempt": 2,
+          "state": "failed",
+          "label": "ревью",
+          "at": "2026-11-19T11:35:00.000Z",
+          "reason": "ревью отклонило"
+        },
+        {
+          "kind": "integration",
+          "attempt": 2,
+          "state": "skipped",
+          "label": "интеграция"
+        },
+        {
+          "kind": "diagnosis",
+          "state": "waiting",
+          "label": "разбор ведущего",
+          "actor": "lead"
+        },
+        {
+          "kind": "checks",
+          "state": "waiting",
+          "actor": "lead",
+          "label": "ждёт ведущего: проверка e2e удержана"
+        },
+        {
+          "kind": "code",
+          "attempt": 3,
+          "state": "planned",
+          "label": "код"
+        },
+        {
+          "kind": "checks",
+          "attempt": 3,
+          "state": "planned",
+          "label": "проверки"
+        },
+        {
+          "kind": "review",
+          "attempt": 3,
+          "state": "planned",
+          "label": "ревью"
+        },
+        {
+          "kind": "integration",
+          "attempt": 3,
+          "state": "planned",
+          "label": "интеграция"
+        },
+        {
+          "kind": "diagnosis",
+          "state": "planned",
+          "label": "разбор ведущего",
+          "actor": "lead"
+        },
+        {
+          "kind": "reset",
+          "state": "planned",
+          "label": "ещё попытки от ведущего",
+          "reason": "сброс 1 из 2",
+          "actor": "lead"
+        },
+        {
+          "kind": "diagnosis",
+          "state": "planned",
+          "label": "разбор ведущего",
+          "actor": "lead"
+        },
+        {
+          "kind": "reset",
+          "state": "planned",
+          "label": "ещё попытки от ведущего",
+          "reason": "сброс 2 из 2",
+          "actor": "lead"
+        },
+        {
+          "kind": "accepted",
+          "state": "planned",
+          "label": "принято"
+        }
+      ]
+    }
+  },
+  "attempts": [
+    {
+      "attempt": 2,
+      "status": "failed",
+      "failureBucket": "defect",
+      "runtime": "claude",
+      "model": "example-writer",
+      "startedAt": "2026-11-19T11:12:00.000Z",
+      "finishedAt": "2026-11-19T11:35:00.000Z",
+      "stages": [
+        {
+          "stage": "prepare",
+          "durationMs": 15000,
+          "outcome": "passed"
+        },
+        {
+          "stage": "implementation",
+          "durationMs": 840000,
+          "outcome": "passed"
+        },
+        {
+          "stage": "candidate-test:lint",
+          "durationMs": 32000,
+          "outcome": "passed"
+        },
+        {
+          "stage": "candidate-test:unit",
+          "durationMs": 95000,
+          "outcome": "passed"
+        },
+        {
+          "stage": "candidate-review",
+          "durationMs": 310000,
+          "outcome": "failed"
+        }
+      ]
+    },
+    {
+      "attempt": 1,
+      "status": "failed",
+      "failureBucket": "defect",
+      "runtime": "claude",
+      "model": "example-writer",
+      "startedAt": "2026-11-19T10:20:00.000Z",
+      "finishedAt": "2026-11-19T10:40:00.000Z",
+      "stages": [
+        {
+          "stage": "prepare",
+          "durationMs": 14000,
+          "outcome": "passed"
+        },
+        {
+          "stage": "implementation",
+          "durationMs": 900000,
+          "outcome": "passed"
+        },
+        {
+          "stage": "candidate-test:lint",
+          "durationMs": 30000,
+          "outcome": "passed"
+        },
+        {
+          "stage": "candidate-test:unit",
+          "durationMs": 120000,
+          "outcome": "failed"
+        }
+      ]
+    }
+  ],
+  "verification": [
+    {
+      "gate": "lint",
+      "kind": "gate",
+      "phase": "candidate",
+      "result": "passed",
+      "how": "executed",
+      "by": "harness",
+      "attempt": 2,
+      "at": "2026-11-19T11:27:00.000Z"
+    },
+    {
+      "gate": "unit",
+      "kind": "gate",
+      "phase": "candidate",
+      "result": "passed",
+      "how": "executed",
+      "by": "harness",
+      "attempt": 2,
+      "at": "2026-11-19T11:29:00.000Z"
+    }
+  ],
+  "reviews": [],
+  "questions": []
+}

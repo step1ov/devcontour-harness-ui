@@ -66,7 +66,7 @@ test('two big rings at the top: «До релиза» with the harness line, «�
   assert.match(release, /aria-valuemax="100"/);
   assert.match(
     release,
-    /aria-valuetext="До релиза: готово ~23 %, осталось задач: 5 из 6, в работе: 1"/,
+    /aria-valuetext="До релиза: готово ~23 %, осталось задач: 5 из 6, в работе: 1, планируемых \(не утверждены\): 1"/,
   );
   assert.match(release, /aria-labelledby="[^"]+"/);
   const t = shown(m);
@@ -503,13 +503,25 @@ test('owner questions from the tracker are in «Нужно от вас» with a 
 test('the run slice: tasks not handed to the harness in Tasks and the Overview, by key', () => {
   const o = shown(overview(ru));
   // With a forecast the total of the release is the ring's; this line is the harness works only.
-  assert.match(o, /В harness: принято 1 из 4 · в работе 1 · ждут 2 · ещё не переданы в harness: 2/);
-  assert.match(o, /Ещё не переданы в harness \(2\)/);
-  assert.match(o, /DEMO-5: Импорт отчёта из CSV не передана в harness ещё не передана в harness/);
-  assert.match(o, /DEMO-6: Печать отчёта ждёт готовности у задачи нет критериев приёмки/);
+  assert.match(o, /В harness: принято 1 из 5 · в работе 1 · ждут 3 · ещё не переданы в harness: 1/);
+  // Revision 6: the same split as Tasks — DEMO-6 is listed as planned, with its not-ready reason.
+  assert.doesNotMatch(o, /Ещё не переданы в harness \(/);
+  assert.match(
+    o,
+    /Ещё не утверждены \(1\)[^]*DEMO-6 · Печать отчёта ещё не утверждена[^]*Не готова: у задачи нет критериев приёмки\./,
+  );
+  const oldO = shown(overview({ ...ru, planned: undefined }));
+  assert.match(oldO, /Ещё не переданы в harness \(1\)/);
+  assert.match(oldO, /DEMO-6: Печать отчёта ждёт готовности у задачи нет критериев приёмки/);
   const t = shown(html(<Tasks view={viewOf(ru)} lang="ru" />));
-  assert.match(t, /Ещё не переданы в harness \(2\)/);
-  assert.match(t, /DEMO-6: Печать отчёта/);
+  // Revision 6: DEMO-6 is a planned task — its own «ещё не утверждена» card, not a second listing.
+  assert.match(t, /Ещё не утверждены \(1\)/);
+  assert.match(t, /DEMO-6 · Печать отчёта ещё не утверждена/);
+  assert.doesNotMatch(t, /Ещё не переданы в harness/);
+  // An older harness without `planned[]` lists the task as not handed over.
+  const old = shown(html(<Tasks view={viewOf({ ...ru, planned: undefined })} lang="ru" />));
+  assert.match(old, /Ещё не переданы в harness \(1\)/);
+  assert.match(old, /DEMO-6: Печать отчёта/);
 });
 
 test('tracker compatibility in Health; updates banner and read-only mode in Settings', () => {

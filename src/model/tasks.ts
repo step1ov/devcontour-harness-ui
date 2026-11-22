@@ -5,7 +5,9 @@
 
 import { SLOT_STAGES, leadMayAnswer, questionStatus } from './format.ts';
 import { actorsOn, leadAnswers, type NextSteps, type StepActor } from './steps.ts';
+import { outsideHarness, type ScopeView } from './scope.ts';
 import type {
+  PlannedTaskView,
   AttemptRow,
   OperatorQuestion,
   OperatorView,
@@ -26,7 +28,16 @@ export function splitQuestions(view: OperatorView, steps: NextSteps) {
 
 /** What a task card says the work is doing, as a kind the dictionary words. */
 export type TaskPhase =
-  'accepted' | 'cancelled' | 'running' | 'question' | 'stopped' | 'dependency' | 'queued' | 'other';
+  | 'accepted'
+  | 'cancelled'
+  | 'running'
+  | 'question'
+  | 'stopped'
+  | 'dependency'
+  | 'queued'
+  /** Revision 6: the plan of the work is not approved yet (`works[].planned`). */
+  | 'planned'
+  | 'other';
 
 export type NextActor =
   | { kind: 'nobody' }
@@ -79,12 +90,18 @@ export function taskCard(view: OperatorView, steps: NextSteps, w: WorkView): Tas
     const actors = actorsOn(steps, w.id, view);
     if (asking.length || steps.unlistedAnswers.includes(w.id)) phase = 'question';
     else if (dep) phase = 'dependency';
+    // Revision 6: nothing ran and the plan is not approved — «ещё не утверждена».
+    else if (w.planned === true) phase = 'planned';
     else if (w.stage.name === 'stopped' || w.stage.name === 'blocked') phase = 'stopped';
     else if (w.stage.name === 'queued') phase = 'queued';
     else phase = 'other';
     if (actors.length) next = { kind: 'actors', actors };
     else if (dep) next = { kind: 'dependency', on: dep.on };
-    else if (steps.queue.some((q) => q.workId === w.id && !q.unexplained) || phase === 'queued')
+    else if (
+      steps.queue.some((q) => q.workId === w.id && !q.unexplained) ||
+      phase === 'queued' ||
+      phase === 'planned'
+    )
       next = { kind: 'queue' };
     else next = { kind: 'unknown' };
     // A stopped work that only waits for its dependency reads as waiting for it.
@@ -107,6 +124,7 @@ const ORDER: TaskPhase[] = [
   'stopped',
   'dependency',
   'queued',
+  'planned',
   'other',
   'accepted',
   'cancelled',
@@ -354,4 +372,61 @@ export function writerEnvironmentStop(
   const s = leadStopOf(w, viewRevision);
   if (!s?.env) return undefined;
   return s.summary ? { summary: s.summary } : {};
+}
+
+/** A planned task with the readiness reason the run slice gives it (revision 6). */
+export interface PlannedItem {
+  task: PlannedTaskView;
+  /**
+   * The scope task's `plain` when it is `not-ready` there («у задачи нет
+   * критериев приёмки»): the reason stays with the planned card.
+   */
+  notReady?: string;
+}
+
+/**
+ * The planned tasks (`planned[]`) and the tasks outside the harness that are
+ * not among them — one split for the Tasks screen and the Overview, so both
+ * list each task once.
+ */
+export function plannedSplit(view: Pick<OperatorView, 'planned'>, scope: ScopeView | undefined) {
+  const keys = plannedKeys(view);
+  const byKey = new Map(
+    (scope?.tasks ?? []).map((t) => [(t.connector ?? '') + '\0' + t.id, t] as const),
+  );
+  const planned: PlannedItem[] = (view.planned ?? []).map((task) => {
+    const st = byKey.get(task.connector + '\0' + task.taskId);
+    return st?.state === 'not-ready' && st.plain?.trim() ? { task, notReady: st.plain } : { task };
+  });
+  const outside = outsideHarness(scope).filter((t) => !keys.has((t.connector ?? '') + '\0' + t.id));
+  return { planned, outside };
+}
+
+/**
+ * Held gates of a work (`resources.gates.held`, harness alpha.66): the gates
+ * whose refusal without a retry this work's attempt caused (`own`), and
+ * whether the work waits for a held gate (blocker `ENVIRONMENT_GATE_HELD`).
+ */
+export function gateHoldsOf(
+  view: Pick<OperatorView, 'resources'>,
+  w: Pick<WorkView, 'id' | 'blockers'>,
+): { own: { repositoryId: string; gate: string }[]; waits: boolean; plain?: string } {
+  const own = (view.resources?.gates.held ?? []).filter((h) => h.workId === w.id);
+  const stop = w.blockers.find((b) => b.code === 'ENVIRONMENT_GATE_HELD');
+  const plain = stop?.plain?.trim();
+  return {
+    own: own.map(({ repositoryId, gate }) => ({ repositoryId, gate })),
+    waits: stop !== undefined,
+    ...(plain ? { plain } : {}),
+  };
+}
+
+/**
+ * Tasks of the run slice that the view lists as planned (`planned[]`,
+ * revision 6): the Tasks screen shows them as «ещё не утверждена» cards, so
+ * they are not repeated in the «not handed over» list. Keyed by connector
+ * and task id, as `scope.tasks[]` names them.
+ */
+export function plannedKeys(view: Pick<OperatorView, 'planned'>): Set<string> {
+  return new Set((view.planned ?? []).map((p) => p.connector + '\0' + p.taskId));
 }

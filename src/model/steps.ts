@@ -145,7 +145,13 @@ const ANSWER_ACTIONS = new Set(['answer', 'answer-input']);
  * escalation states the action, so one stop stays one line.
  */
 const CODE_ACTIONS: Readonly<Record<string, readonly string[]>> = {
-  ATTEMPTS_EXHAUSTED: ['reset-attempts'],
+  // Harness alpha.66: on exhausted attempts the lead may diagnose first (`exhausted-diagnose`).
+  ATTEMPTS_EXHAUSTED: ['reset-attempts', 'diagnose'],
+  // Harness alpha.66: counted failures in a row — the lead diagnoses before the next attempt.
+  DIAGNOSIS_REQUIRED: ['diagnose'],
+  // Harness alpha.66: a gate held by a refusal without a retry — the lead fixes the gate or the test.
+  // Once the lead's reset budget is spent the holder's stop names the user: a reset.
+  ENVIRONMENT_GATE_HELD: ['fix-environment', 'reset-attempts'],
   APPROVAL_STALE: ['review-plan'],
   APPROVAL_REQUIRED: ['review-plan'],
   BUDGET_EXHAUSTED: ['raise-budget'],

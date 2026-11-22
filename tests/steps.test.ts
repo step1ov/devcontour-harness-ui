@@ -334,7 +334,11 @@ test('review round 1: stage needs never join an unrelated stop; plans, terminal 
       },
     ],
   });
-  assert.deepEqual(technical.lead, []);
+  // The lead's diagnosis of import-csv (revision 6 demo) is its own line; nothing about export-csv.
+  assert.deepEqual(
+    technical.lead.filter((x) => x.workIds.includes('export-csv')),
+    [],
+  );
   assert.equal(technical.questions.length, 1);
 });
 

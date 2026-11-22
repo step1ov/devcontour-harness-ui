@@ -8,6 +8,7 @@ import { Activity } from '../components/Activity.tsx';
 import { Decisions } from '../components/Decisions.tsx';
 import { Health } from '../components/Health.tsx';
 import { History } from '../components/History.tsx';
+import { LeadJournal } from '../components/Lead.tsx';
 import { Overview } from '../components/Overview.tsx';
 import { Settings, type ThemeChoice } from '../components/Settings.tsx';
 import { Tasks } from '../components/Tasks.tsx';
@@ -422,9 +423,10 @@ const screens: [string, NavKey][] = [
   ['#/activity', 'journal'],
   ['#/settings', 'settings'],
 ];
-/** Screens of «Журнал»: who did what, the run over time, the machinery. */
-const journal: [string, 'activity' | 'history' | 'health'][] = [
+/** Screens of «Журнал»: who did what, the lead, the run over time, the machinery. */
+const journal: [string, 'activity' | 'lead' | 'history' | 'health'][] = [
   ['#/activity', 'activity'],
+  ['#/lead', 'lead'],
   ['#/history', 'history'],
   ['#/health', 'health'],
 ];
@@ -433,13 +435,16 @@ const navOf = (s: Route['screen']): NavKey | undefined =>
     ? s
     : s === 'work' || s === 'reviews'
       ? 'tasks'
-      : s === 'activity' || s === 'history' || s === 'health'
+      : s === 'activity' || s === 'history' || s === 'health' || s === 'lead'
         ? 'journal'
         : undefined;
 const titleOf = (r: Route): string =>
   r.screen === 'work'
     ? (r.workId ?? '')
-    : r.screen === 'activity' || r.screen === 'history' || r.screen === 'health'
+    : r.screen === 'activity' ||
+        r.screen === 'history' ||
+        r.screen === 'health' ||
+        r.screen === 'lead'
       ? t.nav[r.screen]
       : r.screen === 'reviews'
         ? t.nav.tasks
@@ -614,7 +619,7 @@ function App() {
     const common = { view, lang, now: Date.now(), workHref: workHash };
     const screen =
       route.screen === 'overview' ? (
-        <Overview {...common} />
+        <Overview {...common} leadHref="#/lead" />
       ) : route.screen === 'tasks' || route.screen === 'reviews' ? (
         <Tasks {...common} />
       ) : route.screen === 'decisions' ? (
@@ -625,6 +630,8 @@ function App() {
         <Settings view={view} lang={lang} theme={theme} onThemeChange={setTheme} />
       ) : route.screen === 'history' ? (
         <History view={view} lang={lang} now={Date.now()} />
+      ) : route.screen === 'lead' ? (
+        <LeadJournal {...common} activityHref={activityHash({ actor: 'lead' })} />
       ) : route.screen === 'health' ? (
         <Health {...common} {...(uiVersion ? { uiVersion } : {})} />
       ) : (

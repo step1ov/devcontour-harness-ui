@@ -1,10 +1,10 @@
 // Operator view: the read-only document the panel renders. The schema is
 // owned by devcontour-harness (`operatorViewSchema` in its
 // src/contracts/operator-view.ts, JSON Schema schemas/operator-view.schema.json
-// and schemas/work-detail-view.schema.json, harness 0.1.0-alpha.60, view
-// version 1, revision 4; every revision 1–4 field is optional, so alpha.55
-// (revision 0), alpha.56 (1), alpha.57/58 (2) and alpha.59 (3) documents have
-// the same type). These types mirror it field by field; tests/contract.test.ts
+// and schemas/work-detail-view.schema.json, harness 0.1.0-alpha.66, view
+// version 1, revision 6; every revision 1–6 field is optional, so alpha.55
+// (revision 0), alpha.56 (1), alpha.57/58 (2), alpha.59 (3), alpha.60–.62
+// (4) and alpha.65 (5) documents have the same type). These types mirror it field by field; tests/contract.test.ts
 // validates the fixtures against copies of the harness JSON Schemas. A host
 // adapter that builds a view from its own store follows the same schema.
 // Pure types: no node:*, no React.
@@ -101,6 +101,43 @@ export interface ViewSettings {
    * `thresholds.repairBudget`, `thresholds.maxAttempts`, `timeouts.stall`.
    */
   defaulted: string[];
+  /**
+   * Who decides (revision 6, harness alpha.66): the attempt limit, the
+   * recovery rule and whether the lead answers technical questions — each
+   * value, where it comes from and one sentence in both languages; the
+   * summary in one phrase and an unusual combination. Absent = an older harness.
+   */
+  decisions?: DecisionSettingsView;
+}
+
+/** The keys of `settings.decisions.items[]` (harness alpha.66). */
+export type DecisionSettingKey =
+  | 'maxAttempts'
+  | 'recovery.mode'
+  | 'recovery.diagnoseAfter'
+  | 'recovery.leadResets'
+  | 'inputPolicy.leadAnswers.technical';
+
+/** A text the harness gives in both languages; the panel picks the current one. */
+export interface Bilingual {
+  ru: string;
+  en: string;
+}
+
+/** `settings.decisions` (revision 6): the same texts as `doctor` and `status --human`. */
+export interface DecisionSettingsView {
+  /** At most 10. */
+  items: {
+    key: DecisionSettingKey;
+    value: number | boolean | string;
+    /** `policy` — the policy field; `derived` — from a neighbouring setting; `default`. */
+    source: 'policy' | 'derived' | 'default';
+    explain: Bilingual;
+  }[];
+  /** «после 2 отказов — разбор ведущего; …; дальше — вы». */
+  summary: Bilingual;
+  /** An allowed but unusual combination, named. */
+  warning?: Bilingual;
 }
 
 /** `status.works[].stage.name` (harness alpha.54). Unknown values are shown as is. */
@@ -288,11 +325,67 @@ export interface TargetView {
   };
 }
 
+/** Kinds of a track step (revision 6). */
+export type TrackStepKind =
+  | 'code'
+  | 'checks'
+  | 'review'
+  | 'integration'
+  | 'question'
+  | 'diagnosis'
+  | 'reset'
+  | 'user-decision'
+  | 'accepted';
+
+/** States of a track step (revision 6). */
+export type TrackStepState =
+  'planned' | 'current' | 'passed' | 'failed' | 'waiting' | 'skipped' | 'decision';
+
+/** One step of the whole path of a work (`works[].track.steps[]`, revision 6). */
+export interface TrackStep {
+  kind: TrackStepKind;
+  /** Attempt number; planned attempts continue the numbering. */
+  attempt?: number;
+  state: TrackStepState;
+  /** Ready label in the view language («код», «разбор ведущего»), at most 80. */
+  label: string;
+  at?: string;
+  /** Short plain reason: why it failed, what was decided. At most 200. */
+  reason?: string;
+  /** A step of a rework after acceptance (the rework number). */
+  rework?: number;
+  /**
+   * Who acts at a decision or wait step (harness alpha.66): the lead, a
+   * person (`user`) or the harness itself. Absent on attempt steps.
+   */
+  actor?: 'lead' | 'user' | 'harness';
+}
+
+/**
+ * The whole path of a work (revision 6): the attempts by step (code →
+ * checks → review → integration), the lead's and people's decisions between
+ * them, the current point and the planned rest. At most 120 steps; the
+ * earliest are dropped first (`truncated`).
+ */
+export interface WorkTrack {
+  steps: TrackStep[];
+  truncated?: number;
+}
+
 export interface WorkView {
   id: string;
   graphId: string;
   title?: string;
   status: string;
+  /** Revision 6: the plan of the work is not approved yet and nothing ran — «ещё не утверждена». */
+  planned?: true;
+  /**
+   * Revision 6: a rework an older harness cancelled together with the work
+   * is shown as the accepted work (`done`, the earlier result);
+   * `restoredLine` says so («принято на <sha>; доработка отменена»).
+   */
+  restoredFrom?: 'cancelled-rework';
+  restoredLine?: string;
   stage: {
     name: WorkStage;
     step?: string;
@@ -321,6 +414,13 @@ export interface WorkView {
      * refusal, a stop); present only when it differs from `used` (revision 5).
      */
     runs?: number;
+    /**
+     * A rework after acceptance (harness alpha.66): a new revision changed
+     * the task of the accepted work. The counters are the rework's only;
+     * `acceptedSha`/`acceptedAt` — the earlier acceptance; `fresh` — the
+     * rework has its own attempt limit.
+     */
+    rework?: { revision: number; fresh: boolean; acceptedSha: string; acceptedAt?: string };
     /** Why the previous attempt stopped (harness alpha.55). */
     lastFailure?: {
       attempt: number;
@@ -351,6 +451,8 @@ export interface WorkView {
   question?: Pick<OperatorQuestion, 'requestId' | 'state' | 'severity' | 'line'>;
   spend: { calls: number; usd: Bounded; durationMs: number };
   resultSha?: string;
+  /** Revision 6: the whole path of the work. Absent = an older harness or dropped for size. */
+  track?: WorkTrack;
 }
 
 export interface ViewProgress {
@@ -569,8 +671,48 @@ export interface ForecastView {
       attempt?: { n: number; max: number };
       /** `repair`: the running attempt fixes the last review; `answer`: it goes on after a question. */
       retry?: 'repair' | 'answer';
+      /** A rework after acceptance: `percent` is the rework's; the work is already `done`. */
+      rework?: true;
       line: string;
     }[];
+    /** Open reworks after acceptance (harness alpha.66). Absent = none. */
+    rework?: number;
+    /**
+     * Revision 6: planned (not yet approved) tasks, weight 0; `line` —
+     * «по утверждённому плану ~X %; с планируемыми (N задач, не утверждены: …) ~Y %».
+     */
+    planned?: { count: number; keys: string[]; line: string };
+    /** Revision 6: the approved plan only (comes with `planned`). */
+    approved?: {
+      percent: number;
+      total: number;
+      done: number;
+      left: number;
+      loMs?: number;
+      hiMs?: number;
+    };
+    /** Revision 6: the lead's steps, 10 % of the release in equal parts (`weight` — share of the release). */
+    lead?: {
+      steps: {
+        step: 'plan' | 'questions' | 'delivery' | 'report';
+        weight: number;
+        done: boolean;
+      }[];
+      weighted: number;
+      total: number;
+    };
+    /**
+     * Revision 6: the release state — `in-work`, `code-accepted` (the code is
+     * accepted, the lead's final report is not written), `done`
+     * (`harness release done`). Only `done` is 100 %.
+     */
+    release?: {
+      state: 'in-work' | 'code-accepted' | 'done';
+      doneAt?: string;
+      /** The lead's final report, at most 2000. */
+      summary?: string;
+      line: string;
+    };
   };
   time: {
     /** Start of the release (revision 5: the first scope snapshot or the first attempt). */
@@ -585,6 +727,10 @@ export interface ForecastView {
     rough?: { loMs: number; hiMs: number; samples: number; attemptsPerTask: number };
     /** Revision 5: what «осталось» is based on. Absent = an older harness. */
     estimate?: 'precise' | 'rough' | 'unknown' | 'nothing';
+    /** Revision 6: the dependency chain of unfinished works (task shares): the lower end is not shorter. */
+    chain?: number;
+    /** Revision 6: the lead's own work, a separate share, by the project history. */
+    lead?: { ms: number; samples: number; line: string };
     /** Works waiting for a person or the lead now, and the longest wait; not in the forecast. */
     humanWait: { works: number; ms: number; since?: string };
     line: string;
@@ -741,6 +887,14 @@ export interface OperatorView {
   forecast?: ForecastView;
   /** Updates (revision 4). Absent = no updates config and no check. */
   updates?: UpdatesView;
+  /** Revision 6: planned tasks without a harness work — «ещё не утверждена» cards, at most 200. */
+  planned?: PlannedTaskView[];
+  /** Revision 6: the lead's session and journal. Absent = an older harness or dropped for size. */
+  lead?: LeadView;
+  /** Revision 6: what is used — models, isolation, tools, services, checks. */
+  resources?: ResourcesView;
+  /** Harness alpha.66: running previews of the result, at least 1 and at most 20. Absent = none runs. */
+  previews?: PreviewView[];
   /** Entries omitted by the projection's per-list limits, by list. */
   truncated?: Partial<
     Record<
@@ -767,10 +921,132 @@ export interface OperatorView {
       | 'whatsNew'
       // Revision 5.
       | 'sourceReviews'
-      | 'forecastWorks',
+      | 'forecastWorks'
+      // Revision 6.
+      | 'planned'
+      | 'leadNotes'
+      | 'resources'
+      | 'previews',
       number
     >
   >;
+}
+
+/**
+ * A planned task without a harness work (revision 6): an «ещё не утверждена»
+ * card, no attempts and no actions. `from`: `validated` — in the checked but
+ * not approved snapshot of the task source; `read` — only in its last read.
+ */
+export interface PlannedTaskView {
+  id: string;
+  connector: string;
+  taskId: string;
+  key?: string;
+  title?: string;
+  status: 'planned';
+  from: 'validated' | 'read';
+  graphId?: string;
+  dependsOn?: string[];
+  line: string;
+}
+
+/**
+ * The lead (revision 6): the `harness lead begin|end` session (a lease until
+ * `until`), the last note and the journal newest first — notes, the lead's
+ * harness commands, the release summary.
+ */
+export interface LeadView {
+  active: boolean;
+  since?: string;
+  until?: string;
+  endedAt?: string;
+  lastNote?: { at: string; plain: string };
+  /** At most 20; more in `truncated.leadNotes`. */
+  notes: { at: string; kind: string; action: string; workId?: string; plain: string }[];
+  line: string;
+}
+
+/** Network of a role or of the checks in plain words. */
+export type ResourcesNetwork = 'closed' | 'loopback' | 'domains' | 'open' | 'mixed';
+
+/** «Что задействовано» (revision 6): every line is the harness's, in plain words. */
+export interface ResourcesView {
+  roles: {
+    role: string;
+    kind: 'writer' | 'reviewer' | 'lead';
+    review?: 'plan' | 'contract' | 'code';
+    alternate?: true;
+    runtime: string;
+    /** For a person: OpenAI, Anthropic, fixture. */
+    vendor: string;
+    model?: string;
+    effort?: string;
+    repositoryId?: string;
+    network?: ResourcesNetwork;
+    line: string;
+  }[];
+  isolation: {
+    sandbox: 'os' | 'none';
+    writers: ResourcesNetwork;
+    gates: ResourcesNetwork;
+    domains: number;
+    line: string;
+  };
+  toolchain: { tools: { name: string; version: string; repositoryId?: string }[]; line: string };
+  dependencyStore: {
+    state: 'on' | 'off' | 'partial';
+    repositories: { repositoryId: string; manager: string; seeds?: number }[];
+    line: string;
+  };
+  services: {
+    /** `@workspace` — the joint check. */
+    repositoryId: string;
+    name: string;
+    engine?: 'docker';
+    scope: 'attempt' | 'workspace';
+    running: number;
+    stopped: number;
+    leftover: number;
+    since?: string;
+    leftoverRuns?: string[];
+    line: string;
+  }[];
+  gates: {
+    total: number;
+    workspace: number;
+    repositories: { repositoryId: string; count: number }[];
+    line: string;
+    /**
+     * Gates held by a refusal without a retry (`ENVIRONMENT_GATE_HELD`,
+     * harness alpha.66): works that need them are not issued; `workId` is
+     * the work whose attempt failed. At most 10.
+     */
+    held?: { repositoryId: string; gate: string; workId: string }[];
+    /** The same in plain words; also the first of `lines`. */
+    heldLine?: string;
+  };
+  /** Short lines for the home screen, at most 8. */
+  lines: string[];
+  truncated?: { roles?: number; tools?: number; services?: number; receipts?: number };
+}
+
+/**
+ * A running preview of the result (harness alpha.66, `harness
+ * preview-start`): a loopback address the harness proxies, what it shows and
+ * when it stops by itself.
+ */
+export interface PreviewView {
+  id: string;
+  repositoryId: string;
+  title?: string;
+  /** Always `http://127.0.0.1:<port>/`. */
+  url: string;
+  ref: string;
+  sha: string;
+  workId?: string;
+  startedAt: string;
+  expiresAt: string;
+  state: 'running';
 }
 
 /** One attempt row of the work detail document. */

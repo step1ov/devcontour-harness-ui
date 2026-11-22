@@ -25,6 +25,8 @@ import {
   leadAnswers,
   taskCards,
   leadStopOf,
+  plannedSplit,
+  gateHoldsOf,
   type TaskCard as Card_,
   type TaskPhase,
 } from '../model/tasks.ts';
@@ -47,6 +49,8 @@ import { Badge, type Tone } from './ui/badge.tsx';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card.tsx';
 import { Progress } from './ui/progress.tsx';
 import { hasOverview, SetupScreen } from './Setup.tsx';
+import { TrackLine } from './Track.tsx';
+import { PlannedBlock } from './Planned.tsx';
 
 export interface TasksProps extends ScreenProps {
   view: OperatorView;
@@ -60,6 +64,7 @@ const tones: Record<TaskPhase, Tone> = {
   stopped: 'warn',
   dependency: 'outline',
   queued: 'outline',
+  planned: 'outline',
   other: 'outline',
 };
 
@@ -73,7 +78,9 @@ export function Tasks({ view, lang = 'ru', now, onOpenWork, workHref, timeZone }
   const steps = nextSteps(view);
   const cards = taskCards(view, steps);
   const scope = scopeOf(view);
-  const outside = outsideHarness(scope);
+  // Revision 6: planned tasks get their own «ещё не утверждена» cards below
+  // (the same split as on the Overview: each task once).
+  const { planned, outside } = plannedSplit(view, scope);
   const unlisted = overallProgress(view).outsideUnlisted;
   const other = view.reviews.filter((r) => r.workId === undefined);
   return (
@@ -105,6 +112,7 @@ export function Tasks({ view, lang = 'ru', now, onOpenWork, workHref, timeZone }
         ))}
       </ul>
       {view.truncated?.works ? <p className="hui-muted">{t.overview.planClipped}</p> : null}
+      <PlannedBlock view={view} items={planned} lang={lang} testid="tasks-planned" />
       {scope ? (
         outside.length ? (
           <Block t={t} title={k.outside(outside.length)} testid="tasks-outside">
@@ -214,6 +222,11 @@ function TaskCardView({
   const titleText = w.title && w.title !== name ? w.title : undefined;
   // Revision 5: accepted, and left in the task source for your check.
   const review = sourceReviewOf(view, w.id);
+  // Harness alpha.66: a check held by a refusal without a retry — the lead's move.
+  // The harness's words: for the work that caused the hold the held-gate line
+  // of «что задействовано» (whole, up to 300), else the stop's own `plain`.
+  const holds = gateHoldsOf(view, w);
+  const holdLine = (holds.own.length ? view.resources?.gates.heldLine : undefined) ?? holds.plain;
   return (
     <Card as="li" data-testid={`task-${w.id}`} className="hui-task">
       <CardHeader>
@@ -225,11 +238,21 @@ function TaskCardView({
         <Badge tone={tones[c.phase]} data-testid="task-phase">
           {label(k.phase, c.phase)}
         </Badge>
+        {w.planned && c.phase !== 'planned' ? (
+          <Badge tone="outline" data-testid="planned-badge">
+            {t.r6.plannedBadge}
+          </Badge>
+        ) : null}
       </CardHeader>
       <CardContent className="hui:gap-2 hui:text-sm">
         <p data-testid="task-now" data-status={c.phase === 'accepted' ? 'accepted' : undefined}>
           {nowText}
         </p>
+        {w.planned ? <p className="hui-muted">{t.r6.plannedWork}</p> : null}
+        {holdLine && holdLine !== firstBlocker?.plain?.trim() ? (
+          <p data-testid="task-gate-held">{withWorkNames(view, holdLine)}</p>
+        ) : null}
+        {w.track ? <TrackLine track={w.track} lang={lang} name={titleText ?? name} /> : null}
         {review ? (
           <p data-testid="task-source-review" data-status="blocked">
             <Badge tone="info">{t.r5.kindSourceReview}</Badge>{' '}

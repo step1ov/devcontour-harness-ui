@@ -36,3 +36,14 @@ export { UPDATE_BANNER_STATES, UpdatesBanner, UpdatesSection } from './component
 export { SourceQuestionItem, SourceReviewItem } from './components/Overview.tsx';
 export { SetupNote, SetupScreen, hasOverview, inSetup, stageLines } from './components/Setup.tsx';
 export { Term, type ScreenProps } from './components/common.tsx';
+// Revision 6 (harness 0.1.0-alpha.66): the lead, the task path, what is used, previews, who decides.
+export {
+  LeadJournal,
+  LeadSummary,
+  hasLeadPanel,
+  type LeadJournalProps,
+} from './components/Lead.tsx';
+export { TrackLegend, TrackLine, TrackTable, stateWord, stepWords } from './components/Track.tsx';
+export { ResourcesPanel } from './components/Resources.tsx';
+export { PreviewsPanel, previewHref } from './components/Previews.tsx';
+export { DecisionsPanel, decisionValueText } from './components/Settings.tsx';

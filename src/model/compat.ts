@@ -20,7 +20,7 @@ export type ViewCheck =
     };
 
 /** Highest `viewRevision` this build knows how to render in full. */
-export const KNOWN_VIEW_REVISION = 5;
+export const KNOWN_VIEW_REVISION = 6;
 
 type Obj = Record<string, unknown>;
 const isObject = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -114,6 +114,14 @@ const obj =
       c(Object.hasOwn(v, k) ? v[k] : undefined, path ? `${path}.${k}` : k, out);
   };
 const bounded = obj({ value: N, bound: S });
+/** A setting value of `settings.decisions` (revision 6): a number, a boolean or a short string. */
+const scalar = leaf(
+  (v) =>
+    typeof v === 'boolean' ||
+    typeof v === 'string' ||
+    (typeof v === 'number' && Number.isFinite(v)),
+);
+const bilingual = obj({ ru: S, en: S });
 
 const binding = obj({ runtime: S, model: opt(S), effort: opt(S) });
 const source = obj({ producer: S, producerVersion: S, stateVersion: N, token: S });
@@ -156,12 +164,22 @@ const settings = obj({
   }),
   lean: obj({ state: S }),
   defaulted: arr(S, 50),
+  decisions: opt(
+    obj({
+      items: arr(obj({ key: S, value: scalar, source: S, explain: bilingual }), 10),
+      summary: bilingual,
+      warning: opt(bilingual),
+    }),
+  ),
 });
 const work = obj({
   id: S,
   graphId: S,
   title: opt(S),
   status: S,
+  planned: opt(B),
+  restoredFrom: opt(S),
+  restoredLine: opt(S),
   stage: obj({
     name: S,
     step: opt(S),
@@ -179,6 +197,7 @@ const work = obj({
     rechecks: C,
     neutral: obj({ used: C, max: C }),
     runs: opt(C),
+    rework: opt(obj({ revision: C, fresh: B, acceptedSha: S, acceptedAt: opt(I) })),
     line: opt(S),
     lastFailure: opt(
       obj({ attempt: C, bucket: S, plain: S, at: opt(I), kind: opt(S), counted: opt(B) }),
@@ -206,6 +225,23 @@ const work = obj({
   question: opt(obj({ requestId: S, state: S, severity: N, line: opt(S) })),
   spend: obj({ calls: N, usd: bounded, durationMs: N }),
   resultSha: opt(S),
+  track: opt(
+    obj({
+      steps: arr(
+        obj({
+          kind: S,
+          attempt: opt(C),
+          state: S,
+          label: S,
+          at: opt(I),
+          reason: opt(S),
+          rework: opt(C),
+        }),
+        120,
+      ),
+      truncated: opt(C),
+    }),
+  ),
 });
 const review = obj({
   kind: S,
@@ -453,11 +489,23 @@ const overview = obj({
               percent: N,
               attempt: opt(obj({ n: C, max: C })),
               retry: opt(S),
+              rework: opt(B),
               line: S,
             }),
             50,
           ),
         ),
+        rework: opt(C),
+        planned: opt(obj({ count: C, keys: arr(S, 20), line: S })),
+        approved: opt(obj({ percent: N, total: C, done: C, left: C, loMs: opt(C), hiMs: opt(C) })),
+        lead: opt(
+          obj({
+            steps: arr(obj({ step: S, weight: N, done: B }), 4),
+            weighted: N,
+            total: N,
+          }),
+        ),
+        release: opt(obj({ state: S, doneAt: opt(I), summary: opt(S), line: S })),
       }),
       time: obj({
         startedAt: opt(I),
@@ -466,6 +514,8 @@ const overview = obj({
         remaining: opt(obj({ loMs: C, hiMs: C, samples: C, attemptsPerTask: N })),
         rough: opt(obj({ loMs: C, hiMs: C, samples: C, attemptsPerTask: N })),
         estimate: opt(S),
+        chain: opt(N),
+        lead: opt(obj({ ms: C, samples: C, line: S })),
         humanWait: obj({ works: C, ms: C, since: opt(I) }),
         line: S,
       }),
@@ -483,6 +533,106 @@ const overview = obj({
       whatsNew: opt(arr(S, 10)),
       command: opt(S),
     }),
+  ),
+  planned: opt(
+    arr(
+      obj({
+        id: S,
+        connector: S,
+        taskId: S,
+        key: opt(S),
+        title: opt(S),
+        status: S,
+        from: S,
+        graphId: opt(S),
+        dependsOn: opt(arr(S, 50)),
+        line: S,
+      }),
+      200,
+    ),
+  ),
+  lead: opt(
+    obj({
+      active: B,
+      since: opt(I),
+      until: opt(I),
+      endedAt: opt(I),
+      lastNote: opt(obj({ at: I, plain: S })),
+      notes: arr(obj({ at: I, kind: S, action: S, workId: opt(S), plain: S }), 20),
+      line: S,
+    }),
+  ),
+  resources: opt(
+    obj({
+      roles: arr(
+        obj({
+          role: S,
+          kind: S,
+          review: opt(S),
+          alternate: opt(B),
+          runtime: S,
+          vendor: S,
+          model: opt(S),
+          effort: opt(S),
+          repositoryId: opt(S),
+          network: opt(S),
+          line: S,
+        }),
+        100,
+      ),
+      isolation: obj({ sandbox: S, writers: S, gates: S, domains: C, line: S }),
+      toolchain: obj({
+        tools: arr(obj({ name: S, version: S, repositoryId: opt(S) }), 50),
+        line: S,
+      }),
+      dependencyStore: obj({
+        state: S,
+        repositories: arr(obj({ repositoryId: S, manager: S, seeds: opt(C) }), 10),
+        line: S,
+      }),
+      services: arr(
+        obj({
+          repositoryId: S,
+          name: S,
+          engine: opt(S),
+          scope: S,
+          running: C,
+          stopped: C,
+          leftover: C,
+          since: opt(I),
+          leftoverRuns: opt(arr(S, 5)),
+          line: S,
+        }),
+        50,
+      ),
+      gates: obj({
+        total: C,
+        workspace: C,
+        repositories: arr(obj({ repositoryId: S, count: C }), 10),
+        line: S,
+        held: opt(arr(obj({ repositoryId: S, gate: S, workId: S }), 10)),
+        heldLine: opt(S),
+      }),
+      lines: arr(S, 8),
+      truncated: opt(rec(C)),
+    }),
+  ),
+  previews: opt(
+    arr(
+      obj({
+        id: S,
+        repositoryId: S,
+        title: opt(S),
+        url: S,
+        ref: S,
+        sha: S,
+        workId: opt(S),
+        startedAt: I,
+        expiresAt: I,
+        state: S,
+      }),
+      20,
+    ),
   ),
   truncated: opt(rec(C)),
 });

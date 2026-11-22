@@ -12,14 +12,16 @@ const screens: [string, string, RegExp][] = [
   [
     'overview',
     '#/',
-    /Сейчас harness работает над locale-format[\s\S]*В harness: принято 1 из 4 · в работе 1 · ждут 2[\s\S]*Какой разделитель использовать в CSV\?[\s\S]*Проблемы по ходу/,
+    /Сейчас harness работает над locale-format[\s\S]*В harness: принято 1 из 5 · в работе 1 · ждут 3[\s\S]*Какой разделитель использовать в CSV\?[\s\S]*Проблемы по ходу/,
   ],
   [
     'tasks',
     '#/tasks',
     /Format dates by locale[^]*Попытки: израсходовано 2 из 3, осталось 1[^]*Дальше действует: harness[^]*Export report as CSV[^]*Дальше действует: вы[^]*раунды 2 из 6/,
   ],
-  ['work', '#/work/locale-format', /Что проверено/],
+  ['work', '#/work/locale-format', /Путь задачи[\s\S]*идёт сейчас[\s\S]*Что проверено/],
+  ['work-diagnosis', '#/work/import-csv', /разбор ведущего[\s\S]*ждёт/],
+  ['lead', '#/lead', /Журнал ведущего \(6\)[\s\S]*ведущий разобрал отказы locale-format/],
   [
     'work-accepted',
     '#/work/add-greeting',
@@ -27,7 +29,7 @@ const screens: [string, string, RegExp][] = [
   ],
   ['decisions', '#/decisions', /Временные \(1\)/],
   ['activity', '#/activity', /Кто что делал[\s\S]*контроллер[\s\S]*вчера 21:05/],
-  ['settings', '#/settings', /Технические вопросы решает ведущий: да/],
+  ['settings', '#/settings', /Кто принимает решения[\s\S]*Технические вопросы решает ведущий: да/],
   ['history', '#/history', /Наибольшая нагрузка за окно/],
   ['health', '#/health', /Контроллер работает/],
 ];
@@ -362,4 +364,84 @@ test('an open tab offers a reload when the panel server serves a new build (F-AF
     /Панель обновилась \(версия [^)]+\): на этой вкладке открыта прежняя сборка\./,
   );
   await expect(prompt.getByRole('button', { name: 'Обновить страницу' })).toBeVisible();
+});
+
+test('task path: one focusable line per card, focus or tap opens the steps, Escape closes', async ({
+  page,
+}) => {
+  await open(page, '#/tasks');
+  const card = page.getByTestId('task-locale-format');
+  const trigger = card.getByRole('button', { name: 'Путь задачи Format dates by locale' });
+  await expect(trigger).toBeVisible();
+  const tip = card.getByRole('tooltip');
+  await expect(tip).toBeHidden();
+  // The steps are the button's description for assistive technology.
+  await expect(trigger).toHaveAccessibleDescription(
+    /разбор ведущего — решение \(D1: слабое покрытие\)[\s\S]*попытка 2: код — пройдено; проверки — идёт сейчас/,
+  );
+  // Keyboard: Tab reaches it and the list opens; Escape closes it.
+  await trigger.focus();
+  await expect(tip).toBeVisible();
+  await expect(tip).toContainText('попытка 2: код — пройдено; проверки — идёт сейчас');
+  await page.keyboard.press('Escape');
+  await expect(tip).toBeHidden();
+  await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+  // A tap (click) opens it and a second tap closes it.
+  await page.mouse.move(0, 0);
+  await trigger.blur();
+  await trigger.click();
+  await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  await expect(tip).toBeVisible();
+  await trigger.click();
+  await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+  const dot = card.locator('.hui-dot[data-tone="current"]');
+  await expect(dot).toHaveCount(1);
+  expect(await dot.evaluate((el) => getComputedStyle(el).animationName)).toBe('hui-pulse');
+  // States differ by mark too: failed is a cross, waiting a ring.
+  const failed = page.locator('.hui-dot[data-tone="failed"]').first();
+  expect(await failed.evaluate((el) => getComputedStyle(el).clipPath)).toMatch(/polygon/);
+  const waiting = page.locator('.hui-dot[data-tone="waiting"]').first();
+  expect(await waiting.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe(
+    'rgba(0, 0, 0, 0)',
+  );
+  // Each colour of the owner's palette is used in the demo.
+  for (const tone of ['passed', 'current', 'failed', 'waiting', 'decision', 'rework', 'planned'])
+    expect(await page.locator(`.hui-dot[data-tone="${tone}"]`).count(), tone).toBeGreaterThan(0);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  expect(await dot.evaluate((el) => getComputedStyle(el).animationName)).toBe('none');
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
+  expect(overflow, 'horizontal scroll').toBeLessThanOrEqual(0);
+});
+
+test('the lead tab and the home panels: lead, previews, what is used, planned tasks', async ({
+  page,
+}) => {
+  await page.clock.setFixedTime(new Date('2026-11-19T12:05:00Z'));
+  await open(page, '#/');
+  const lead = page.getByTestId('lead-summary');
+  await expect(lead).toContainText('работает');
+  await expect(lead).toContainText('Последняя заметка (14:50): жду ответа про разделитель CSV');
+  const preview = page.getByTestId('previews').getByRole('link', { name: 'Открыть Сайт' });
+  await expect(preview).toHaveAttribute('href', 'http://127.0.0.1:4791/');
+  await expect(preview).toHaveAttribute('target', '_blank');
+  await expect(page.getByTestId('resources')).toContainText('docker: postgres — 1 работает');
+  await expect(page.getByTestId('resources')).toContainText(
+    'Удержано: app/e2e (работа import-csv)',
+  );
+  await expect(page.getByTestId('needs-you')).not.toContainText('удержан');
+  // The lead's diagnosis is not «нужно от вас».
+  await expect(page.getByTestId('needs-you')).not.toContainText('import-csv');
+  await expect(page.getByTestId('by-lead')).toContainText('Разобрать причину повторных отказов');
+  await lead.getByRole('link', { name: 'Журнал ведущего' }).click();
+  await expect(page).toHaveURL(/#\/lead$/);
+  const sub = page.getByRole('navigation', { name: 'Разделы журнала' });
+  await expect(sub.getByRole('link', { name: 'Ведущий' })).toHaveAttribute('aria-current', 'page');
+  await open(page, '#/tasks');
+  await expect(page.getByTestId('tasks-planned')).toContainText('DEMO-6 · Печать отчёта');
+  await expect(page.getByTestId('tasks-planned')).toContainText('ещё не утверждена');
+  await expect(page.getByTestId('task-import-csv').getByTestId('task-gate-held')).toContainText(
+    'Удержано: app/e2e (работа import-csv)',
+  );
 });

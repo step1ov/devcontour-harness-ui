@@ -49,16 +49,16 @@ const at = (iso: string) => Date.parse(iso);
 
 test('overall progress: harness counts, never the clipped list; scope tasks outside are added', () => {
   assert.deepEqual(overallProgress(view), {
-    total: 4,
+    total: 5,
     done: 1,
     running: 1,
-    waiting: 2,
+    waiting: 3,
     cancelled: 0,
     outside: undefined,
     outsideUnlisted: 0,
   });
   // A clipped works list does not change the counts: they come from `progress`.
-  assert.equal(overallProgress({ ...view, works: view.works.slice(0, 1) }).total, 4);
+  assert.equal(overallProgress({ ...view, works: view.works.slice(0, 1) }).total, 5);
   const withScope = {
     ...view,
     scope: {
@@ -76,10 +76,10 @@ test('overall progress: harness counts, never the clipped list; scope tasks outs
   // Two tasks outside the harness are listed; of 8 in the snapshot, 3 are listed: 5 are
   // clipped, of unknown state — named as not shown, never counted as outside or in the total.
   assert.deepEqual(overallProgress(withScope), {
-    total: 6,
+    total: 7,
     done: 1,
     running: 1,
-    waiting: 2,
+    waiting: 3,
     cancelled: 0,
     outside: 2,
     outsideUnlisted: 5,
@@ -100,10 +100,10 @@ test('overall progress: harness counts, never the clipped list; scope tasks outs
 test('rough times: ranges from observed times, unknown never zero', () => {
   // 11 attempts, 33 000 000 ms in the window: 50 min on average.
   assert.deepEqual(attemptAverage(view), { ms: 3_000_000, samples: 11 });
-  // 3 works left, 2 slots: at best 2 rounds of 50 min, at worst 3 in a row.
-  assert.deepEqual(scopeLeft(view).range, { loMs: 6_000_000, hiMs: 9_000_000 });
+  // 4 works left, 2 slots: at best 2 rounds of 50 min, at worst 4 in a row.
+  assert.deepEqual(scopeLeft(view).range, { loMs: 6_000_000, hiMs: 12_000_000 });
   // The low end rounds down, the high end up: never narrower than the numbers.
-  assert.equal(formatRange(scopeLeft(view).range!, 'ru'), '1,5–2,5 ч');
+  assert.equal(formatRange(scopeLeft(view).range!, 'ru'), '1,5–3,5 ч');
   // Below the sample minimum or without totals (alpha.55): no range at all.
   const few = {
     ...view,
@@ -115,7 +115,7 @@ test('rough times: ranges from observed times, unknown never zero', () => {
   assert.equal(scopeLeft({ ...view, history: noTotals }).range, undefined);
   // Nothing left: no range, zero works.
   assert.deepEqual(
-    scopeLeft({ ...view, progress: { ...view.progress, done: 4, running: 0 } }).works,
+    scopeLeft({ ...view, progress: { ...view.progress, done: 5, running: 0 } }).works,
     0,
   );
   assert.equal(formatRough(20_000, 'ru'), 'меньше минуты');

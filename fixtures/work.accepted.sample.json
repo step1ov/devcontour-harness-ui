@@ -1,6 +1,6 @@
 {
   "viewVersion": 1,
-  "viewRevision": 4,
+  "viewRevision": 6,
   "generatedAt": "2026-11-19T12:00:00.000Z",
   "source": {
     "producer": "fixture",
@@ -50,7 +50,81 @@
         "checkedAt": "2026-11-18T17:30:00.000Z",
         "line": "accepted locally; not yet on the remote branch origin/harness/accepted"
       }
-    }
+    },
+    "track": {
+      "steps": [
+        {
+          "kind": "code",
+          "attempt": 1,
+          "state": "passed",
+          "label": "code"
+        },
+        {
+          "kind": "checks",
+          "attempt": 1,
+          "state": "passed",
+          "label": "checks"
+        },
+        {
+          "kind": "review",
+          "attempt": 1,
+          "state": "passed",
+          "label": "review"
+        },
+        {
+          "kind": "integration",
+          "attempt": 1,
+          "state": "passed",
+          "label": "integration"
+        },
+        {
+          "kind": "accepted",
+          "attempt": 1,
+          "state": "passed",
+          "label": "accepted (earlier revision)",
+          "at": "2026-11-19T09:24:00.000Z"
+        },
+        {
+          "kind": "code",
+          "attempt": 2,
+          "state": "passed",
+          "label": "code",
+          "rework": 1
+        },
+        {
+          "kind": "checks",
+          "attempt": 2,
+          "state": "failed",
+          "label": "checks",
+          "at": "2026-11-19T10:05:00.000Z",
+          "reason": "checks failed",
+          "rework": 1
+        },
+        {
+          "kind": "review",
+          "attempt": 2,
+          "state": "skipped",
+          "label": "review",
+          "rework": 1
+        },
+        {
+          "kind": "integration",
+          "attempt": 2,
+          "state": "skipped",
+          "label": "integration",
+          "rework": 1
+        },
+        {
+          "kind": "accepted",
+          "state": "passed",
+          "label": "rework abandoned — the accepted revision",
+          "at": "2026-11-19T10:05:00.000Z",
+          "rework": 1
+        }
+      ]
+    },
+    "restoredFrom": "cancelled-rework",
+    "restoredLine": "accepted at 3b1f9e0; the rework was cancelled"
   },
   "attempts": [
     {

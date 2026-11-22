@@ -1,6 +1,6 @@
 {
   "viewVersion": 1,
-  "viewRevision": 4,
+  "viewRevision": 6,
   "generatedAt": "2026-11-19T12:00:00.000Z",
   "source": {
     "producer": "fixture",
@@ -56,6 +56,123 @@
         "bound": "lower"
       },
       "durationMs": 1900000
+    },
+    "track": {
+      "steps": [
+        {
+          "kind": "code",
+          "attempt": 1,
+          "state": "passed",
+          "label": "код"
+        },
+        {
+          "kind": "checks",
+          "attempt": 1,
+          "state": "failed",
+          "label": "проверки",
+          "at": "2026-11-19T11:40:30.000Z",
+          "reason": "проверки не прошли"
+        },
+        {
+          "kind": "review",
+          "attempt": 1,
+          "state": "skipped",
+          "label": "ревью"
+        },
+        {
+          "kind": "integration",
+          "attempt": 1,
+          "state": "skipped",
+          "label": "интеграция"
+        },
+        {
+          "kind": "diagnosis",
+          "state": "decision",
+          "label": "разбор ведущего",
+          "at": "2026-11-19T11:40:50.000Z",
+          "reason": "D1: слабое покрытие",
+          "actor": "lead"
+        },
+        {
+          "kind": "code",
+          "attempt": 2,
+          "state": "passed",
+          "label": "код"
+        },
+        {
+          "kind": "checks",
+          "attempt": 2,
+          "state": "current",
+          "label": "проверки"
+        },
+        {
+          "kind": "review",
+          "attempt": 2,
+          "state": "planned",
+          "label": "ревью"
+        },
+        {
+          "kind": "integration",
+          "attempt": 2,
+          "state": "planned",
+          "label": "интеграция"
+        },
+        {
+          "kind": "code",
+          "attempt": 3,
+          "state": "planned",
+          "label": "код"
+        },
+        {
+          "kind": "checks",
+          "attempt": 3,
+          "state": "planned",
+          "label": "проверки"
+        },
+        {
+          "kind": "review",
+          "attempt": 3,
+          "state": "planned",
+          "label": "ревью"
+        },
+        {
+          "kind": "integration",
+          "attempt": 3,
+          "state": "planned",
+          "label": "интеграция"
+        },
+        {
+          "kind": "diagnosis",
+          "state": "planned",
+          "label": "разбор ведущего",
+          "actor": "lead"
+        },
+        {
+          "kind": "reset",
+          "state": "planned",
+          "label": "ещё попытки от ведущего",
+          "reason": "сброс 1 из 2",
+          "actor": "lead"
+        },
+        {
+          "kind": "diagnosis",
+          "state": "planned",
+          "label": "разбор ведущего",
+          "actor": "lead"
+        },
+        {
+          "kind": "reset",
+          "state": "planned",
+          "label": "ещё попытки от ведущего",
+          "reason": "сброс 2 из 2",
+          "actor": "lead"
+        },
+        {
+          "kind": "accepted",
+          "state": "planned",
+          "label": "принято"
+        }
+      ]
     }
   },
   "attempts": [

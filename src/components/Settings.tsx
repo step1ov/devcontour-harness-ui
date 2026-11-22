@@ -3,9 +3,12 @@
 // "default" mark appears only for paths in `settings.defaulted`. For each
 // role (and repository) the effective code reviewer and where it comes from
 // are shown, by the harness resolution role -> repository -> global.
+// Revision 6: «Кто принимает решения» first — the harness's own summary and
+// explanations of the attempt limit and the recovery rule.
 
 import { RadioGroup } from './ui/radio-group.tsx';
-import { dict, label, type Dict } from '../model/dict.ts';
+import { dict, knownLabel, label, type Dict, type Lang } from '../model/dict.ts';
+import { Alert } from './ui/alert.tsx';
 import { formatDuration, usd } from '../model/format.ts';
 import type { Binding, OperatorView, ReviewRuleView, RoleBinding } from '../model/view.ts';
 import { Clipped, Heading, type ScreenProps } from './common.tsx';
@@ -134,6 +137,8 @@ export function Settings({ view, lang = 'ru', theme = 'system', onThemeChange }:
           <p className="hui-muted">{t.theme.note}</p>
         </div>
       ) : null}
+
+      <DecisionsPanel view={view} lang={lang} />
 
       {view.updates ? (
         <div className="hui-panel" data-testid="settings-updates">
@@ -297,5 +302,58 @@ export function Settings({ view, lang = 'ru', theme = 'system', onThemeChange }:
         {v.digest(s.policyDigest)} · {t.app.readOnly}
       </footer>
     </section>
+  );
+}
+
+/** A setting value in words: booleans and the recovery modes in the panel language, the rest as is. */
+export function decisionValueText(value: number | boolean | string, lang: Lang): string {
+  const t = dict(lang);
+  if (typeof value === 'boolean') return value ? t.yes : t.no;
+  if (typeof value === 'string') return knownLabel(t.r6.decisionValue, value) ?? value;
+  return String(value);
+}
+
+/**
+ * «Кто принимает решения» (`settings.decisions`, view revision 6): the
+ * harness's summary sentence, an unusual combination as a warning, and each
+ * setting with its value, where the value comes from and the harness's own
+ * explanation in the panel language. Before revision 6: nothing to show.
+ */
+export function DecisionsPanel({ view, lang = 'ru' }: { view: OperatorView; lang?: Lang }) {
+  const t = dict(lang);
+  const k = t.r6;
+  const d = view.settings.decisions;
+  const pick = (b: { ru: string; en: string }) => (lang === 'en' ? b.en : b.ru);
+  if (!d) return null;
+  return (
+    <div className="hui-panel" data-testid="settings-decisions">
+      <Heading t={t} term="lead">
+        {k.decisionsTitle}
+      </Heading>
+      <p className="hui:font-medium" data-testid="decisions-summary">
+        {k.decisionsSummary} {pick(d.summary)}
+      </p>
+      {d.warning ? (
+        <Alert tone="warn" data-testid="decisions-warning" role="note">
+          {pick(d.warning)}
+        </Alert>
+      ) : null}
+      <dl className="hui-defs">
+        {d.items.map((x) => (
+          <div className="hui-def" key={x.key} data-testid={`decision-${x.key}`}>
+            <dt>{knownLabel(k.decisionKey, x.key) ?? x.key}</dt>
+            <dd>
+              <strong>{decisionValueText(x.value, lang)}</strong>{' '}
+              <span className="hui-badge hui-default" data-source={x.source}>
+                {knownLabel(k.decisionSource, x.source) ?? x.source}
+              </span>
+              <span className="hui:mt-1 hui:block hui:text-sm hui:text-muted-foreground">
+                {pick(x.explain)}
+              </span>
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </div>
   );
 }

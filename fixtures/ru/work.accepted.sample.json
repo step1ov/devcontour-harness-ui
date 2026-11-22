@@ -1,6 +1,6 @@
 {
   "viewVersion": 1,
-  "viewRevision": 4,
+  "viewRevision": 6,
   "generatedAt": "2026-11-19T12:00:00.000Z",
   "source": {
     "producer": "fixture",
@@ -50,7 +50,81 @@
         "checkedAt": "2026-11-18T17:30:00.000Z",
         "line": "принято локально; в удалённой ветке origin/harness/accepted ещё нет"
       }
-    }
+    },
+    "track": {
+      "steps": [
+        {
+          "kind": "code",
+          "attempt": 1,
+          "state": "passed",
+          "label": "код"
+        },
+        {
+          "kind": "checks",
+          "attempt": 1,
+          "state": "passed",
+          "label": "проверки"
+        },
+        {
+          "kind": "review",
+          "attempt": 1,
+          "state": "passed",
+          "label": "ревью"
+        },
+        {
+          "kind": "integration",
+          "attempt": 1,
+          "state": "passed",
+          "label": "интеграция"
+        },
+        {
+          "kind": "accepted",
+          "attempt": 1,
+          "state": "passed",
+          "label": "принято (прежняя редакция)",
+          "at": "2026-11-19T09:24:00.000Z"
+        },
+        {
+          "kind": "code",
+          "attempt": 2,
+          "state": "passed",
+          "label": "код",
+          "rework": 1
+        },
+        {
+          "kind": "checks",
+          "attempt": 2,
+          "state": "failed",
+          "label": "проверки",
+          "at": "2026-11-19T10:05:00.000Z",
+          "reason": "проверки не прошли",
+          "rework": 1
+        },
+        {
+          "kind": "review",
+          "attempt": 2,
+          "state": "skipped",
+          "label": "ревью",
+          "rework": 1
+        },
+        {
+          "kind": "integration",
+          "attempt": 2,
+          "state": "skipped",
+          "label": "интеграция",
+          "rework": 1
+        },
+        {
+          "kind": "accepted",
+          "state": "passed",
+          "label": "доработка оставлена — принятая редакция",
+          "at": "2026-11-19T10:05:00.000Z",
+          "rework": 1
+        }
+      ]
+    },
+    "restoredFrom": "cancelled-rework",
+    "restoredLine": "принято на 3b1f9e0; доработка отменена"
   },
   "attempts": [
     {
