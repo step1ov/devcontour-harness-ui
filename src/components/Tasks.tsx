@@ -223,9 +223,10 @@ function TaskCardView({
   // Revision 5: accepted, and left in the task source for your check.
   const review = sourceReviewOf(view, w.id);
   // Harness alpha.66: a check held by a refusal without a retry — the lead's move.
-  // The harness's words: the stop of this work, else the held-gate line of «что задействовано».
+  // The harness's words: for the work that caused the hold the held-gate line
+  // of «что задействовано» (whole, up to 300), else the stop's own `plain`.
   const holds = gateHoldsOf(view, w);
-  const holdLine = holds.plain ?? (holds.own.length ? view.resources?.gates.heldLine : undefined);
+  const holdLine = (holds.own.length ? view.resources?.gates.heldLine : undefined) ?? holds.plain;
   return (
     <Card as="li" data-testid={`task-${w.id}`} className="hui-task">
       <CardHeader>

@@ -442,6 +442,6 @@ test('the lead tab and the home panels: lead, previews, what is used, planned ta
   await expect(page.getByTestId('tasks-planned')).toContainText('DEMO-6 · Печать отчёта');
   await expect(page.getByTestId('tasks-planned')).toContainText('ещё не утверждена');
   await expect(page.getByTestId('task-import-csv').getByTestId('task-gate-held')).toContainText(
-    'gate e2e удержан: зовёт ps',
+    'Удержано: app/e2e (работа import-csv)',
   );
 });

@@ -663,19 +663,18 @@ test('a held gate (ENVIRONMENT_GATE_HELD): the lead’s move, in «Что зад
   // The card of the work whose attempt failed says it in plain words.
   const t = html(<Tasks view={viewRu} lang="ru" />);
   const card = t.slice(t.indexOf('data-testid="task-import-csv"'));
-  // The harness's own words (the work's stop), not a panel-made cause.
+  // The harness's own words (the held-gate line, whole), not a panel-made cause.
   assert.match(
     card,
-    /data-testid="task-gate-held">gate e2e удержан: зовёт ps, а в песочнице проверок список процессов недоступен; ход ведущего/,
+    /data-testid="task-gate-held">Удержано: app\/e2e \(работа import-csv\) — gate зовёт ps/,
   );
-  // Without the stop's text: the held-gate line of «что задействовано».
-  const noPlain = structuredClone(ru);
-  for (const b of noPlain.works.find((x: Json) => x.id === 'import-csv').blockers)
-    if (b.code === 'ENVIRONMENT_GATE_HELD') delete b.plain;
-  const np = html(<Tasks view={viewOf(noPlain)} lang="ru" />);
+  // Without the held-gate line: the stop's own text.
+  const noLine = structuredClone(ru);
+  delete noLine.resources.gates.heldLine;
+  const np = html(<Tasks view={viewOf(noLine)} lang="ru" />);
   assert.match(
     np.slice(np.indexOf('data-testid="task-import-csv"')),
-    /data-testid="task-gate-held">Удержано: app\/e2e \(работа import-csv\)/,
+    /data-testid="task-gate-held">gate e2e удержан: зовёт ps, а в песочнице проверок список процессов недоступен; ход ведущего/,
   );
   // A work that only waits for a held gate.
   const waits = structuredClone(ru);
