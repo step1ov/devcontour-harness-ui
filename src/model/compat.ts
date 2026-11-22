@@ -610,6 +610,8 @@ const overview = obj({
         workspace: C,
         repositories: arr(obj({ repositoryId: S, count: C }), 10),
         line: S,
+        held: opt(arr(obj({ repositoryId: S, gate: S, workId: S }), 10)),
+        heldLine: opt(S),
       }),
       lines: arr(S, 8),
       truncated: opt(rec(C)),

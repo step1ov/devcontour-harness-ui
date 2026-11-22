@@ -124,4 +124,4 @@ export {
   type TrackGroup,
   type TrackTone,
 } from './track.ts';
-export { plannedKeys } from './tasks.ts';
+export { gateHoldsOf, plannedKeys } from './tasks.ts';

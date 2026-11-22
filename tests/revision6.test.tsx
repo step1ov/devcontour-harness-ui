@@ -88,20 +88,37 @@ test('track tones: the harness state alone picks the colour; rework violet; unkn
   assert.equal(t('something-new'), 'planned');
 });
 
-test('track steps: positions after the dropped ones; a running attempt’s later phases read as ahead', () => {
+test('track steps: positions after the dropped ones; states as sent, a real skipped stays skipped', () => {
   const track = view.works.find((w) => w.id === 'locale-format')!.track!;
   const d = drawnSteps(track);
   assert.equal(d.length, 18);
   assert.equal(d[0]!.n, 1);
-  // Attempt 2 runs its checks: its review and integration come as `skipped` from harness alpha.66.
+  // Attempt 2 runs its checks: harness alpha.66 sends the steps ahead as `planned`.
   const a2 = d.filter((x) => x.step.attempt === 2);
   assert.deepEqual(
     a2.map((x) => [x.step.kind, x.step.state, x.state, x.tone]),
     [
       ['code', 'passed', 'passed', 'passed'],
       ['checks', 'current', 'current', 'current'],
-      ['review', 'skipped', 'planned', 'planned'],
-      ['integration', 'skipped', 'planned', 'planned'],
+      ['review', 'planned', 'planned', 'planned'],
+      ['integration', 'planned', 'planned', 'planned'],
+    ],
+  );
+  // No panel reading: a `skipped` after the running step is said as skipped.
+  const odd: WorkTrack = {
+    steps: track.steps.map((x) =>
+      x.attempt === 2 && x.state === 'planned' ? { ...x, state: 'skipped' as const } : x,
+    ),
+  };
+  assert.deepEqual(
+    drawnSteps(odd)
+      .filter((x) => x.step.attempt === 2)
+      .map((x) => [x.state, x.tone]),
+    [
+      ['passed', 'passed'],
+      ['current', 'current'],
+      ['skipped', 'skipped'],
+      ['skipped', 'skipped'],
     ],
   );
   // An attempt that failed keeps its skipped steps skipped.
@@ -216,7 +233,9 @@ test('work detail: the path panel, and an older or a size-cut document says why 
 
 test('the diagnosis is the lead’s move: never «нужно от вас», one lead line per stop', () => {
   const steps = nextSteps(view);
-  const lead = steps.lead.filter((s) => s.workIds.includes('import-csv'));
+  const lead = steps.lead.filter(
+    (s) => s.workIds.includes('import-csv') && s.code === 'DIAGNOSIS_REQUIRED',
+  );
   assert.equal(lead.length, 1, JSON.stringify(steps.lead));
   assert.equal(lead[0]!.code, 'DIAGNOSIS_REQUIRED');
   assert.equal(lead[0]!.action, 'diagnose');
@@ -272,7 +291,11 @@ test('Журнал → Ведущий: session, release, the journal newest firs
   const t = shown(m);
   assert.match(t, /Ведущий/);
   assert.match(t, /работает в сессии с 09:05 отметка действует до 12:35/);
-  assert.match(t, /ведущий работает с 09:05 UTC: жду ответа про разделитель CSV/);
+  // Harness 5496b33: the line has no clock; the time is `since`, in the viewer's zone.
+  assert.match(t, /ведущий работает: жду ответа про разделитель CSV/);
+  assert.doesNotMatch(t, /UTC/);
+  const moscow = shown(html(<LeadJournal view={viewRu} lang="ru" timeZone="Europe/Moscow" />));
+  assert.match(moscow, /в сессии с 12:05/);
   assert.match(t, /код в работе/);
   assert.match(t, /Журнал ведущего \(6\)/);
   // Newest first, with the work link and the action code only under «подробности».
@@ -469,7 +492,7 @@ test('«Посмотреть результат»: only the harness loopback add
   assert.match(t, /принятый результат, коммит 3b1f9e0 · add-greeting/);
   assert.match(t, /запущено 11:45 · остановится само 13:45/);
   assert.match(t, /npx harness preview-stop --state <каталог состояния> --preview web/);
-  assert.match(t, /npx harness preview-start --state <каталог состояния> --ref accepted/);
+  assert.match(t, /npx harness preview-start --state <каталог состояния> --ref accepted --ttl 2h/);
   assert.doesNotMatch(m, /<button|<form/);
   // An odd address is text, not a link.
   const odd = structuredClone(ru);
@@ -545,4 +568,74 @@ test('the gate checks the revision 6 fields the panel renders', () => {
   // Each of them absent is a revision 5 document: accepted.
   assert.equal(checkView(asAlpha65(en)).ok, true);
   assert.equal(checkWorkDetail(asAlpha65(read('../fixtures/work.diagnosis.sample.json'))).ok, true);
+});
+
+test('a held gate (ENVIRONMENT_GATE_HELD): the lead’s move, in «Что задействовано» and on the card', () => {
+  // One lead line per stop, never the operator's.
+  const steps = nextSteps(view);
+  const held = steps.lead.filter((s) => s.code === 'ENVIRONMENT_GATE_HELD');
+  assert.equal(held.length, 1, JSON.stringify(steps.lead));
+  assert.deepEqual(held[0]!.workIds, ['import-csv']);
+  assert.equal(
+    steps.operator.some((s) => s.code === 'ENVIRONMENT_GATE_HELD'),
+    false,
+  );
+  // A stage need «fix-environment» of the lead joins the same stop.
+  const need = structuredClone(en);
+  const w = need.works.find((x: Json) => x.id === 'import-csv');
+  w.blockers = w.blockers.filter((b: Json) => b.code === 'ENVIRONMENT_GATE_HELD');
+  w.stage.needs = { actor: 'lead', action: 'fix-environment' };
+  need.escalations = [];
+  const one = nextSteps(viewOf(need)).lead.filter((s) => s.workIds.includes('import-csv'));
+  assert.equal(one.length, 1, JSON.stringify(one));
+  assert.equal(one[0]!.action, 'fix-environment');
+  const o = html(<Overview view={viewRu} lang="ru" timeZone={TZ} workHref={href} />);
+  const needs = o.slice(o.indexOf('data-testid="needs-you"'), o.indexOf('data-testid="problems"'));
+  assert.doesNotMatch(needs, /удержан/);
+  assert.match(
+    shown(o.slice(o.indexOf('data-testid="by-lead"'))),
+    /Делает ведущий \(2\)[^]*Gate e2e удержан: зовёт ps[^]*— import-csv действует: ведущий/,
+  );
+  // «Что задействовано»: the harness line first, and the held list.
+  const r = shown(html(<ResourcesPanel view={viewRu} lang="ru" />));
+  assert.match(r, /Что задействовано Удержано: app\/e2e \(работа import-csv\)/);
+  assert.match(r, /Удержанные проверки Удержано: app\/e2e[^]*app\/e2e · import-csv/);
+  // The card of the work whose attempt failed says it in plain words.
+  const t = html(<Tasks view={viewRu} lang="ru" />);
+  const card = t.slice(t.indexOf('data-testid="task-import-csv"'));
+  assert.match(
+    shown(card),
+    /Проверка app\/e2e удержана: она зовёт список процессов, а в песочнице проверок его нет\. Это ход ведущего/,
+  );
+  // A work that only waits for a held gate.
+  const waits = structuredClone(ru);
+  waits.works
+    .find((x: Json) => x.id === 'docs-page')
+    .blockers.push({ code: 'ENVIRONMENT_GATE_HELD', plain: 'gate e2e удержан', actor: 'lead' });
+  const wt = html(<Tasks view={viewOf(waits)} lang="ru" />);
+  assert.match(
+    shown(wt.slice(wt.indexOf('data-testid="task-docs-page"'))),
+    /Ждёт удержанную проверку: её чинит ведущий/,
+  );
+  // Without the fields (revision 5, or no hold): nothing.
+  assert.doesNotMatch(html(<Tasks view={viewOf(asAlpha65(ru))} lang="ru" />), /task-gate-held/);
+  const none = structuredClone(ru);
+  delete none.resources.gates.held;
+  delete none.resources.gates.heldLine;
+  assert.doesNotMatch(html(<ResourcesPanel view={viewOf(none)} lang="ru" />), /resources-held/);
+  // The gate checks the new fields.
+  const bad = structuredClone(en);
+  bad.resources.gates.held = [{ repositoryId: 'app', gate: 3, workId: 'x' }];
+  assert.equal(checkView(bad).ok, false);
+});
+
+test('every command the panel shows gives --ttl a unit', () => {
+  const pages = [
+    html(<PreviewsPanel view={viewRu} lang="ru" />),
+    html(<LeadJournal view={viewOf((({ lead: _l, ...r }) => r)(ru))} lang="ru" />),
+    html(<Overview view={viewRu} lang="ru" />),
+  ];
+  const all = shown(pages.join('\n'));
+  assert.match(all, /harness lead begin --state <каталог состояния> --ttl 30m/);
+  for (const m of all.matchAll(/--ttl\s+(\S+)/g)) assert.match(m[1]!, /^\d+[smh]\b/, m[0]);
 });

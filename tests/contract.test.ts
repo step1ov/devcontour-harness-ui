@@ -1,11 +1,12 @@
 // Contract with devcontour-harness: the view schema is owned by the harness.
 // tests/contract/harness/*.schema.json are verbatim copies of the harness
 // schemas (schemas/operator-view.schema.json, schemas/work-detail-view.schema.json
-// and schemas/setup-view.schema.json of 0.1.0-alpha.65, view revision 5);
+// and schemas/setup-view.schema.json of 0.1.0-alpha.66, view revision 6);
 // empty-state.view.json is a real `harness view --lang en` envelope of that
 // version for a state that does not exist yet (examples/two-vendors policy),
 // setup-state.view.json a real `harness view --repository <empty dir> --lang en`
-// (the setup document). tests/contract/harness-0.1.0-alpha.62/ keeps the same
+// (the setup document). tests/contract/harness-0.1.0-alpha.65/ keeps the same
+// files of 0.1.0-alpha.65 (revision 5); tests/contract/harness-0.1.0-alpha.62/ keeps the same
 // files of 0.1.0-alpha.62 (revision 4 with `neverRun` and `scopeReason`),
 // harness-0.1.0-alpha.60/ (revision 4 without them), harness-0.1.0-alpha.59/
 // (revision 3), harness-0.1.0-alpha.57/ (revision 2, also alpha.58),
@@ -303,6 +304,26 @@ test('the demo fixtures really carry the revision 6 fields (the alpha.65 schema 
       steps.some((x: Json) => x.rework !== undefined),
       name,
     );
+    // Harness 5496b33: the steps a running attempt has not reached are `planned`, not `skipped`.
+    for (const w of doc.works as Json[]) {
+      const st: Json[] = w.track.steps;
+      st.forEach((x, i) => {
+        if (x.state !== 'current') return;
+        for (const y of st.slice(i + 1).filter((y) => y.attempt === x.attempt))
+          assert.equal(y.state, 'planned', `${name}: ${w.id} attempt ${x.attempt}`);
+      });
+    }
+    // A held gate: the resources list and its line first, the lead's stop on the work.
+    assert.deepEqual(doc.resources.gates.held, [
+      { repositoryId: 'app', gate: 'e2e', workId: 'import-csv' },
+    ]);
+    assert.equal(doc.resources.lines[0], doc.resources.gates.heldLine);
+    assert.ok(
+      doc.works
+        .find((w: Json) => w.id === 'import-csv')
+        .blockers.some((b: Json) => b.code === 'ENVIRONMENT_GATE_HELD' && b.actor === 'lead'),
+    );
+    assert.doesNotMatch(doc.lead.line, /UTC|\d\d:\d\d/);
     // The waiting diagnosis is the lead's move, never the operator's.
     const diag = doc.works.find((w: Json) => w.id === 'import-csv');
     assert.deepEqual(diag.stage.needs, { actor: 'lead', action: 'diagnose' });
@@ -1701,6 +1722,17 @@ const shapes: [string, Json, Record<string, string>][] = [
       workspace: 'req:n',
       repositories: 'req:a<o>',
       line: 'req:s',
+      held: 'opt:a<o>',
+      heldLine: 'opt:s',
+    }),
+  ],
+  [
+    'resources.gates.held[]',
+    overviewSchema[ov].resources[ov].gates[ov].held.items,
+    shape<NonNullable<ResourcesView['gates']['held']>[number]>({
+      repositoryId: 'req:s',
+      gate: 'req:s',
+      workId: 'req:s',
     }),
   ],
   [

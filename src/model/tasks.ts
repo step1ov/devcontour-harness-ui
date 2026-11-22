@@ -373,6 +373,20 @@ export function writerEnvironmentStop(
 }
 
 /**
+ * Held gates of a work (`resources.gates.held`, harness alpha.66): the gates
+ * whose refusal without a retry this work's attempt caused (`own`), and
+ * whether the work waits for a held gate (blocker `ENVIRONMENT_GATE_HELD`).
+ */
+export function gateHoldsOf(
+  view: Pick<OperatorView, 'resources'>,
+  w: Pick<WorkView, 'id' | 'blockers'>,
+): { own: { repositoryId: string; gate: string }[]; waits: boolean } {
+  const own = (view.resources?.gates.held ?? []).filter((h) => h.workId === w.id);
+  const waits = w.blockers.some((b) => b.code === 'ENVIRONMENT_GATE_HELD');
+  return { own: own.map(({ repositoryId, gate }) => ({ repositoryId, gate })), waits };
+}
+
+/**
  * Tasks of the run slice that the view lists as planned (`planned[]`,
  * revision 6): the Tasks screen shows them as «ещё не утверждена» cards, so
  * they are not repeated in the «not handed over» list. Keyed by connector

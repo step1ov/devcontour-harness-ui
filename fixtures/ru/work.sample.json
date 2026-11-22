@@ -107,13 +107,13 @@
         {
           "kind": "review",
           "attempt": 2,
-          "state": "skipped",
+          "state": "planned",
           "label": "ревью"
         },
         {
           "kind": "integration",
           "attempt": 2,
-          "state": "skipped",
+          "state": "planned",
           "label": "интеграция"
         },
         {

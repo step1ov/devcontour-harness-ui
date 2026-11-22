@@ -50,6 +50,11 @@
         "code": "DIAGNOSIS_REQUIRED",
         "plain": "2 counted failures in a row: the lead diagnoses the cause before the next attempt",
         "actor": "lead"
+      },
+      {
+        "code": "ENVIRONMENT_GATE_HELD",
+        "plain": "gate e2e is held: it runs ps, and the check sandbox has no process list; the lead changes the gate or command, or fixes the test and retries import-csv (harness",
+        "actor": "lead"
       }
     ],
     "spend": {

@@ -406,6 +406,10 @@ test('the lead tab and the home panels: lead, previews, what is used, planned ta
   await expect(preview).toHaveAttribute('href', 'http://127.0.0.1:4791/');
   await expect(preview).toHaveAttribute('target', '_blank');
   await expect(page.getByTestId('resources')).toContainText('docker: postgres — 1 работает');
+  await expect(page.getByTestId('resources')).toContainText(
+    'Удержано: app/e2e (работа import-csv)',
+  );
+  await expect(page.getByTestId('needs-you')).not.toContainText('удержан');
   // The lead's diagnosis is not «нужно от вас».
   await expect(page.getByTestId('needs-you')).not.toContainText('import-csv');
   await expect(page.getByTestId('by-lead')).toContainText('Разобрать причину повторных отказов');
@@ -416,4 +420,7 @@ test('the lead tab and the home panels: lead, previews, what is used, planned ta
   await open(page, '#/tasks');
   await expect(page.getByTestId('tasks-planned')).toContainText('DEMO-6 · Печать отчёта');
   await expect(page.getByTestId('tasks-planned')).toContainText('ещё не утверждена');
+  await expect(page.getByTestId('task-import-csv').getByTestId('task-gate-held')).toContainText(
+    'Проверка app/e2e удержана',
+  );
 });

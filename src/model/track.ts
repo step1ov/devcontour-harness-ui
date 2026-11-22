@@ -42,10 +42,9 @@ export interface DrawnStep {
   n: number;
   tone: TrackTone;
   /**
-   * The state word to say: the harness state, except that a `skipped` step
-   * after the running step of the same attempt reads as `planned` — harness
-   * 0.1.0-alpha.66 sends the phases a running attempt has not reached yet as
-   * `skipped`, and «пропущено» there would say the attempt gave them up.
+   * The state word to say: the harness state as sent. Since harness
+   * 0.1.0-alpha.66 (5496b33) the steps a running attempt has not reached yet
+   * come as `planned`; a `skipped` step really was skipped.
    */
   state: string;
 }
@@ -79,18 +78,8 @@ export function trackTone(
 export function drawnSteps(track: WorkTrack): DrawnStep[] {
   const offset =
     Number.isSafeInteger(track.truncated) && track.truncated! > 0 ? track.truncated! : 0;
-  let running: number | undefined;
   return track.steps.map((step, i) => {
-    let state = String(step.state);
-    if (state === 'current') running = step.attempt;
-    else if (
-      state === 'skipped' &&
-      running !== undefined &&
-      step.attempt === running &&
-      PHASE_KINDS.has(step.kind)
-    )
-      state = 'planned';
-    else if (step.attempt !== running) running = undefined;
+    const state = String(step.state);
     return { step, n: offset + i + 1, tone: trackTone(step, state), state };
   });
 }

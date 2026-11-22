@@ -364,13 +364,13 @@
           {
             "kind": "review",
             "attempt": 2,
-            "state": "skipped",
+            "state": "planned",
             "label": "review"
           },
           {
             "kind": "integration",
             "attempt": 2,
-            "state": "skipped",
+            "state": "planned",
             "label": "integration"
           },
           {
@@ -625,6 +625,11 @@
         {
           "code": "DIAGNOSIS_REQUIRED",
           "plain": "2 counted failures in a row: the lead diagnoses the cause before the next attempt",
+          "actor": "lead"
+        },
+        {
+          "code": "ENVIRONMENT_GATE_HELD",
+          "plain": "gate e2e is held: it runs ps, and the check sandbox has no process list; the lead changes the gate or command, or fixes the test and retries import-csv (harness",
           "actor": "lead"
         }
       ],
@@ -1507,7 +1512,7 @@
         "plain": "started the release: 5 tasks from the tracker, DEMO-6 is not ready yet"
       }
     ],
-    "line": "the lead is working since 09:05 UTC: waiting for the CSV delimiter answer; meanwhile looking at the import failures"
+    "line": "the lead is working: waiting for the CSV delimiter answer; meanwhile looking at the import failures"
   },
   "resources": {
     "roles": [
@@ -1609,9 +1614,18 @@
           "count": 5
         }
       ],
-      "line": "5 checks in app, no joint checks"
+      "line": "5 checks in app, no joint checks",
+      "held": [
+        {
+          "repositoryId": "app",
+          "gate": "e2e",
+          "workId": "import-csv"
+        }
+      ],
+      "heldLine": "Held: app/e2e (work import-csv) — the gate runs ps, and the check sandbox has no process list; the lead changes the gate, or fixes the test and retries the work (retry --by lead)"
     },
     "lines": [
+      "Held: app/e2e (work import-csv) — the gate runs ps, and the check sandbox has no process list; the lead changes the gate, or fixes the test and retries the work (retry --by lead)",
       "writers: claude (Anthropic); reviewers: codex (OpenAI)",
       "OS sandbox; network: allowed domains for writers, local only for checks",
       "docker: postgres — 1 running, 1 left over after an attempt",

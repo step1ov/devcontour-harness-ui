@@ -99,7 +99,7 @@ export function PreviewsPanel({
       <p className="hui:text-sm">
         {k.previewStart}{' '}
         <code data-testid="preview-start">
-          {`npx harness preview-start --state ${k.stateDir} --ref accepted`}
+          {`npx harness preview-start --state ${k.stateDir} --ref accepted --ttl 2h`}
         </code>
       </p>
     </Block>

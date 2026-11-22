@@ -1458,6 +1458,12 @@ const ru = {
     trackEarlier: (n: number) =>
       `${rp(n, 'ранний шаг', 'ранних шага', 'ранних шагов')} не ${n % 10 === 1 && n % 100 !== 11 ? 'показан' : 'показаны'} (предел пути)`,
     trackEnd: 'итог задачи',
+    gateHeld: (gates: string) =>
+      `Проверка ${gates} удержана: она зовёт список процессов, а в песочнице проверок его нет. Это ход ведущего — поменять проверку или тест; от вас ничего не нужно.`,
+    gateHeldWaits:
+      'Ждёт удержанную проверку: её чинит ведущий (поменять проверку или тест); от вас ничего не нужно.',
+    resourcesHeld: 'Удержанные проверки',
+    leadBegin: 'Ведущий начинает сессию командой',
     trackMissing: 'Путь задачи передаёт harness 0.1.0-alpha.66 и новее.',
     trackDropped: 'Путь задачи не вошёл в документ (документ сокращён по размеру).',
     trackState: {
@@ -2572,6 +2578,12 @@ const en: Dict = {
     trackRework: (n: number) => `rework ${n}`,
     trackEarlier: (n: number) => `${ep(n, 'earlier step', 'earlier steps')} not shown (path limit)`,
     trackEnd: 'end of the task',
+    gateHeld: (gates: string) =>
+      `Check ${gates} is held: it asks for the process list, and the check sandbox has none. This is the lead's move — change the check or the test; nothing is needed from you.`,
+    gateHeldWaits:
+      'Waits for a held check: the lead fixes it (changes the check or the test); nothing is needed from you.',
+    resourcesHeld: 'Held checks',
+    leadBegin: 'The lead starts a session with',
     trackMissing: 'The task path comes from harness 0.1.0-alpha.66 and newer.',
     trackDropped: 'The task path is not in the document (the document was cut for size).',
     trackState: {

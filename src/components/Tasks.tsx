@@ -26,6 +26,7 @@ import {
   taskCards,
   leadStopOf,
   plannedKeys,
+  gateHoldsOf,
   type TaskCard as Card_,
   type TaskPhase,
 } from '../model/tasks.ts';
@@ -258,6 +259,8 @@ function TaskCardView({
   const titleText = w.title && w.title !== name ? w.title : undefined;
   // Revision 5: accepted, and left in the task source for your check.
   const review = sourceReviewOf(view, w.id);
+  // Harness alpha.66: a check held by a refusal without a retry — the lead's move.
+  const holds = gateHoldsOf(view, w);
   return (
     <Card as="li" data-testid={`task-${w.id}`} className="hui-task">
       <CardHeader>
@@ -280,6 +283,13 @@ function TaskCardView({
           {nowText}
         </p>
         {w.planned ? <p className="hui-muted">{t.r6.plannedWork}</p> : null}
+        {holds.own.length ? (
+          <p data-testid="task-gate-held">
+            {t.r6.gateHeld(holds.own.map((h) => `${h.repositoryId}/${h.gate}`).join(', '))}
+          </p>
+        ) : holds.waits ? (
+          <p data-testid="task-gate-held">{t.r6.gateHeldWaits}</p>
+        ) : null}
         {w.track ? <TrackLine track={w.track} lang={lang} name={titleText ?? name} /> : null}
         {review ? (
           <p data-testid="task-source-review" data-status="blocked">

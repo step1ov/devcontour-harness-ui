@@ -1011,6 +1011,14 @@ export interface ResourcesView {
     workspace: number;
     repositories: { repositoryId: string; count: number }[];
     line: string;
+    /**
+     * Gates held by a refusal without a retry (`ENVIRONMENT_GATE_HELD`,
+     * harness alpha.66): works that need them are not issued; `workId` is
+     * the work whose attempt failed. At most 10.
+     */
+    held?: { repositoryId: string; gate: string; workId: string }[];
+    /** The same in plain words; also the first of `lines`. */
+    heldLine?: string;
   };
   /** Short lines for the home screen, at most 8. */
   lines: string[];

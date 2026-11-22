@@ -28,6 +28,9 @@ export function asAlpha65<T>(doc: T): T {
   }
   for (const w of [...(d.works ?? []), ...(d.work ? [d.work] : [])]) {
     for (const k of ['planned', 'restoredFrom', 'restoredLine', 'track']) delete w[k];
+    // The held-gate stop is new in alpha.66.
+    if (Array.isArray(w.blockers))
+      w.blockers = w.blockers.filter((b: Json) => b.code !== 'ENVIRONMENT_GATE_HELD');
     if (w.attempts) delete w.attempts.rework;
   }
   return d as T;

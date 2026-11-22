@@ -149,6 +149,8 @@ const CODE_ACTIONS: Readonly<Record<string, readonly string[]>> = {
   ATTEMPTS_EXHAUSTED: ['reset-attempts', 'diagnose'],
   // Harness alpha.66: counted failures in a row — the lead diagnoses before the next attempt.
   DIAGNOSIS_REQUIRED: ['diagnose'],
+  // Harness alpha.66: a gate held by a refusal without a retry — the lead fixes the gate or the test.
+  ENVIRONMENT_GATE_HELD: ['fix-environment'],
   APPROVAL_STALE: ['review-plan'],
   APPROVAL_REQUIRED: ['review-plan'],
   BUDGET_EXHAUSTED: ['raise-budget'],

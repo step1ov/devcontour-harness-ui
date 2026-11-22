@@ -107,13 +107,13 @@
         {
           "kind": "review",
           "attempt": 2,
-          "state": "skipped",
+          "state": "planned",
           "label": "review"
         },
         {
           "kind": "integration",
           "attempt": 2,
-          "state": "skipped",
+          "state": "planned",
           "label": "integration"
         },
         {

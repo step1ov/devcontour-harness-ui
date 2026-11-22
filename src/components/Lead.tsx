@@ -160,9 +160,17 @@ export function LeadJournal({
           <p data-testid="lead-line">{l.line}</p>
         </div>
       ) : (
-        <p className="hui-muted" data-testid="lead-missing">
-          {view.viewRevision >= 6 ? t.r6.leadNone : t.r6.leadOld}
-        </p>
+        <div className="hui:grid hui:gap-1" data-testid="lead-missing">
+          <p className="hui-muted">{view.viewRevision >= 6 ? t.r6.leadNone : t.r6.leadOld}</p>
+          {view.viewRevision >= 6 ? (
+            <p className="hui:text-sm">
+              {t.r6.leadBegin}{' '}
+              <code data-testid="lead-begin">
+                npx harness lead begin --state {t.r6.stateDir} --ttl 30m
+              </code>
+            </p>
+          ) : null}
+        </div>
       )}
       {release ? (
         <div className="hui-panel hui:grid hui:gap-2" data-testid="lead-release-panel">

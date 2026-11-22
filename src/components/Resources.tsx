@@ -95,9 +95,27 @@ export function ResourcesPanel({
             )}
             {clipped(r.truncated?.services)}
           </div>
-          <div>
+          <div data-testid="resources-gates">
             <h4 className="hui:font-semibold">{k.resourcesGates}</h4>
             <p>{r.gates.line}</p>
+            {r.gates.held?.length || r.gates.heldLine ? (
+              <div className="hui:mt-1" data-testid="resources-held">
+                <h5 className="hui:font-medium">{k.resourcesHeld}</h5>
+                {r.gates.heldLine ? <p>{r.gates.heldLine}</p> : null}
+                {r.gates.held?.length ? (
+                  <ul className="hui:grid hui:list-none hui:gap-0.5">
+                    {r.gates.held.map((h, i) => (
+                      <li key={i}>
+                        <code>
+                          {h.repositoryId}/{h.gate}
+                        </code>{' '}
+                        · {h.workId}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         </div>
       </details>
