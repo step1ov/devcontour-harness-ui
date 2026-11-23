@@ -336,3 +336,31 @@ test('English words for the new lines', () => {
   assert.equal(e.codeReview(2, 6), 'Extra code review (lead): rounds 2 of 6');
   assert.equal(t.r10.findings(5), '5 находок');
 });
+
+test('P6-5: code accepted, the lead finishing — the ring stays below 100 with a striped tail', async () => {
+  const { Overview } = await import('../src/index.ts');
+  const { tailDashes } = await import('../src/components/Forecast.tsx');
+  const v = structuredClone(ru);
+  Object.assign(v.forecast.progress, {
+    percent: 100,
+    release: { state: 'code-accepted', line: 'код принят, ведущий работает' },
+  });
+  const m = html(<Overview view={viewOf(v)} lang="ru" />);
+  const ring = /data-testid="ring-release"[\s\S]*?<\/svg>/.exec(m)![0];
+  assert.match(ring, /data-part="tail"/);
+  assert.match(ring, /class="hui-ring-tail"/);
+  // The fill is capped at 99 % of the circle; the words keep the harness figure.
+  const fill = /stroke-dasharray="([\d.]+) ([\d.]+)"[^>]*data-part="fill"/.exec(ring)!;
+  assert.ok(Number(fill[1]) / Number(fill[2]) < 0.995, fill[0]);
+  assert.match(shown(m), /Код принят · осталось немного: ведущий завершает работу/);
+  // In work or done: no tail.
+  assert.doesNotMatch(html(<Overview view={viewRu} lang="ru" />), /data-part="tail"/);
+  // Stripes fill the rest of the circle and end with a gap round it.
+  const d = tailDashes(0.5).split(' ').map(Number);
+  assert.equal(d.at(-2), 0);
+  const sum = d.slice(0, -2).reduce((a, b) => a + b, 0);
+  assert.ok(sum > 160 && sum <= 174, String(sum)); // half the circle (≈169.6), the last gap may run over
+  const css = readFileSync(new URL('../src/components/styles.css', import.meta.url), 'utf8');
+  assert.match(css, /\.hui-ring-tail \{\s*stroke-opacity: 0\.55;\s*animation: hui-breathe/);
+  assert.match(css, /prefers-reduced-motion: reduce\) \{\s*\.hui-ring-tail \{\s*animation: none/);
+});

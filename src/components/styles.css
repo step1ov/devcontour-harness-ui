@@ -757,6 +757,25 @@
     font-weight: 600;
     color: var(--hui-warn);
   }
+  /* The lead finishes the release (ui alpha.10): a striped tail that breathes. */
+  .hui-ring-tail {
+    stroke-opacity: 0.55;
+    animation: hui-breathe 1.8s ease-in-out infinite;
+  }
+  @keyframes hui-breathe {
+    0%,
+    100% {
+      stroke-opacity: 0.25;
+    }
+    50% {
+      stroke-opacity: 0.7;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .hui-ring-tail {
+      animation: none !important;
+    }
+  }
   /* A setup step whose outcome is not recorded (doctor only reads): a thin ring. */
   .hui-dot[data-tone='unknown'] {
     background: transparent;

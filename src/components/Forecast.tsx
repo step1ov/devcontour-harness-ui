@@ -29,10 +29,16 @@ function Ring({
   share,
   band,
   tone,
+  tail = false,
 }: {
   share: number | undefined;
   band?: number | undefined;
   tone: 'ok' | 'primary';
+  /**
+   * The lead finishes the release (code accepted, ui alpha.10, P6-5): the
+   * rest of the ring after `share` is a striped, breathing tail.
+   */
+  tail?: boolean;
 }) {
   const color = tone === 'ok' ? 'var(--hui-ok)' : 'var(--hui-accent)';
   const arc = (x: number) => `${clamp(x) * CIRC} ${CIRC}`;
@@ -68,6 +74,20 @@ function Ring({
           data-part="band"
         />
       ) : null}
+      {tail && share !== undefined && share < 1 ? (
+        <circle
+          cx={SIZE / 2}
+          cy={SIZE / 2}
+          r={R}
+          fill="none"
+          stroke={color}
+          strokeWidth={STROKE}
+          strokeDasharray={tailDashes(share)}
+          transform={`rotate(${share * 360 - 90} ${SIZE / 2} ${SIZE / 2})`}
+          className="hui-ring-tail"
+          data-part="tail"
+        />
+      ) : null}
       {share !== undefined && share > 0 ? (
         <circle
           cx={SIZE / 2}
@@ -84,6 +104,21 @@ function Ring({
       ) : null}
     </svg>
   );
+}
+
+/** Stripes of 4 / gap 4 along the rest of the ring after `share`, then a gap round the rest. */
+export function tailDashes(share: number): string {
+  const len = (1 - clamp(share)) * CIRC;
+  const out: number[] = [];
+  // A small gap after the solid fill, so the tail reads apart from it.
+  let used = 4;
+  out.push(0, 4);
+  while (used + 4 <= len) {
+    out.push(4, 4);
+    used += 8;
+  }
+  out.push(0, CIRC);
+  return out.map((x) => Math.round(x * 100) / 100).join(' ');
 }
 
 /** A whole-minute span, «2 ч 50 мин», «45 мин», «меньше минуты»: seconds would be noise here. */
@@ -287,6 +322,9 @@ export function ForecastRings({
   const percent = Math.max(0, Math.min(100, Math.round(p.percent)));
   // Revision 6: the release state, the approved-plan figure and the lead's share — as sent.
   const release = p.release;
+  // ui alpha.10 (P6-5): the code is accepted and the lead finishes — the ring
+  // stays below 100 with a tail; only `release done` closes it.
+  const finishing = release?.state === 'code-accepted';
   const num = (x: number) =>
     new Intl.NumberFormat(lang === 'en' ? 'en' : 'ru', { maximumFractionDigits: 1 }).format(x);
   return (
@@ -299,7 +337,13 @@ export function ForecastRings({
           <Tile
             title={f.release}
             testid="ring-release"
-            ring={<Ring share={percent / 100} tone="ok" />}
+            ring={
+              <Ring
+                share={(finishing ? Math.min(percent, 99) : percent) / 100}
+                tone="ok"
+                tail={finishing}
+              />
+            }
             center={f.percent(percent)}
             sub={release?.state === 'code-accepted' ? t.r6.codeAccepted : f.doneWord}
             valueNow={percent}
@@ -308,6 +352,7 @@ export function ForecastRings({
             <p className="hui:font-medium" data-testid="release-line">
               {p.line}
             </p>
+            {finishing ? <p data-testid="release-finishing">{t.r10.leadFinishing}</p> : null}
             {p.approved ? (
               <div className="hui:grid hui:gap-0.5" data-testid="forecast-figures">
                 <span className="hui-sr">{t.r6.twoFigures}: </span>

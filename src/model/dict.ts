@@ -1643,6 +1643,7 @@ const ru = {
     findings: (n: number) => rp(n, 'находка', 'находки', 'находок'),
     reviewLine: (items: string) => `Ревью: ${items}`,
     reviewNone: 'Ревью: ещё не было',
+    leadFinishing: 'Код принят · осталось немного: ведущий завершает работу',
     codeReview: (rounds: number, max: number | null) =>
       `Дополнительное ревью кода (ведущий): раунды ${rounds}${max !== null ? ` из ${max}` : ''}`,
   },
@@ -2854,6 +2855,7 @@ const en: Dict = {
     findings: (n: number) => `${n} ${n === 1 ? 'finding' : 'findings'}`,
     reviewLine: (items: string) => `Review: ${items}`,
     reviewNone: 'Review: none yet',
+    leadFinishing: 'Code accepted · a little left: the lead is finishing',
     codeReview: (rounds: number, max: number | null) =>
       `Extra code review (lead): rounds ${rounds}${max !== null ? ` of ${max}` : ''}`,
   },
