@@ -289,6 +289,10 @@ test('a real alpha.68 overview right after harness init carries the setup progre
   );
   assert.equal(p.budgetMs, 30 * 60_000);
   assert.equal(p.overBudget, false);
+  // Alpha.68: the setup clock starts at this setup's first recorded step, not
+  // at the oldest file of an inherited `.harness/` — right after init, seconds.
+  assert.ok(p.elapsedMs < 60_000, String(p.elapsedMs));
+  assert.ok(instantMs(p.since) <= instantMs(doc.generatedAt));
   assert.match(p.line, /^Настройка: готово 2 из 5 шагов/);
   assert.match(p.lineEn, /^Setup: 2 of 5 steps done/);
   // The progress line is not one of the stage lines: the panel shows it itself.
