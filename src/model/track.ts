@@ -320,14 +320,12 @@ export function leadResets(track: WorkTrack | undefined): {
 }
 
 /**
- * Whether the lead's diagnosis is required (harness alpha.68, P6-3):
- * `true` — the work is held until the lead diagnoses; `false` — the harness
- * retries by itself and the lead may diagnose. `undefined` — not said (an
- * older harness, or not a diagnosis step).
+ * Whether the lead's diagnosis is required (view revision 8, harness
+ * alpha.68, P6-3): `true` — the work is held until the lead diagnoses;
+ * `false` — the harness retries by itself and the lead may diagnose.
+ * `undefined` — not said (an older harness, or not a diagnosis step).
  */
-export function diagnosisRequired(step: Pick<TrackStep, 'kind'>): boolean | undefined {
+export function diagnosisRequired(step: Pick<TrackStep, 'kind' | 'required'>): boolean | undefined {
   if (step.kind !== 'diagnosis') return undefined;
-  // Read untyped until the final alpha.68 contract types it.
-  const required = (step as { required?: unknown }).required;
-  return typeof required === 'boolean' ? required : undefined;
+  return typeof step.required === 'boolean' ? step.required : undefined;
 }

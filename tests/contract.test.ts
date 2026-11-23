@@ -1,14 +1,15 @@
 // Contract with devcontour-harness: the view schema is owned by the harness.
 // tests/contract/harness/*.schema.json are verbatim copies of the harness
 // schemas (schemas/operator-view.schema.json, schemas/work-detail-view.schema.json
-// and schemas/setup-view.schema.json of 0.1.0-alpha.67, view revision 7);
+// and schemas/setup-view.schema.json of 0.1.0-alpha.68, view revision 8);
 // empty-state.view.json is a real `harness view --lang en` envelope of that
 // version for a state that does not exist yet (examples/two-vendors policy),
 // setup-state.view.json a real `harness view --repository <empty dir> --lang en`
 // (the setup document) and setup-progress.view.json a real `harness view
 // --repository <dir> --lang en` right after `harness init` (an overview at the
 // setup stage with `stage.progress`), made with the built CLI of the
-// released 0.1.0-alpha.67. tests/contract/harness-0.1.0-alpha.66/ keeps the same
+// released 0.1.0-alpha.68. tests/contract/harness-0.1.0-alpha.67/ keeps the same
+// files of 0.1.0-alpha.67 (revision 7); tests/contract/harness-0.1.0-alpha.66/ keeps the same
 // files of 0.1.0-alpha.66 (revision 6); tests/contract/harness-0.1.0-alpha.65/ keeps the same
 // files of 0.1.0-alpha.65 (revision 5); tests/contract/harness-0.1.0-alpha.62/ keeps the same
 // files of 0.1.0-alpha.62 (revision 4 with `neverRun` and `scopeReason`),
@@ -56,7 +57,14 @@ import {
   type DriftView,
   type Escalation,
   type FindingView,
+  type AttemptReviewResult,
+  type ForecastGrowthView,
+  type ForecastOutlineView,
   type ForecastView,
+  type OutlineComponentView,
+  type OutlineStageView,
+  type ReopenedView,
+  type StageProgressView,
   type QuestionOption,
   type ScopeTaskView,
   type SetupView,
@@ -105,8 +113,8 @@ const harnessEmpty = read('./contract/harness/empty-state.view.json');
 const setupSchema = read('./contract/harness/setup-view.schema.json');
 const harnessSetup = read('./contract/harness/setup-state.view.json');
 const harnessProgress = read('./contract/harness/setup-progress.view.json');
-/** The producer of the alpha.67 copies. */
-const ALPHA67 = /^0\.1\.0-alpha\.67$/;
+/** The producer of the alpha.68 copies. */
+const ALPHA68 = /^0\.1\.0-alpha\.68$/;
 const overviewSchema62 = read('./contract/harness-0.1.0-alpha.62/operator-view.schema.json');
 const detailSchema62 = read('./contract/harness-0.1.0-alpha.62/work-detail-view.schema.json');
 const harnessEmpty62 = read('./contract/harness-0.1.0-alpha.62/empty-state.view.json');
@@ -144,8 +152,8 @@ test('both fixtures and a real harness document are valid under the harness sche
   for (const f of ['work.sample.json', 'work.accepted.sample.json'])
     assert.deepEqual(validate(detailSchema, read('../fixtures/ru/' + f)), [], f);
   assert.equal(harnessEmpty.ok, true);
-  assert.equal(harnessEmpty.data.viewRevision, 7);
-  assert.match(harnessEmpty.data.source.producerVersion, ALPHA67);
+  assert.equal(harnessEmpty.data.viewRevision, 8);
+  assert.match(harnessEmpty.data.source.producerVersion, ALPHA68);
   // Revision 6: who decides, with the harness's own words in both languages.
   assert.equal(harnessEmpty.data.settings.decisions.items[0].key, 'maxAttempts');
   assert.match(harnessEmpty.data.settings.decisions.summary.en, /you decide/);
@@ -227,11 +235,11 @@ test('alpha.57/58 documents (revision 2) stay valid under the alpha.59 schemas a
   }
 });
 
-test('the setup document of harness alpha.67 is valid, passes the setup gate and is not an overview', () => {
+test('the setup document of harness alpha.68 is valid, passes the setup gate and is not an overview', () => {
   assert.equal(harnessSetup.ok, true);
   const doc = harnessSetup.data;
-  assert.equal(doc.viewRevision, 7);
-  assert.match(doc.source.producerVersion, ALPHA67);
+  assert.equal(doc.viewRevision, 8);
+  assert.match(doc.source.producerVersion, ALPHA68);
   // An empty directory has no `.harness/`: no setup progress yet.
   assert.equal(Object.hasOwn(doc.stage, 'progress'), false);
   assert.deepEqual(validate(setupSchema, doc), []);
@@ -265,11 +273,11 @@ const setupSchema66 = read('./contract/harness-0.1.0-alpha.66/setup-view.schema.
 const harnessEmpty66 = read('./contract/harness-0.1.0-alpha.66/empty-state.view.json');
 const harnessSetup66 = read('./contract/harness-0.1.0-alpha.66/setup-state.view.json');
 
-test('a real alpha.67 overview right after harness init carries the setup progress', () => {
+test('a real alpha.68 overview right after harness init carries the setup progress', () => {
   assert.equal(harnessProgress.ok, true);
   const doc = harnessProgress.data;
-  assert.equal(doc.viewRevision, 7);
-  assert.match(doc.source.producerVersion, ALPHA67);
+  assert.equal(doc.viewRevision, 8);
+  assert.match(doc.source.producerVersion, ALPHA68);
   assert.deepEqual(validate(overviewSchema, doc), []);
   assert.deepEqual(doc.works, []);
   assert.equal(doc.stage.name, 'setup');
@@ -292,7 +300,197 @@ test('a real alpha.67 overview right after harness init carries the setup progre
   assert.match(validate(overviewSchema66, doc).join(), /unknown field progress/);
 });
 
-test('alpha.66 documents (revision 6) stay valid under the alpha.67 schemas and pass the gate', () => {
+const overviewSchema67 = read('./contract/harness-0.1.0-alpha.67/operator-view.schema.json');
+const detailSchema67 = read('./contract/harness-0.1.0-alpha.67/work-detail-view.schema.json');
+const setupSchema67 = read('./contract/harness-0.1.0-alpha.67/setup-view.schema.json');
+const harnessEmpty67 = read('./contract/harness-0.1.0-alpha.67/empty-state.view.json');
+const harnessSetup67 = read('./contract/harness-0.1.0-alpha.67/setup-state.view.json');
+const harnessProgress67 = read('./contract/harness-0.1.0-alpha.67/setup-progress.view.json');
+
+test('alpha.67 documents (revision 7) stay valid under the alpha.68 schemas and pass the gate', () => {
+  for (const [name, env, schema, old] of [
+    ['empty', harnessEmpty67, overviewSchema, overviewSchema67],
+    ['setup', harnessSetup67, setupSchema, setupSchema67],
+    ['progress', harnessProgress67, overviewSchema, overviewSchema67],
+  ] as const) {
+    assert.equal(env.data.viewRevision, 7, name);
+    assert.equal(env.data.source.producerVersion, '0.1.0-alpha.67', name);
+    assert.deepEqual(validate(old, env.data), [], name);
+    assert.deepEqual(validate(schema, env.data), [], name);
+    const c = checkOverview(env.data);
+    assert.equal(c.ok, true, `${name}: ${c.ok ? '' : c.message}`);
+    assert.equal(c.ok && c.newerRevision, false, name);
+  }
+  for (const [name, doc, schema] of fixtures()) {
+    const old67 = schema === overviewSchema ? overviewSchema67 : detailSchema67;
+    assert.deepEqual(validate(old67, doc), [], name);
+  }
+});
+
+test('revision 8 fields: valid under the alpha.68 schemas, refused by alpha.67, checked by the gate', () => {
+  const v = structuredClone(viewFixture);
+  v.viewRevision = 8;
+  const w = v.works.find((x: Json) => x.id === 'import-csv');
+  w.attemptReviews = [
+    {
+      attempt: 1,
+      phase: 'candidate',
+      verdict: 'rejected',
+      findings: 3,
+      notes: 1,
+      at: '2026-11-19T10:40:00.000Z',
+      earlier: true,
+    },
+    {
+      attempt: 2,
+      phase: 'integration',
+      verdict: 'approved',
+      findings: 0,
+      notes: 0,
+      at: '2026-11-19T11:36:00.000Z',
+    },
+  ];
+  w.track.steps.find((x: Json) => x.kind === 'diagnosis').required = true;
+  v.works.find((x: Json) => x.id === 'add-greeting').reopened = {
+    at: '2026-11-19T11:00:00.000Z',
+    by: 'lead',
+    revision: 2,
+    budget: 'fresh',
+    acceptedSha: '3b1f9e0aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    spent: 1,
+    reason: 'reopened by the lead: rework after acceptance (accepted result 3b1f9e0 not included)',
+  };
+  v.reviews[0].rounds = { ...v.reviews[0].rounds, remaining: 4, free: 1 };
+  Object.assign(v.forecast.progress, {
+    conditional: true,
+    growth: {
+      at: '2026-11-19T11:01:00.000Z',
+      added: ['photo-gate'],
+      before: 95,
+      after: 80,
+      by: 'works',
+      line: 'plan grew: +photo-gate (was 95 % → now 80 %)',
+    },
+    infraShare: { share: 0.3, line: 'infrastructure is 30 % of the release (estimate)' },
+  });
+  v.forecast.progress.works = [
+    {
+      workId: 'locale-format',
+      percent: 25,
+      attempt: { n: 2, max: 3 },
+      stageProgress: {
+        stage: 'checks',
+        from: 0.25,
+        to: 0.5,
+        since: '2026-11-19T11:52:10.000Z',
+        typicalMs: 600000,
+        samples: 6,
+      },
+      line: 'DEMO-2: ~25 %',
+    },
+  ];
+  v.forecast.time.finishing = {
+    since: '2026-11-19T11:25:00.000Z',
+    elapsedMs: 60000,
+    exceeded: true,
+  };
+  v.forecast.time.outline = {
+    units: 5,
+    basis: 'default',
+    line: 'by the release outline ~5 more tasks',
+  };
+  v.forecast.outline = {
+    state: 'recorded',
+    revision: 1,
+    units: 10,
+    stages: [
+      {
+        id: 'infra',
+        kind: 'infra',
+        state: 'partial',
+        units: 3,
+        registered: 2,
+        percent: 60,
+        components: [
+          {
+            id: 'api',
+            size: 'M',
+            actor: 'writers',
+            state: 'registered',
+            units: 2,
+            registered: 2,
+            percent: 90,
+            works: ['locale-format'],
+          },
+        ],
+      },
+    ],
+    line: 'release outline: 1 stage, ~10 tasks',
+  };
+  v.truncated = { ...(v.truncated ?? {}), attemptReviews: 2 };
+  assert.deepEqual(validate(overviewSchema, v), []);
+  const old = validate(overviewSchema67, v).join();
+  for (const f of [
+    'attemptReviews',
+    'reopened',
+    'required',
+    'remaining',
+    'free',
+    'stageProgress',
+    'growth',
+    'conditional',
+    'infraShare',
+    'finishing',
+    'outline',
+  ])
+    assert.match(old, new RegExp(`unknown field ${f}`), f);
+  const c = checkView(v);
+  assert.equal(c.ok, true, c.ok ? '' : c.message);
+  assert.equal(c.ok && c.newerRevision, false);
+  // The gate refuses a malformed revision 8 field instead of throwing during render.
+  const bad = (f: (d: Json) => void) => {
+    const d = structuredClone(v);
+    f(d);
+    return checkView(d).ok;
+  };
+  assert.equal(
+    bad((d) => (d.works[3].attemptReviews[0].attempt = 'x')),
+    false,
+  );
+  assert.equal(
+    bad((d) => (d.works[0].reopened.spent = -1)),
+    false,
+  );
+  assert.equal(
+    bad((d) => (d.reviews[0].rounds.remaining = 'four')),
+    false,
+  );
+  assert.equal(
+    bad((d) => (d.reviews[0].rounds.remaining = null)),
+    true,
+  );
+  assert.equal(
+    bad((d) => (d.forecast.outline.stages[0].units = -1)),
+    false,
+  );
+  assert.equal(
+    bad((d) => (d.forecast.progress.works[0].stageProgress.from = 'a')),
+    false,
+  );
+  assert.equal(
+    bad((d) => (d.forecast.time.finishing.since = 'yesterday')),
+    false,
+  );
+  // The work detail embeds the same work.
+  const detail = structuredClone(workFixture);
+  detail.viewRevision = 8;
+  detail.work.attemptReviews = w.attemptReviews;
+  detail.truncated = { ...(detail.truncated ?? {}), attemptReviews: 1 };
+  assert.deepEqual(validate(detailSchema, detail), []);
+  assert.equal(checkWorkDetail(detail).ok, true);
+});
+
+test('alpha.66 documents (revision 6) stay valid under the alpha.68 schemas and pass the gate', () => {
   assert.equal(harnessEmpty66.data.viewRevision, 6);
   assert.equal(harnessEmpty66.data.source.producerVersion, '0.1.0-alpha.66');
   assert.deepEqual(validate(overviewSchema66, harnessEmpty66.data), []);
@@ -1294,6 +1492,34 @@ const shapes: [string, Json, Record<string, string>][] = [
       spend: 'req:o',
       resultSha: 'opt:s',
       track: 'opt:o',
+      reopened: 'opt:o',
+      attemptReviews: 'opt:a<o>',
+    }),
+  ],
+  [
+    'works[].reopened',
+    overviewSchema[ov].works.items[ov].reopened,
+    shape<ReopenedView>({
+      at: 'req:s',
+      by: 'opt:s',
+      revision: 'req:n',
+      budget: 'req:s',
+      acceptedSha: 'req:s',
+      spent: 'req:n',
+      reason: 'req:s',
+    }),
+  ],
+  [
+    'works[].attemptReviews[]',
+    overviewSchema[ov].works.items[ov].attemptReviews.items,
+    shape<AttemptReviewResult>({
+      attempt: 'req:n',
+      phase: 'req:s',
+      verdict: 'req:s',
+      findings: 'req:n',
+      notes: 'req:n',
+      at: 'req:s',
+      earlier: 'opt:b',
     }),
   ],
   [
@@ -1313,6 +1539,7 @@ const shapes: [string, Json, Record<string, string>][] = [
       reason: 'opt:s',
       rework: 'opt:n',
       actor: 'opt:s',
+      required: 'opt:b',
     }),
   ],
   [
@@ -1438,6 +1665,16 @@ const shapes: [string, Json, Record<string, string>][] = [
       findings: 'req:a<o>',
       escalation: 'opt:o',
       line: 'opt:s',
+    }),
+  ],
+  [
+    'reviews[].rounds',
+    overviewSchema[ov].reviews.items[ov].rounds,
+    shape<ReviewSubjectView['rounds']>({
+      used: 'req:n',
+      max: 'req:n|null',
+      remaining: 'opt:n|null',
+      free: 'opt:n',
     }),
   ],
   [
@@ -1673,7 +1910,109 @@ const shapes: [string, Json, Record<string, string>][] = [
   [
     'forecast',
     overviewSchema[ov].forecast,
-    shape<ForecastView>({ progress: 'req:o', time: 'req:o', assumptions: 'req:a<s>' }),
+    shape<ForecastView>({
+      progress: 'req:o',
+      time: 'req:o',
+      outline: 'opt:o',
+      assumptions: 'req:a<s>',
+    }),
+  ],
+  [
+    'forecast.outline',
+    overviewSchema[ov].forecast[ov].outline,
+    shape<ForecastOutlineView>({
+      state: 'req:s',
+      code: 'opt:s',
+      revision: 'opt:n',
+      recordedAt: 'opt:s',
+      units: 'opt:n',
+      registered: 'opt:n',
+      unregistered: 'opt:n',
+      beyond: 'opt:n',
+      stages: 'opt:a<o>',
+      line: 'req:s',
+    }),
+  ],
+  [
+    'forecast.outline.stages[]',
+    overviewSchema[ov].forecast[ov].outline[ov].stages.items,
+    shape<OutlineStageView>({
+      id: 'req:s',
+      title: 'opt:s',
+      kind: 'req:s',
+      state: 'req:s',
+      units: 'req:n',
+      registered: 'req:n',
+      percent: 'req:n',
+      components: 'req:a<o>',
+    }),
+  ],
+  [
+    'forecast.outline.stages[].components[]',
+    overviewSchema[ov].forecast[ov].outline[ov].stages.items[ov].components.items,
+    shape<OutlineComponentView>({
+      id: 'req:s',
+      title: 'opt:s',
+      size: 'opt:s',
+      tasks: 'opt:n',
+      actor: 'req:s',
+      state: 'req:s',
+      units: 'req:n',
+      registered: 'req:n',
+      percent: 'req:n',
+      works: 'opt:a<s>',
+    }),
+  ],
+  [
+    'forecast.progress.growth',
+    overviewSchema[ov].forecast[ov].progress[ov].growth,
+    shape<ForecastGrowthView>({
+      at: 'req:s',
+      added: 'req:a<s>',
+      before: 'req:n',
+      after: 'req:n',
+      by: 'req:s',
+      reason: 'opt:s',
+      line: 'req:s',
+    }),
+  ],
+  [
+    'forecast.progress.infraShare',
+    overviewSchema[ov].forecast[ov].progress[ov].infraShare,
+    shape<NonNullable<ForecastView['progress']['infraShare']>>({ share: 'req:n', line: 'req:s' }),
+  ],
+  [
+    'forecast.progress.works[].stageProgress',
+    overviewSchema[ov].forecast[ov].progress[ov].works.items[ov].stageProgress,
+    shape<StageProgressView>({
+      stage: 'req:s',
+      from: 'req:n',
+      to: 'req:n',
+      since: 'opt:s',
+      typicalMs: 'opt:n',
+      samples: 'opt:n',
+    }),
+  ],
+  [
+    'forecast.time.outline',
+    overviewSchema[ov].forecast[ov].time[ov].outline,
+    shape<NonNullable<ForecastView['time']['outline']>>({
+      units: 'req:n',
+      ownerUnits: 'opt:n',
+      loMs: 'opt:n',
+      hiMs: 'opt:n',
+      basis: 'req:s',
+      line: 'req:s',
+    }),
+  ],
+  [
+    'forecast.time.finishing',
+    overviewSchema[ov].forecast[ov].time[ov].finishing,
+    shape<NonNullable<ForecastView['time']['finishing']>>({
+      since: 'opt:s',
+      elapsedMs: 'opt:n',
+      exceeded: 'opt:b',
+    }),
   ],
   [
     'forecast.progress',
@@ -1690,6 +2029,9 @@ const shapes: [string, Json, Record<string, string>][] = [
       added: 'opt:a<o>',
       works: 'opt:a<o>',
       rework: 'opt:n',
+      growth: 'opt:o',
+      conditional: 'opt:b',
+      infraShare: 'opt:o',
       planned: 'opt:o',
       approved: 'opt:o',
       lead: 'opt:o',
@@ -1966,6 +2308,7 @@ const shapes: [string, Json, Record<string, string>][] = [
       attempt: 'opt:o',
       retry: 'opt:s',
       rework: 'opt:b',
+      stageProgress: 'opt:o',
       line: 'req:s',
     }),
   ],
@@ -1990,6 +2333,8 @@ const shapes: [string, Json, Record<string, string>][] = [
       chain: 'opt:n',
       lead: 'opt:o',
       humanWait: 'req:o',
+      outline: 'opt:o',
+      finishing: 'opt:o',
       line: 'req:s',
     }),
   ],
@@ -2114,6 +2459,7 @@ const shapes: [string, Json, Record<string, string>][] = [
       leadNotes: 'opt:n',
       resources: 'opt:n',
       previews: 'opt:n',
+      attemptReviews: 'opt:n',
     }),
   ],
   [
@@ -2184,6 +2530,7 @@ const shapes: [string, Json, Record<string, string>][] = [
       questions: 'opt:n',
       blockers: 'opt:n',
       dependsOn: 'opt:n',
+      attemptReviews: 'opt:n',
     }),
   ],
 ];
@@ -2547,6 +2894,66 @@ const vocabularies: [string, Json, string[]][] = [
       'gates',
       'connector',
     ]),
+  ],
+  [
+    'works[].reopened.by',
+    overviewSchema[ov].works.items[ov].reopened[ov].by,
+    vocab<NonNullable<ReopenedView['by']>>()(['lead', 'operator']),
+  ],
+  [
+    'works[].reopened.budget',
+    overviewSchema[ov].works.items[ov].reopened[ov].budget,
+    vocab<ReopenedView['budget']>()(['fresh', 'carried']),
+  ],
+  [
+    'works[].attemptReviews[].phase',
+    overviewSchema[ov].works.items[ov].attemptReviews.items[ov].phase,
+    vocab<AttemptReviewResult['phase']>()(['candidate', 'integration']),
+  ],
+  [
+    'works[].attemptReviews[].verdict',
+    overviewSchema[ov].works.items[ov].attemptReviews.items[ov].verdict,
+    vocab<AttemptReviewResult['verdict']>()(['approved', 'rejected', 'invalid']),
+  ],
+  [
+    'forecast.progress.works[].stageProgress.stage',
+    overviewSchema[ov].forecast[ov].progress[ov].works.items[ov].stageProgress[ov].stage,
+    vocab<StageProgressView['stage']>()(['code', 'checks', 'review', 'integration']),
+  ],
+  [
+    'forecast.progress.growth.by',
+    overviewSchema[ov].forecast[ov].progress[ov].growth[ov].by,
+    vocab<ForecastGrowthView['by']>()(['works', 'outline']),
+  ],
+  [
+    'forecast.time.outline.basis',
+    overviewSchema[ov].forecast[ov].time[ov].outline[ov].basis,
+    vocab<NonNullable<ForecastView['time']['outline']>['basis']>()(['attempts', 'default']),
+  ],
+  [
+    'forecast.outline.state',
+    overviewSchema[ov].forecast[ov].outline[ov].state,
+    vocab<ForecastOutlineView['state']>()(['recorded', 'missing']),
+  ],
+  [
+    'forecast.outline.stages[].kind',
+    overviewSchema[ov].forecast[ov].outline[ov].stages.items[ov].kind,
+    vocab<OutlineStageView['kind']>()(['infra', 'product', 'deploy', 'other']),
+  ],
+  [
+    'forecast.outline.stages[].state',
+    overviewSchema[ov].forecast[ov].outline[ov].stages.items[ov].state,
+    vocab<OutlineStageView['state']>()(['registered', 'partial', 'unregistered']),
+  ],
+  [
+    'forecast.outline.stages[].components[].size',
+    overviewSchema[ov].forecast[ov].outline[ov].stages.items[ov].components.items[ov].size,
+    vocab<NonNullable<OutlineComponentView['size']>>()(['S', 'M', 'L']),
+  ],
+  [
+    'forecast.outline.stages[].components[].actor',
+    overviewSchema[ov].forecast[ov].outline[ov].stages.items[ov].components.items[ov].actor,
+    vocab<OutlineComponentView['actor']>()(['writers', 'environment', 'owner']),
   ],
   [
     'detail verification[].phase',

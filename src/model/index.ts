@@ -138,8 +138,7 @@ export {
   forecastAdditions,
   reopenedOf,
   stageProgressOf,
-  type AttemptReviewResult,
-  type ReopenedView,
+  type ForecastAdditions,
 } from './revision8.ts';
 export {
   isInfraWork,

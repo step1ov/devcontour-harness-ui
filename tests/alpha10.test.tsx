@@ -402,7 +402,6 @@ test('revision 8: the harness per-attempt review results win over the track', ()
       notes: 0,
       at: '2026-11-19T11:37:00.000Z',
     },
-    { attempt: 'x', phase: 'candidate', verdict: 'approved', findings: 0, notes: 0 },
   ];
   const m = card(viewOf(v), 'import-csv');
   assert.match(m, /data-testid="task-attempt-reviews" data-source="harness"/);
@@ -658,7 +657,7 @@ test('alpha.68 forecast: stages of the release outline, the infra share without 
   assert.match(n, /flex-grow:30;flex-basis:0/);
   assert.match(n, /data-testid="forecast-outline" data-state="missing"/);
   assert.match(shown(n), /плана выпуска нет — прогноз по одному графу/);
-  // A malformed outline stage is skipped, not thrown on.
+  // A malformed outline stage: the gate refuses the document instead of a render throw.
   v.forecast.outline.stages.push({
     id: 'bad',
     kind: 'other',
@@ -666,8 +665,9 @@ test('alpha.68 forecast: stages of the release outline, the infra share without 
     units: -1,
     registered: 0,
     percent: 0,
+    components: [],
   });
-  assert.doesNotMatch(shown(html(<Overview view={viewOf(v)} lang="ru" />)), /прочее/);
+  assert.equal(checkView(v).ok, false);
 });
 
 test('alpha.68 card bar: the stage span of the forecast, moved on by the clock against its typical time', () => {
@@ -696,4 +696,65 @@ test('alpha.68 card bar: the stage span of the forecast, moved on by the clock a
   assert.equal(at('2026-11-19T11:57:10.000Z'), '38');
   // Past the typical time: the stage end, not beyond.
   assert.equal(at('2026-11-19T13:00:00.000Z'), '50');
+});
+
+test('revision 8: plan review rounds left and free re-reviews on the review line', async () => {
+  const { ReviewSubjectCard } = await import('../src/components/Reviews.tsx');
+  const v = structuredClone(ru);
+  v.reviews[0].rounds = { used: 2, max: 6, remaining: 4, free: 1 };
+  const r = viewOf(v).reviews[0]!;
+  const m = html(<ReviewSubjectCard r={r} lang="ru" links={{}} />);
+  assert.match(
+    shown(m),
+    /раунды 2 из 6 · раундов ревью плана: осталось 4 · 1 повторное ревью неизменённого плана — без траты раунда/,
+  );
+  // None left: said, and marked for attention.
+  v.reviews[0].rounds = { used: 6, max: 6, remaining: 0 };
+  const zero = html(<ReviewSubjectCard r={viewOf(v).reviews[0]!} lang="ru" links={{}} />);
+  assert.match(zero, /data-testid="rounds-left" data-status="blocked"/);
+  assert.match(shown(zero), /раундов ревью плана: осталось 0/);
+  assert.doesNotMatch(zero, /rounds-free/);
+  // No limit (`null`) or an older harness: the alpha.9 words only.
+  for (const rounds of [
+    { used: 2, max: null, remaining: null },
+    { used: 2, max: 6 },
+  ]) {
+    v.reviews[0].rounds = rounds;
+    const old = html(<ReviewSubjectCard r={viewOf(v).reviews[0]!} lang="ru" links={{}} />);
+    assert.doesNotMatch(old, /rounds-left|rounds-free/);
+  }
+  assert.equal(dict('en').reviews.roundsLeft('plan', 4), 'plan review rounds left: 4');
+});
+
+test('revision 8: the budget and diagnosis-addendum decisions have their words', async () => {
+  const { Decisions } = await import('../src/index.ts');
+  const v = structuredClone(ru);
+  v.decisions = [
+    {
+      id: 'budget:0123456789abcdef',
+      kind: 'budget',
+      by: 'operator',
+      at: '2026-11-19T11:50:00.000Z',
+      temporary: false,
+      title: 'бюджет поднят: maxAttempts 3 → 5',
+      reason: 'ещё две попытки на инфраструктуру',
+    },
+    {
+      id: 'diagnosis-addendum:0123456789abcdef',
+      kind: 'diagnosis-addendum',
+      by: 'lead',
+      at: '2026-11-19T11:45:00.000Z',
+      workId: 'import-csv',
+      subject: 'D1',
+      temporary: false,
+      reason: 'вторая причина: очистка теста скрывает исходный отказ',
+    },
+  ];
+  const m = shown(html(<Decisions view={viewOf(v)} lang="ru" timeZone={TZ} />));
+  assert.match(
+    m,
+    /11:50 бюджет поднят · кто решил: вы бюджет поднят: maxAttempts 3 → 5 причина: ещё две попытки на инфраструктуру/,
+  );
+  assert.match(m, /11:45 дополнение разбора ведущего по D1 \( import-csv \) · кто решил: ведущий/);
+  assert.equal(dict('en').decisions.kind['diagnosis-addendum'], 'lead diagnosis addendum');
 });

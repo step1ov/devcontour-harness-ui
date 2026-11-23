@@ -1,10 +1,10 @@
 // Operator view: the read-only document the panel renders. The schema is
 // owned by devcontour-harness (`operatorViewSchema` in its
 // src/contracts/operator-view.ts, JSON Schema schemas/operator-view.schema.json
-// and schemas/work-detail-view.schema.json, harness 0.1.0-alpha.67, view
-// version 1, revision 7; every revision 1–7 field is optional, so alpha.55
+// and schemas/work-detail-view.schema.json, harness 0.1.0-alpha.68, view
+// version 1, revision 8; every revision 1–8 field is optional, so alpha.55
 // (revision 0), alpha.56 (1), alpha.57/58 (2), alpha.59 (3), alpha.60–.62
-// (4), alpha.65 (5) and alpha.66 (6) documents have the same type). These types mirror it field by field; tests/contract.test.ts
+// (4), alpha.65 (5), alpha.66 (6) and alpha.67 (7) documents have the same type). These types mirror it field by field; tests/contract.test.ts
 // validates the fixtures against copies of the harness JSON Schemas. A host
 // adapter that builds a view from its own store follows the same schema.
 // Pure types: no node:*, no React.
@@ -177,7 +177,12 @@ export interface ReviewSubjectView {
   subject: string;
   workId?: string;
   approved: boolean;
-  rounds: { used: number; max: number | null };
+  /**
+   * `used` — counted in the current epoch (harness alpha.68); `remaining` —
+   * left to the limit (`null` without one); `free` — re-reviews of an
+   * unchanged plan that spent no round (revision 8).
+   */
+  rounds: { used: number; max: number | null; remaining?: number | null; free?: number };
   open: { blocking: number; notes: number };
   accepted: number;
   reviewer?: Binding;
@@ -359,6 +364,12 @@ export interface TrackStep {
    * person (`user`) or the harness itself. Absent on attempt steps.
    */
   actor?: 'lead' | 'user' | 'harness';
+  /**
+   * Revision 8 (harness alpha.68), diagnosis steps: `true` — the work is
+   * held until the lead diagnoses (DIAGNOSIS_REQUIRED, exhaustion); `false`
+   * — the harness retries by itself and the lead may diagnose.
+   */
+  required?: boolean;
 }
 
 /**
@@ -460,6 +471,105 @@ export interface WorkView {
   resultSha?: string;
   /** Revision 6: the whole path of the work. Absent = an older harness or dropped for size. */
   track?: WorkTrack;
+  /** Revision 8: a new plan revision reopened the accepted work; the rework is not accepted yet. */
+  reopened?: ReopenedView;
+  /** Revision 8: the last applied independent review round per attempt and phase, at most 40. */
+  attemptReviews?: AttemptReviewResult[];
+}
+
+/** `works[].reopened` (revision 8): why an accepted work is in work again. */
+export interface ReopenedView {
+  at: string;
+  /** Who approved the reopening revision; absent while it is not approved. */
+  by?: 'lead' | 'operator';
+  revision: number;
+  /** `fresh` — its own attempt limit; `carried` — the limit carried over. */
+  budget: 'fresh' | 'carried';
+  acceptedSha: string;
+  /** Counted attempts of the accepted revision. */
+  spent: number;
+  /** The harness phrase for the card. */
+  reason: string;
+}
+
+/** `works[].attemptReviews[]` (revision 8). Lead code reviews (`reviews[kind=code]`) are not here. */
+export interface AttemptReviewResult {
+  attempt: number;
+  phase: 'candidate' | 'integration';
+  /** `invalid` — only off-protocol or unsafe replies. */
+  verdict: 'approved' | 'rejected' | 'invalid';
+  /** Open blocking findings of the round. */
+  findings: number;
+  /** Other open findings. */
+  notes: number;
+  at: string;
+  /** An attempt of the earlier (accepted) revision of the work, before the rework. */
+  earlier?: true;
+}
+
+/** `forecast.progress.works[].stageProgress` (revision 8): the running attempt's stage. */
+export interface StageProgressView {
+  stage: 'code' | 'checks' | 'review' | 'integration';
+  /** Share of the attempt at the start (`from`) and end (`to`) of the stage, 0..1. */
+  from: number;
+  to: number;
+  since?: string;
+  typicalMs?: number;
+  samples?: number;
+}
+
+/** `forecast.progress.growth` (revision 8): the last plan growth. */
+export interface ForecastGrowthView {
+  at: string;
+  added: string[];
+  before: number;
+  after: number;
+  by: 'works' | 'outline';
+  reason?: string;
+  line: string;
+}
+
+/** How much of an outline part has harness works (revision 8). */
+export type OutlineFill = 'registered' | 'partial' | 'unregistered';
+
+/** A component of a release outline stage (revision 8). */
+export interface OutlineComponentView {
+  id: string;
+  title?: string;
+  size?: 'S' | 'M' | 'L';
+  tasks?: number;
+  actor: 'writers' | 'environment' | 'owner';
+  state: OutlineFill;
+  units: number;
+  registered: number;
+  percent: number;
+  works?: string[];
+}
+
+/** One stage of the lead's release outline (revision 8). */
+export interface OutlineStageView {
+  id: string;
+  title?: string;
+  kind: 'infra' | 'product' | 'deploy' | 'other';
+  state: OutlineFill;
+  units: number;
+  registered: number;
+  percent: number;
+  components: OutlineComponentView[];
+}
+
+/** `forecast.outline` (revision 8): the lead's release outline, or the hint that there is none. */
+export interface ForecastOutlineView {
+  state: 'recorded' | 'missing';
+  code?: 'RELEASE_OUTLINE_MISSING';
+  revision?: number;
+  recordedAt?: string;
+  units?: number;
+  registered?: number;
+  unregistered?: number;
+  beyond?: number;
+  stages?: OutlineStageView[];
+  line: string;
 }
 
 export interface ViewProgress {
@@ -721,8 +831,16 @@ export interface ForecastView {
       retry?: 'repair' | 'answer';
       /** A rework after acceptance: `percent` is the rework's; the work is already `done`. */
       rework?: true;
+      /** Revision 8: the stage of the running attempt and its share span. */
+      stageProgress?: StageProgressView;
       line: string;
     }[];
+    /** Revision 8: the last plan growth. */
+    growth?: ForecastGrowthView;
+    /** Revision 8: «если ведущий не добавит задач» — the lead's last stretch with an open session. */
+    conditional?: true;
+    /** Revision 8: no outline and every work is infrastructure — its estimated share of the release. */
+    infraShare?: { share: number; line: string };
     /** Open reworks after acceptance (harness alpha.66). Absent = none. */
     rework?: number;
     /**
@@ -781,8 +899,21 @@ export interface ForecastView {
     lead?: { ms: number; samples: number; line: string };
     /** Works waiting for a person or the lead now, and the longest wait; not in the forecast. */
     humanWait: { works: number; ms: number; since?: string };
+    /** Revision 8: the unregistered parts of the release outline, estimated by size. */
+    outline?: {
+      units: number;
+      ownerUnits?: number;
+      loMs?: number;
+      hiMs?: number;
+      basis: 'attempts' | 'default';
+      line: string;
+    };
+    /** Revision 8: the code is accepted and the lead finishes — start, duration, estimate exceeded. */
+    finishing?: { since?: string; elapsedMs?: number; exceeded?: true };
     line: string;
   };
+  /** Revision 8: the lead's release outline, or the hint that there is none. */
+  outline?: ForecastOutlineView;
   /** The assumptions in words, in the view language. */
   assumptions: string[];
 }
@@ -976,7 +1107,9 @@ export interface OperatorView {
       | 'planned'
       | 'leadNotes'
       | 'resources'
-      | 'previews',
+      | 'previews'
+      // Revision 8.
+      | 'attemptReviews',
       number
     >
   >;
@@ -1171,7 +1304,9 @@ export interface WorkDetailView {
       | 'reviews'
       | 'questions'
       | 'blockers'
-      | 'dependsOn',
+      | 'dependsOn'
+      // Revision 8.
+      | 'attemptReviews',
       number
     >
   >;

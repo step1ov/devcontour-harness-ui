@@ -47,11 +47,13 @@
 > «превышен бюджет настройки»), значок «инфраструктура» у работ
 > инфраструктуры harness, а строка «Очередь стоит — никто не запущен:
 > запустите harness run…» — отдельной строкой «Очередь — за ведущим».
-> Выпуск `0.1.0-alpha.10` (договор ожидает harness `0.1.0-alpha.68`) —
-> меню закреплено сверху, у каждой попытки на пути задачи своя подсказка,
-> полоса карточки — путь текущей попытки к приёмке со значком «попытка N
-> из M», строка ревью — из ревью каждой попытки; с harness `0.1.0-alpha.67`
-> работает, как alpha.9, плюс эти изменения вида.
+> Выпуск `0.1.0-alpha.10` рассчитан на harness `0.1.0-alpha.68`
+> (ревизия 8): меню закреплено сверху, у каждой попытки на пути задачи своя
+> подсказка, полоса карточки — путь текущей попытки к приёмке со значком
+> «попытка N из M», строка ревью — из ревью каждой попытки, «Решения» из
+> журнала harness, вид разбора ведущего, переоткрытые работы, выпуск по
+> этапам, рост плана и остаток раундов ревью плана; с harness
+> `0.1.0-alpha.67` работает, как alpha.9, плюс изменения вида.
 > С alpha.55–.58 всё прочее работает, как раньше.
 > [Дизайн](docs/design.md) описывает схему, экраны, безопасность и этапы;
 > изменения — в заметках к выпускам [0.1.0-alpha.10](docs/release-notes/0.1.0-alpha.10.md), [0.1.0-alpha.9](docs/release-notes/0.1.0-alpha.9.md), [0.1.0-alpha.8](docs/release-notes/0.1.0-alpha.8.md), [0.1.0-alpha.7](docs/release-notes/0.1.0-alpha.7.md), [0.1.0-alpha.6](docs/release-notes/0.1.0-alpha.6.md), [0.1.0-alpha.5](docs/release-notes/0.1.0-alpha.5.md), [0.1.0-alpha.4](docs/release-notes/0.1.0-alpha.4.md), [0.1.0-alpha.3](docs/release-notes/0.1.0-alpha.3.md), [0.1.0-alpha.2](docs/release-notes/0.1.0-alpha.2.md)
@@ -72,7 +74,7 @@
 версия, как и у harness):
 
 ```sh
-npm install --save-dev --save-exact devcontour-harness@0.1.0-alpha.67 devcontour-harness-ui@0.1.0-alpha.9
+npm install --save-dev --save-exact devcontour-harness@0.1.0-alpha.68 devcontour-harness-ui@0.1.0-alpha.10
 npx devcontour-harness-ui --demo --lang ru      # демонстрационные данные
 # → {"ok":true,"url":"http://127.0.0.1:4790/","port":4790,"readOnly":true,...}
 ```

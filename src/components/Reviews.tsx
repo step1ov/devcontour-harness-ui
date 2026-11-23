@@ -52,7 +52,9 @@ export function ReviewSubjectCard({
       </div>
       {r.line ? <p className="hui-muted">{r.line}</p> : null}
       <ul className="hui-facts">
-        <li>{v.rounds(r.rounds.used, r.rounds.max)}</li>
+        <li data-testid="review-rounds">
+          <RoundsText r={r} t={t} />
+        </li>
         <li>{v.open(r.open.blocking, r.open.notes)}</li>
         <li>{v.acceptedLimits(r.accepted)}</li>
         <li>{v.reviewer(bindingText(r.reviewer, t))}</li>
@@ -182,7 +184,9 @@ export function Reviews({
                     <code>{r.subject}</code>
                   </td>
                   <td data-label={v.col.kind}>{label(v.kind, r.kind)}</td>
-                  <td data-label={v.col.rounds}>{v.rounds(r.rounds.used, r.rounds.max)}</td>
+                  <td data-label={v.col.rounds}>
+                    <RoundsText r={r} t={t} />
+                  </td>
                   <td data-label={v.col.open}>{v.open(r.open.blocking, r.open.notes)}</td>
                   <td data-label={v.col.accepted}>{r.accepted}</td>
                   <td data-label={v.col.reviewer}>{bindingText(r.reviewer, t)}</td>
@@ -204,5 +208,32 @@ export function Reviews({
       <Clipped n={view.truncated?.reviews} t={t} />
       <Clipped n={view.truncated?.findings} t={t} />
     </section>
+  );
+}
+
+/**
+ * Rounds of a review subject against its limit; revision 8 adds the rounds
+ * left («раундов ревью плана: осталось K», warn at 0) and the free
+ * re-reviews of an unchanged plan that spent no round.
+ */
+export function RoundsText({ r, t }: { r: ReviewSubjectView; t: Dict }) {
+  const v = t.reviews;
+  const left = r.rounds.remaining;
+  return (
+    <>
+      {v.rounds(r.rounds.used, r.rounds.max)}
+      {typeof left === 'number' ? (
+        <span data-testid="rounds-left" data-status={left === 0 ? 'blocked' : undefined}>
+          {' · '}
+          {v.roundsLeft(label(v.roundsKindOf, r.kind), left)}
+        </span>
+      ) : null}
+      {r.rounds.free ? (
+        <span className="hui-muted" data-testid="rounds-free">
+          {' · '}
+          {v.roundsFree(r.rounds.free)}
+        </span>
+      ) : null}
+    </>
   );
 }

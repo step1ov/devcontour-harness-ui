@@ -20,7 +20,7 @@ export type ViewCheck =
     };
 
 /** Highest `viewRevision` this build knows how to render in full. */
-export const KNOWN_VIEW_REVISION = 7;
+export const KNOWN_VIEW_REVISION = 8;
 
 type Obj = Record<string, unknown>;
 const isObject = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -257,11 +257,40 @@ const work = obj({
           at: opt(I),
           reason: opt(S),
           rework: opt(C),
+          // Revision 8: a diagnosis step is required or optional.
+          required: opt(B),
         }),
         120,
       ),
       truncated: opt(C),
     }),
+  ),
+  // Revision 8 (harness alpha.68): why an accepted work is in work again.
+  reopened: opt(
+    obj({
+      at: I,
+      by: opt(S),
+      revision: C,
+      budget: S,
+      acceptedSha: S,
+      spent: C,
+      reason: S,
+    }),
+  ),
+  // Revision 8: the last applied independent review round per attempt and phase.
+  attemptReviews: opt(
+    arr(
+      obj({
+        attempt: C,
+        phase: S,
+        verdict: S,
+        findings: C,
+        notes: C,
+        at: I,
+        earlier: opt(B),
+      }),
+      40,
+    ),
   ),
 });
 const review = obj({
@@ -269,7 +298,8 @@ const review = obj({
   subject: S,
   workId: opt(S),
   approved: B,
-  rounds: obj({ used: N, max: nul(N) }),
+  // Revision 8: rounds left to the limit (`null` without one) and free re-reviews.
+  rounds: obj({ used: N, max: nul(N), remaining: opt(nul(C)), free: opt(C) }),
   open: obj({ blocking: N, notes: N }),
   accepted: N,
   reviewer: opt(binding),
@@ -511,11 +541,36 @@ const overview = obj({
               attempt: opt(obj({ n: C, max: C })),
               retry: opt(S),
               rework: opt(B),
+              // Revision 8: the running attempt's stage and its share span.
+              stageProgress: opt(
+                obj({
+                  stage: S,
+                  from: N,
+                  to: N,
+                  since: opt(I),
+                  typicalMs: opt(C),
+                  samples: opt(C),
+                }),
+              ),
               line: S,
             }),
             50,
           ),
         ),
+        // Revision 8: plan growth, the conditional figure, the infra share.
+        growth: opt(
+          obj({
+            at: I,
+            added: arr(S, 10),
+            before: N,
+            after: N,
+            by: S,
+            reason: opt(S),
+            line: S,
+          }),
+        ),
+        conditional: opt(B),
+        infraShare: opt(obj({ share: N, line: S })),
         rework: opt(C),
         planned: opt(obj({ count: C, keys: arr(S, 20), line: S })),
         approved: opt(obj({ percent: N, total: C, done: C, left: C, loMs: opt(C), hiMs: opt(C) })),
@@ -538,8 +593,63 @@ const overview = obj({
         chain: opt(N),
         lead: opt(obj({ ms: C, samples: C, line: S })),
         humanWait: obj({ works: C, ms: C, since: opt(I) }),
+        // Revision 8: the outline's unregistered part and the lead's last stretch.
+        outline: opt(
+          obj({
+            units: C,
+            ownerUnits: opt(C),
+            loMs: opt(C),
+            hiMs: opt(C),
+            basis: S,
+            line: S,
+          }),
+        ),
+        finishing: opt(obj({ since: opt(I), elapsedMs: opt(C), exceeded: opt(B) })),
         line: S,
       }),
+      // Revision 8: the lead's release outline, or the hint that there is none.
+      outline: opt(
+        obj({
+          state: S,
+          code: opt(S),
+          revision: opt(C),
+          recordedAt: opt(I),
+          units: opt(C),
+          registered: opt(C),
+          unregistered: opt(C),
+          beyond: opt(C),
+          stages: opt(
+            arr(
+              obj({
+                id: S,
+                title: opt(S),
+                kind: S,
+                state: S,
+                units: C,
+                registered: C,
+                percent: N,
+                components: arr(
+                  obj({
+                    id: S,
+                    title: opt(S),
+                    size: opt(S),
+                    tasks: opt(C),
+                    actor: S,
+                    state: S,
+                    units: C,
+                    registered: C,
+                    percent: N,
+                    works: opt(arr(S, 5)),
+                  }),
+                  20,
+                ),
+              }),
+              12,
+            ),
+          ),
+          line: S,
+        }),
+      ),
       assumptions: arr(S, 10),
     }),
   ),

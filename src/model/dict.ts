@@ -1110,6 +1110,11 @@ const ru = {
     notApproved: 'не одобрено',
     rounds: (used: number, max: number | null) =>
       max === null ? `раундов ${used}, без предела` : `раунды ${used} из ${max}`,
+    // Revision 8: rounds left to the limit and free re-reviews of an unchanged plan.
+    roundsLeft: (kind: string, n: number) => `раундов ревью ${kind}: осталось ${n}`,
+    roundsKindOf: { plan: 'плана', contract: 'договора', code: 'кода' } as Labels,
+    roundsFree: (n: number) =>
+      `${rp(n, 'повторное ревью', 'повторных ревью', 'повторных ревью')} неизменённого плана — без траты раунда`,
     open: (blocking: number, notes: number) => `открыто: блокирующих ${blocking}, заметок ${notes}`,
     acceptedLimits: (n: number) => `принято как ограничение: ${n}`,
     reviewer: (who: string) => `reviewer: ${who}`,
@@ -1159,6 +1164,8 @@ const ru = {
       continue: 'решено продолжать',
       // Revision 8 (harness alpha.68).
       diagnosis: 'разбор ведущего',
+      'diagnosis-addendum': 'дополнение разбора ведущего',
+      budget: 'бюджет поднят',
       reset: 'новый предел попыток',
       answer: 'ответ на вопрос',
       'review-continue': 'ещё раунды ревью',
@@ -2392,6 +2399,10 @@ const en: Dict = {
     notApproved: 'not approved',
     rounds: (used: number, max: number | null) =>
       max === null ? `${used} rounds, no limit` : `rounds ${used} of ${max}`,
+    roundsLeft: (kind: string, n: number) => `${kind} review rounds left: ${n}`,
+    roundsKindOf: { plan: 'plan', contract: 'contract', code: 'code' },
+    roundsFree: (n: number) =>
+      `${n} ${n === 1 ? 're-review' : 're-reviews'} of an unchanged plan — no round spent`,
     open: (blocking: number, notes: number) => `open: ${blocking} blocking, ${notes} notes`,
     acceptedLimits: (n: number) => `accepted as a limitation: ${n}`,
     reviewer: (who: string) => `reviewer: ${who}`,
@@ -2439,6 +2450,8 @@ const en: Dict = {
       'technical-answer': 'technical question answered',
       continue: 'decided to continue',
       diagnosis: 'lead diagnosis',
+      'diagnosis-addendum': 'lead diagnosis addendum',
+      budget: 'budget raised',
       reset: 'new attempt limit',
       answer: 'answer to a question',
       'review-continue': 'more review rounds',
