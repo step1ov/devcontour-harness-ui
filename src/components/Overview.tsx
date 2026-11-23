@@ -217,7 +217,9 @@ export function Overview({
       ? runner === 'not-running'
       : !health.controller.present && progress.running === 0 && harnessLeft > 0);
   const standingLine = progress.queue.line?.trim() || undefined;
-  // The queue stands and the lead restarts it: the harness line is the lead's next move.
+  // The queue stands and the lead restarts it: the harness line says when —
+  // now («запустите harness run: готово N задач») or after an answer
+  // («готовых задач нет — вопрос держит X»); the panel adds no instruction.
   const leadMove =
     standing &&
     standingLine !== undefined &&
@@ -329,9 +331,9 @@ export function Overview({
             </span>
           </div>
           {leadMove && standingLine ? (
-            // Harness alpha.67: nobody runs while works are ready («запустите
-            // harness run: готово N задач, вопрос блокирует только X») — the
-            // lead's next move, in its own line under the badges.
+            // Harness alpha.67: the standing queue is the lead's, in its own
+            // line under the badges; the title is neutral, the harness line
+            // says whether to start a run now.
             <div className="hui-lead-move" data-testid="lead-next-move">
               <span className="hui-lead-move-label">{t.r7.leadMoveTitle}</span>
               <p data-status="blocked" data-testid="queue-who" className="hui:m-0 hui:font-medium">

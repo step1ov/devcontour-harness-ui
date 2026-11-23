@@ -1582,8 +1582,9 @@ const ru = {
     infraBadge: 'инфраструктура',
     infraWhy:
       'Работа инфраструктуры harness: мосты окружения, обёртки gates, приёмочные тесты. Идёт обычным циклом — попытки, проверки, ревью.',
-    // The queue stands although works are ready: the lead's next move.
-    leadMoveTitle: 'Следующий ход ведущего',
+    // The queue stands and the lead restarts it. Neutral: the harness line
+    // says whether to start now («запустите harness run») or after an answer.
+    leadMoveTitle: 'Очередь — за ведущим',
     // Activity events the panel names.
     action: {
       'environment.reconciled': 'окружение сверено',
@@ -2743,7 +2744,7 @@ const en: Dict = {
     infraBadge: 'infrastructure',
     infraWhy:
       'A harness infrastructure work: environment bridges, gate wrappers, acceptance tests. It goes through the usual cycle — attempts, checks, review.',
-    leadMoveTitle: "The lead's next move",
+    leadMoveTitle: 'The queue is up to the lead',
     action: {
       'environment.reconciled': 'environment reconciled',
     },

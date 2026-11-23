@@ -1,7 +1,7 @@
 // View revision 7 (harness 0.1.0-alpha.67): setup progress while there are
 // no works (`stage.progress` of the overview and of the setup document),
 // infrastructure works (`works[].kind: 'infra'`), the queue line that names
-// a new run as the lead's next move, and the `environment.reconciled` event
+// a new run as the lead's move, and the `environment.reconciled` event
 // as a known neutral one. A revision 6 document (`asAlpha66`) keeps the
 // previous screens.
 import { strict as assert } from 'node:assert';
@@ -292,16 +292,14 @@ function standing(doc: Json, line = START_RUN, restartBy: string | undefined = '
   return d;
 }
 
-test('the queue line «запустите harness run» stands out on the home as the lead’s next move', () => {
+test('the queue line «запустите harness run» stands out on the home as the lead’s move', () => {
   const view = viewOf(standing(ruSample));
   const m = html(<Overview view={view} lang="ru" now={at(ruSample)} timeZone={TZ} />);
   const block = m.slice(m.lastIndexOf('<', m.indexOf('data-testid="lead-next-move"')));
   assert.ok(block.length < m.length, 'the lead-move block is there');
   assert.match(
     shown(block),
-    new RegExp(
-      `^Следующий ход ведущего ${START_RUN.replace(/[().]/g, '\\$&')} — запускает: ведущий`,
-    ),
+    new RegExp(`^Очередь — за ведущим ${START_RUN.replace(/[().]/g, '\\$&')} — запускает: ведущий`),
   );
   // The badge says the queue stands, the line is in the hero once and among the problems.
   assert.match(m, /data-testid="queue-state"[^>]*>Очередь стоит</);
@@ -316,7 +314,7 @@ test('the queue line «запустите harness run» stands out on the home a
       now={at(ruSample)}
     />,
   );
-  assert.match(shown(bare), /Следующий ход ведущего .* — запускает: ведущий/);
+  assert.match(shown(bare), /Очередь — за ведущим .* — запускает: ведущий/);
   // Another actor restarts: no lead move, the inline line as before.
   const other = html(
     <Overview
@@ -342,8 +340,16 @@ test('the queue line «запустите harness run» stands out on the home a
   );
   assert.match(
     shown(en),
-    /The lead's next move The queue is idle — nothing is running: start harness run/,
+    /The queue is up to the lead The queue is idle — nothing is running: start harness run/,
   );
+  // Harness alpha.67: no task is ready — a question holds them all. The same
+  // block, but nothing in the panel's words tells to start a run now.
+  const held =
+    'Очередь стоит — никто не запущен: готовых задач нет — вопрос держит export-csv; после ответа нужен новый запуск (ведущий: harness run).';
+  const h = html(<Overview view={viewOf(standing(ruSample, held))} lang="ru" now={at(ruSample)} />);
+  const hb = shown(h.slice(h.lastIndexOf('<', h.indexOf('data-testid="lead-next-move"'))));
+  assert.ok(hb.startsWith(`Очередь — за ведущим ${held} — запускает: ведущий`), hb);
+  assert.doesNotMatch(hb.slice(0, hb.indexOf(held)), /запуст|start|ход/i);
   // A running queue has no lead move.
   assert.doesNotMatch(html(<Overview view={viewOf(ruSample)} lang="ru" />), /lead-next-move/);
 });

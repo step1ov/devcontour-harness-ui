@@ -1,7 +1,7 @@
 // View revision 7 (harness 0.1.0-alpha.67) in the browser: the setup
 // progress block on the home while there are no works (light and dark, 1280
 // and 390 px, axe), and on a revision 7 overview an infrastructure work's
-// badge and the queue line «запустите harness run» as the lead's next move.
+// badge and the queue line «запустите harness run» as the lead's move.
 import { AxeBuilder } from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import { spawn } from 'node:child_process';
@@ -80,7 +80,7 @@ test('setup progress on the home: steps, time, budget exceeded; light and dark',
   }
 });
 
-test('revision 7 overview: the infra badge and the lead’s next move «запустите harness run»', async ({
+test('revision 7 overview: the infra badge and the standing queue is the lead’s «запустите harness run»', async ({
   page,
 }) => {
   const base = join(tmpdir(), 'hui-e2e-r7-');
@@ -100,7 +100,7 @@ test('revision 7 overview: the infra badge and the lead’s next move «запу
     await expect(main.getByTestId('queue-state')).toHaveText('Очередь стоит');
     const move = main.getByTestId('lead-next-move');
     await expect(move).toBeVisible();
-    await expect(move).toContainText('Следующий ход ведущего');
+    await expect(move).toContainText('Очередь — за ведущим');
     await expect(move).toContainText(line + ' — запускает: ведущий');
     await expect(main.getByTestId('plan').getByTestId('infra-badge')).toHaveText('инфраструктура');
     await noScrollNoAxe(page);

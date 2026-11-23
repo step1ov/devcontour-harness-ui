@@ -7,10 +7,8 @@
 // setup-state.view.json a real `harness view --repository <empty dir> --lang en`
 // (the setup document) and setup-progress.view.json a real `harness view
 // --repository <dir> --lang en` right after `harness init` (an overview at the
-// setup stage with `stage.progress`). The alpha.67 copies come from the
-// release branch before its version bump, so they still name
-// producerVersion 0.1.0-alpha.66 with viewRevision 7; refresh them from the
-// released package. tests/contract/harness-0.1.0-alpha.66/ keeps the same
+// setup stage with `stage.progress`), made with the built CLI of the
+// released 0.1.0-alpha.67. tests/contract/harness-0.1.0-alpha.66/ keeps the same
 // files of 0.1.0-alpha.66 (revision 6); tests/contract/harness-0.1.0-alpha.65/ keeps the same
 // files of 0.1.0-alpha.65 (revision 5); tests/contract/harness-0.1.0-alpha.62/ keeps the same
 // files of 0.1.0-alpha.62 (revision 4 with `neverRun` and `scopeReason`),
@@ -107,8 +105,8 @@ const harnessEmpty = read('./contract/harness/empty-state.view.json');
 const setupSchema = read('./contract/harness/setup-view.schema.json');
 const harnessSetup = read('./contract/harness/setup-state.view.json');
 const harnessProgress = read('./contract/harness/setup-progress.view.json');
-/** The alpha.67 copies were taken before the harness bumped its version (see the header). */
-const ALPHA67 = /^0\.1\.0-alpha\.6[67]$/;
+/** The producer of the alpha.67 copies. */
+const ALPHA67 = /^0\.1\.0-alpha\.67$/;
 const overviewSchema62 = read('./contract/harness-0.1.0-alpha.62/operator-view.schema.json');
 const detailSchema62 = read('./contract/harness-0.1.0-alpha.62/work-detail-view.schema.json');
 const harnessEmpty62 = read('./contract/harness-0.1.0-alpha.62/empty-state.view.json');

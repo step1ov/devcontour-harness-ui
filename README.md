@@ -46,7 +46,7 @@
 > связка — с состоянием и временем, время настройки против бюджета и
 > «превышен бюджет настройки»), значок «инфраструктура» у работ
 > инфраструктуры harness, а строка «Очередь стоит — никто не запущен:
-> запустите harness run…» — отдельной строкой «Следующий ход ведущего».
+> запустите harness run…» — отдельной строкой «Очередь — за ведущим».
 > С alpha.55–.58 всё прочее работает, как раньше.
 > [Дизайн](docs/design.md) описывает схему, экраны, безопасность и этапы;
 > изменения — в заметках к выпускам [0.1.0-alpha.9](docs/release-notes/0.1.0-alpha.9.md), [0.1.0-alpha.8](docs/release-notes/0.1.0-alpha.8.md), [0.1.0-alpha.7](docs/release-notes/0.1.0-alpha.7.md), [0.1.0-alpha.6](docs/release-notes/0.1.0-alpha.6.md), [0.1.0-alpha.5](docs/release-notes/0.1.0-alpha.5.md), [0.1.0-alpha.4](docs/release-notes/0.1.0-alpha.4.md), [0.1.0-alpha.3](docs/release-notes/0.1.0-alpha.3.md), [0.1.0-alpha.2](docs/release-notes/0.1.0-alpha.2.md)
