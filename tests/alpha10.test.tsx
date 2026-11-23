@@ -349,9 +349,46 @@ test('P6-5: code accepted, the lead finishing — the ring stays below 100 with 
   const ring = /data-testid="ring-release"[\s\S]*?<\/svg>/.exec(m)![0];
   assert.match(ring, /data-part="tail"/);
   assert.match(ring, /class="hui-ring-tail"/);
-  // The fill is capped at 99 % of the circle; the words keep the harness figure.
+  // Review P1: the figure, the accessible value and the ring agree — below 100.
+  assert.match(m, /data-testid="ring-release"[\s\S]*?aria-valuenow="99"/);
+  assert.match(
+    shown(/data-testid="ring-release"[\s\S]*?<\/h3>[\s\S]*?<\/div><\/div>/.exec(m)![0]),
+    /~99 %/,
+  );
+  assert.doesNotMatch(
+    /data-testid="ring-release"[\s\S]*?<\/svg>[\s\S]*?<\/div><\/div>/.exec(m)![0],
+    /~100 %/,
+  );
+  // The fill leaves a visible finishing gap (≤ 95 % of the circle) with butt caps.
   const fill = /stroke-dasharray="([\d.]+) ([\d.]+)"[^>]*data-part="fill"/.exec(ring)!;
-  assert.ok(Number(fill[1]) / Number(fill[2]) < 0.995, fill[0]);
+  assert.ok(Number(fill[1]) / Number(fill[2]) <= 0.95 + 1e-9, fill[0]);
+  assert.match(ring, /stroke-linecap="butt"[^>]*data-part="fill"/);
+  // At 99 % the tail still has stripes.
+  for (const p of [99, 95]) {
+    v.forecast.progress.percent = p;
+    const r = /data-testid="ring-release"[\s\S]*?<\/svg>/.exec(
+      html(<Overview view={viewOf(v)} lang="ru" />),
+    )![0];
+    const dash = /stroke-dasharray="([^"]+)"[^>]*data-part="tail"/
+      .exec(r)![1]!
+      .split(' ')
+      .map(Number);
+    assert.ok(
+      dash.slice(2, -2).some((x, i) => i % 2 === 0 && x > 0),
+      `${p}: ${dash.join(' ')}`,
+    );
+  }
+  // A very short rest still gets one stripe.
+  const short = tailDashes(0.985).split(' ').map(Number);
+  assert.ok(short[2]! > 0, short.join(' '));
+  // In work: the harness figure as is.
+  const work = structuredClone(ru);
+  work.forecast.progress.percent = 100;
+  work.forecast.progress.release = { state: 'done', line: 'выпуск готов' };
+  assert.match(
+    html(<Overview view={viewOf(work)} lang="ru" />),
+    /data-testid="ring-release"[\s\S]*?aria-valuenow="100"/,
+  );
   assert.match(shown(m), /Код принят · осталось немного: ведущий завершает работу/);
   // In work or done: no tail.
   assert.doesNotMatch(html(<Overview view={viewRu} lang="ru" />), /data-part="tail"/);
@@ -757,4 +794,95 @@ test('revision 8: the budget and diagnosis-addendum decisions have their words',
   );
   assert.match(m, /11:45 дополнение разбора ведущего по D1 \( import-csv \) · кто решил: ведущий/);
   assert.equal(dict('en').decisions.kind['diagnosis-addendum'], 'lead diagnosis addendum');
+});
+
+test('review P2: a done work with an open rework shows that rework, not «accepted»', () => {
+  const steps = [
+    { kind: 'code', attempt: 1, state: 'passed', label: 'код' },
+    { kind: 'checks', attempt: 1, state: 'passed', label: 'проверки' },
+    { kind: 'review', attempt: 1, state: 'passed', label: 'ревью' },
+    { kind: 'integration', attempt: 1, state: 'passed', label: 'интеграция' },
+    { kind: 'accepted', attempt: 1, state: 'passed', label: 'принято (прежняя редакция)' },
+  ] as WorkTrack['steps'];
+  const queued: WorkTrack = {
+    steps: [
+      ...steps,
+      ...(['code', 'checks', 'review', 'integration'] as const).map((kind) => ({
+        kind,
+        attempt: 2,
+        state: 'planned' as const,
+        label: kind,
+        rework: 1,
+      })),
+      { kind: 'accepted', state: 'planned', label: 'принято', rework: 1 },
+    ],
+  };
+  assert.deepEqual(attemptProgress(queued, 'done'), {
+    state: 'next',
+    attempt: 2,
+    rework: 1,
+    passed: 0,
+    of: 4,
+  });
+  const failed: WorkTrack = {
+    steps: [
+      ...steps,
+      { kind: 'code', attempt: 2, state: 'passed', label: 'код', rework: 1 },
+      { kind: 'checks', attempt: 2, state: 'failed', label: 'проверки', rework: 1 },
+    ],
+  };
+  assert.deepEqual(attemptProgress(failed, 'done'), {
+    state: 'failed',
+    attempt: 2,
+    rework: 1,
+    passed: 1,
+    of: 4,
+    step: 'проверки',
+  });
+  // A rework that ended (kept or accepted): accepted.
+  assert.equal(attemptProgress(work(viewRu, 'add-greeting').track, 'done').state, 'accepted');
+  assert.equal(attemptProgress({ steps }, 'done').state, 'accepted');
+  // On the card: no 100 % bar for the queued rework.
+  const v = structuredClone(ru);
+  const w = v.works.find((x: Json) => x.id === 'add-greeting');
+  w.track = queued;
+  const m = card(viewOf(v), 'add-greeting');
+  assert.match(m, /data-testid="task-progress" data-state="next"/);
+  assert.doesNotMatch(m, /aria-valuenow="100"/);
+  assert.match(shown(m), /Доработка 1 · попытка 2 ещё не началась/);
+});
+
+test('review P3/P4: the badge counts by the harness budget; a running last attempt is amber without a track', () => {
+  const badge = (m: string) =>
+    /<span[^>]*data-testid="attempt-badge"[^>]*>[\s\S]*?<\/span>/.exec(m)?.[0] ?? '';
+  // After an uncounted run: attempt 3 running, 2 of 3 counted, 1 left — not «3 из 3», not the last.
+  const v = structuredClone(ru);
+  const w = v.works.find((x: Json) => x.id === 'locale-format');
+  for (const s of w.track.steps) if (s.attempt === 2) s.attempt = 3;
+  w.attempts = { ...w.attempts, used: 2, left: 1, runs: 3 };
+  const b = badge(card(viewOf(v), 'locale-format'));
+  assert.match(shown(b), /^попытка 3 · засчитано 2 из 3$/);
+  assert.doesNotMatch(b, /data-why/);
+  // Running the last counted attempt without a track: amber «последняя», not red «израсходованы».
+  const n = structuredClone(ru);
+  const x = n.works.find((y: Json) => y.id === 'locale-format');
+  delete x.track;
+  x.attempts = { ...x.attempts, used: 3, left: 0 };
+  const nb = badge(card(viewOf(n), 'locale-format'));
+  assert.match(nb, /hui:bg-warn-soft[^>]*data-why="last"/);
+  assert.match(shown(nb), /попытка 3 из 3 — последняя попытка/);
+  // Not running and none left: red.
+  x.stage = { ...x.stage, name: 'held' };
+  x.status = 'held';
+  x.blockers = [{ code: 'ATTEMPTS_EXHAUSTED', actor: 'operator' }];
+  assert.match(badge(card(viewOf(n), 'locale-format')), /data-why="spent"/);
+  assert.equal(dict('en').r10.attemptBadgeCounted(3, 2, 3), 'attempt 3 · 2 of 3 counted');
+});
+
+test('review P5: the focused skip link sits above the sticky menu', () => {
+  const css = readFileSync(new URL('../src/app/app.css', import.meta.url), 'utf8');
+  const focus = /\.app-skip:focus \{([^}]*)\}/.exec(css)![1]!;
+  const top = /\.app-top \{([^}]*)\}/.exec(css)![1]!;
+  const z = (rule: string) => Number(/z-index: (\d+);/.exec(rule)![1]);
+  assert.ok(z(focus) > z(top), `${z(focus)} > ${z(top)}`);
 });

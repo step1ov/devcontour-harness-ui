@@ -69,7 +69,8 @@ main:focus {
   background: var(--hui-surface);
   color: var(--hui-text);
   padding: 4px 8px;
-  z-index: 2;
+  /* Above the sticky top menu (z-index 30): visible on the first Tab. */
+  z-index: 40;
 }
 .app-nav {
   max-width: 1200px;

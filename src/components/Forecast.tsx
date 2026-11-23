@@ -23,6 +23,9 @@ const STROKE = 12;
 const R = (SIZE - STROKE) / 2;
 const CIRC = 2 * Math.PI * R;
 
+/** The ring's fill while the lead finishes: a tail of at least 5 % stays visible. */
+const FINISH_RING_MAX = 95;
+
 const clamp = (x: number) => (Number.isFinite(x) ? Math.max(0, Math.min(1, x)) : 0);
 
 /** One ring: `share` filled solid, `band` (≥ share) a lighter range; no share = unknown. */
@@ -97,7 +100,8 @@ function Ring({
           fill="none"
           stroke={color}
           strokeWidth={STROKE}
-          strokeLinecap={share >= 1 ? 'butt' : 'round'}
+          // Butt caps next to a tail: round ones would cover the finishing gap.
+          strokeLinecap={share >= 1 || tail ? 'butt' : 'round'}
           strokeDasharray={arc(share)}
           transform={`rotate(-90 ${SIZE / 2} ${SIZE / 2})`}
           data-part="fill"
@@ -110,14 +114,15 @@ function Ring({
 /** Stripes of 4 / gap 4 along the rest of the ring after `share`, then a gap round the rest. */
 export function tailDashes(share: number): string {
   const len = (1 - clamp(share)) * CIRC;
-  const out: number[] = [];
   // A small gap after the solid fill, so the tail reads apart from it.
-  let used = 4;
-  out.push(0, 4);
+  const out: number[] = [0, 3];
+  let used = 3;
   while (used + 4 <= len) {
-    out.push(4, 4);
-    used += 8;
+    out.push(4, 3);
+    used += 7;
   }
+  // Always at least one stripe, however short the rest is.
+  if (out.length === 2 && len > 3) out.push(len - 3, 0);
   out.push(0, CIRC);
   return out.map((x) => Math.round(x * 100) / 100).join(' ');
 }
@@ -326,6 +331,9 @@ export function ForecastRings({
   // ui alpha.10 (P6-5): the code is accepted and the lead finishes — the ring
   // stays below 100 with a tail; only `release done` closes it.
   const finishing = release?.state === 'code-accepted';
+  // Review P1: while the lead finishes, the figure, its accessible value and
+  // the ring stay below 100 together; only `release done` reaches 100.
+  const shown = finishing ? Math.min(percent, 99) : percent;
   // alpha.68: plan growth, the conditional figure, the infra share, the outline, the lead's stretch.
   const more = forecastAdditions(forecast);
   const finishMs = more.finishing
@@ -351,14 +359,14 @@ export function ForecastRings({
             testid="ring-release"
             ring={
               <Ring
-                share={(finishing ? Math.min(percent, 99) : percent) / 100}
+                share={(finishing ? Math.min(shown, FINISH_RING_MAX) : shown) / 100}
                 tone="ok"
                 tail={finishing}
               />
             }
-            center={f.percent(percent)}
+            center={f.percent(shown)}
             sub={release?.state === 'code-accepted' ? t.r6.codeAccepted : f.doneWord}
-            valueNow={percent}
+            valueNow={shown}
             valueText={f.releaseText(p.line)}
           >
             <p className="hui:font-medium" data-testid="release-line">

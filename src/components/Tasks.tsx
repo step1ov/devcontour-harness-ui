@@ -559,18 +559,22 @@ function AttemptBadge({
 }) {
   const a = w.attempts;
   if (w.planned || phase === 'planned' || phase === 'cancelled') return null;
-  // The running attempt; otherwise the attempts spent (a retry not started yet is not «on» it).
-  const n = prog.state === 'running' ? (prog.attempt ?? a.used) : a.used;
+  // Running: by the track, or by the work's own stage when the track is absent (review P4).
+  const running = prog.state === 'running' || phase === 'running';
+  // The attempt number is the track's; the budget is the harness counters (review P3):
+  // after an uncounted run attempt 3 may have used 2 of 3.
+  const n = running ? (prog.attempt ?? a.used) : a.used;
   if (!n) return null;
   const closed = phase === 'accepted';
-  const spent = !closed && a.left <= 0 && prog.state !== 'running';
+  // `used` includes a running counted attempt: none left while running — the last one.
+  const spent = !closed && a.left <= 0 && !running;
   const why = closed
     ? undefined
     : leadWaits
       ? 'lead'
       : spent
         ? 'spent'
-        : n >= a.max
+        : running && a.left <= 0
           ? 'last'
           : undefined;
   const tone: Tone =
@@ -585,7 +589,7 @@ function AttemptBadge({
   return (
     <Tooltip content={tip} decorative className="hui:ml-auto">
       <Badge tone={tone} data-testid="attempt-badge" data-why={why}>
-        {t.r10.attemptBadge(n, a.max)}
+        {n === a.used ? t.r10.attemptBadge(n, a.max) : t.r10.attemptBadgeCounted(n, a.used, a.max)}
         {why ? <span className="hui-sr"> — {t.r10.attemptBadgeWhy[why]}</span> : null}
       </Badge>
     </Tooltip>

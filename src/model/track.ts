@@ -218,12 +218,17 @@ export function attemptProgress(track: WorkTrack | undefined, status?: string): 
       ...(before ? { retryAfter: before } : {}),
     };
   }
-  // Accepted: the harness says so (`done`), or the last step is a passed end.
+  // Accepted: the last step is a passed end, or the harness says `done` and
+  // no rework after acceptance is still open (review P2: a done work with a
+  // queued or failed rework is that rework's state, not «accepted»).
   const end = drawnSteps(track).at(-1);
-  if (status === 'done' || (end?.step.kind === 'accepted' && end.state === 'passed')) {
+  const ended = end?.step.kind === 'accepted' && end.state === 'passed';
+  const reworkOpen = !ended && groups.some((g) => g.rework !== undefined);
+  const accepted = () => {
     const done = [...groups].reverse().find((g) => g.steps.every((d) => d.state === 'passed'));
-    return { state: 'accepted', ...(done ? pick(done) : {}), passed: of, of };
-  }
+    return { state: 'accepted' as const, ...(done ? pick(done) : {}), passed: of, of };
+  };
+  if (ended || (status === 'done' && !reworkOpen)) return accepted();
   // The first attempt ahead: every phase step planned.
   const next = groups.findIndex((g) => g.steps.every((d) => d.state === 'planned'));
   if (next >= 0) {
@@ -245,6 +250,8 @@ export function attemptProgress(track: WorkTrack | undefined, status?: string): 
       of,
       step: failedStepOf(last)!,
     };
+  // An open rework with nothing to tell: the earlier acceptance stands.
+  if (status === 'done') return accepted();
   return { state: 'none', passed: 0, of };
 }
 

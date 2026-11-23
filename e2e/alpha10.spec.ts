@@ -258,3 +258,29 @@ async function noScrollNoAxe(page: Page) {
   const serious = axe.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical');
   expect(serious.map((v) => `${v.id}: ${v.nodes.map((n) => n.target).join(' ')}`)).toEqual([]);
 }
+
+for (const scheme of ['light', 'dark'] as const)
+  test(`the first Tab shows the skip link above the sticky menu (${scheme})`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: scheme });
+    await open(page, '#/tasks');
+    await page.keyboard.press('Tab');
+    const skip = page.locator('a.app-skip');
+    await expect(skip).toBeFocused();
+    await expect(skip).toBeInViewport();
+    // Nothing covers it: the topmost element at its centre is the link itself.
+    const onTop = await skip.evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return hit === el || el.contains(hit);
+    });
+    expect(onTop).toBe(true);
+    // Enter moves focus to the content.
+    await page.keyboard.press('Enter');
+    await expect(page.locator('#hui-main')).toBeFocused();
+    const axe = await axeOf(page).analyze();
+    expect(
+      axe.violations
+        .filter((v) => v.impact === 'serious' || v.impact === 'critical')
+        .map((v) => v.id),
+    ).toEqual([]);
+  });

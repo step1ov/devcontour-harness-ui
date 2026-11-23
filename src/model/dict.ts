@@ -1632,6 +1632,8 @@ const ru = {
     requiredDone: 'обязательный',
     // Card: progress of the current attempt toward acceptance (P6-25).
     attemptBadge: (n: number, max: number) => `попытка ${n} из ${max}`,
+    attemptBadgeCounted: (n: number, used: number, max: number) =>
+      `попытка ${n} · засчитано ${used} из ${max}`,
     attemptBadgeWhy: {
       last: 'последняя попытка',
       spent: 'попытки израсходованы',
@@ -2890,6 +2892,8 @@ const en: Dict = {
     optionalDone: 'optional',
     requiredDone: 'required',
     attemptBadge: (n: number, max: number) => `attempt ${n} of ${max}`,
+    attemptBadgeCounted: (n: number, used: number, max: number) =>
+      `attempt ${n} · ${used} of ${max} counted`,
     attemptBadgeWhy: {
       last: 'last attempt',
       spent: 'attempts spent',
