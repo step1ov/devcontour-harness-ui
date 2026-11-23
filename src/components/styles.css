@@ -757,6 +757,48 @@
     font-weight: 600;
     color: var(--hui-warn);
   }
+  /* The release by stage (alpha.68 outline): one segment per stage, filled by its percent. */
+  .hui-stage-bar {
+    display: flex;
+    gap: 3px;
+    height: 10px;
+    width: 100%;
+  }
+  .hui-stage-seg {
+    position: relative;
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--hui-track);
+    min-width: 6px;
+  }
+  .hui-stage-seg[data-state='unregistered'] {
+    background: repeating-linear-gradient(135deg, var(--hui-track) 0 4px, transparent 4px 8px);
+    outline: 1px dashed var(--hui-planned);
+    outline-offset: -1px;
+  }
+  .hui-stage-fill {
+    display: block;
+    height: 100%;
+  }
+  /* The lead finishes the release (ui alpha.10): a striped tail that breathes. */
+  .hui-ring-tail {
+    stroke-opacity: 0.55;
+    animation: hui-breathe 1.8s ease-in-out infinite;
+  }
+  @keyframes hui-breathe {
+    0%,
+    100% {
+      stroke-opacity: 0.25;
+    }
+    50% {
+      stroke-opacity: 0.7;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .hui-ring-tail {
+      animation: none !important;
+    }
+  }
   /* A setup step whose outcome is not recorded (doctor only reads): a thin ring. */
   .hui-dot[data-tone='unknown'] {
     background: transparent;
@@ -768,10 +810,40 @@
       animation: none !important;
     }
   }
+  /* The card line (ui alpha.10): a toolbar of segments, each its own button and tooltip. */
+  .hui-track {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 10px;
+    min-width: 0;
+  }
   .hui-track-root {
     position: relative;
     display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
     max-width: 100%;
+  }
+  .hui-track-caption {
+    font-size: 12px;
+    color: var(--hui-muted);
+    overflow-wrap: anywhere;
+  }
+  .hui-track-trigger[aria-expanded='true'] .hui-track-cells {
+    background: var(--hui-muted-bg);
+  }
+  /* An optional lead diagnosis (harness alpha.68): a hollow dashed diamond. */
+  .hui-dot[data-shape='diamond'][data-optional] {
+    background: transparent;
+    border: 1.5px dashed var(--hui-planned);
+  }
+  .hui-dot[data-shape='diamond'][data-optional][data-tone='decision'] {
+    border-color: var(--hui-decision);
+  }
+  .hui-dot[data-shape='diamond'][data-optional][data-tone='waiting'] {
+    border-color: var(--hui-wait);
   }
   .hui-track-trigger {
     display: inline-flex;
@@ -795,8 +867,7 @@
     align-items: center;
     gap: 6px;
   }
-  .hui-track-root:hover > .hui-tooltip,
-  .hui-track-root[data-open] > .hui-tooltip {
+  .hui-track-root > .hui-track-tip[data-open] {
     display: block;
   }
   .hui-tooltip.hui-track-tip {

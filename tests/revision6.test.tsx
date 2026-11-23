@@ -186,27 +186,30 @@ test('track groups: one segment per attempt run, decisions and the end on their 
   );
 });
 
-test('the card line: one focusable button, the step list in a tooltip tied to it, clipped steps said', () => {
+test('the card line: a toolbar of segments, each its own tooltip; clipped steps said', () => {
   const w = view.works.find((x) => x.id === 'import-csv')!;
-  const m = html(<TrackLine track={w.track!} lang="ru" name="import-csv" />);
-  // One tabbable trigger per line with a name; the dots are hidden from the tree.
-  assert.equal((m.match(/<button/g) ?? []).length, 1);
-  const button = /<button[^>]*>/.exec(m)![0];
-  assert.match(button, /type="button"/);
-  assert.match(button, /aria-label="Путь задачи import-csv"/);
-  assert.match(button, /aria-expanded="false"/);
-  const id = /aria-describedby="([^"]+)"/.exec(button)![1]!;
-  const tip = new RegExp(
-    `<span role="tooltip" id="${id.replace(/[:]/g, '\\:')}"[^>]*>([\\s\\S]*?)</span>`,
-  ).exec(m);
-  assert.ok(tip, 'the tooltip is tied to the button');
-  const words = shown(tip![1]!);
-  assert.match(
-    words,
-    /попытка 2: code — пройдено; checks — пройдено; review — не прошло \(review rejected\)/,
+  const m = html(<TrackLine track={w.track!} lang="ru" name="import-csv" timeZone={TZ} />);
+  // A named toolbar; one segment button per attempt or single mark; one tab stop.
+  assert.match(m, /role="toolbar" aria-label="Путь задачи import-csv"/);
+  const buttons = m.match(/<button[^>]*>/g) ?? [];
+  assert.equal(buttons.length, trackGroups(w.track!).length);
+  assert.equal(buttons.filter((b) => /tabindex="0"/.test(b)).length, 1);
+  for (const b of buttons) {
+    assert.match(b, /type="button"/);
+    const id = /aria-describedby="([^"]+)"/.exec(b)![1]!;
+    assert.match(m, new RegExp(`<span role="tooltip" id="${id.replace(/[:]/g, '\\:')}"`));
+  }
+  const tips = [...m.matchAll(/<span role="tooltip"[^>]*>([\s\S]*?)<\/span>/g)].map((x) =>
+    shown(x[1]!),
   );
-  assert.match(words, /lead diagnosis — ждёт/);
-  assert.match(m, /class="hui-track-line" aria-hidden="true"/);
+  assert.equal(tips.length, buttons.length);
+  assert.ok(
+    tips.includes('Попытка 2: code ✓ · checks ✓ · review ✗ — review rejected · 11:35'),
+    tips.join('\n'),
+  );
+  assert.ok(tips.includes('Lead diagnosis — ждёт ведущего'), tips.join('\n'));
+  assert.ok(tips.includes('Попытка 3: впереди'), tips.join('\n'));
+  assert.match(m, /class="hui-track-cells" aria-hidden="true"/);
   assert.match(m, /data-tone="waiting"/);
   assert.match(m, /data-shape="diamond"/);
   const clipped = html(
@@ -871,7 +874,7 @@ test('track actor (final alpha.66): the sent actor wins; the kind/label fallback
   const w = viewRu.works.find((x) => x.id === 'export-csv')!;
   const card = html(<TrackLine track={w.track!} lang="ru" name="export-csv" />);
   assert.match(card, /data-tone="human" data-shape="bar"|data-shape="bar"[^>]*data-tone="human"/);
-  assert.match(shown(card), /сброс попыток человеком — решение \(\+1\)/);
+  assert.match(shown(card), /Сброс попыток человеком · \+1 · /);
   const table = shown(html(<TrackTable track={w.track!} lang="ru" timeZone={TZ} />));
   assert.match(table, /— сброс попыток человеком решение 11:38 \+1/);
 });
@@ -888,7 +891,7 @@ test('the held-check step: a lead wait (amber, «ждёт ведущего»), n
   const table = shown(html(<TrackTable track={w.track!} lang="ru" timeZone={TZ} />));
   assert.match(table, /— ждёт ведущего: проверка e2e удержана ждёт ведущего —/);
   const card = shown(html(<TrackLine track={w.track!} lang="ru" name="import-csv" />));
-  assert.match(card, /ждёт ведущего: проверка e2e удержана — ждёт ведущего/);
+  assert.match(card, /Ждёт ведущего: проверка e2e удержана — ждёт ведущего/);
   // A wait of a person says so.
   const you = drawnSteps({
     steps: [{ kind: 'user-decision', state: 'waiting', actor: 'user', label: 'решение человека' }],

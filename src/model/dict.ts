@@ -1110,6 +1110,11 @@ const ru = {
     notApproved: 'не одобрено',
     rounds: (used: number, max: number | null) =>
       max === null ? `раундов ${used}, без предела` : `раунды ${used} из ${max}`,
+    // Revision 8: rounds left to the limit and free re-reviews of an unchanged plan.
+    roundsLeft: (kind: string, n: number) => `раундов ревью ${kind}: осталось ${n}`,
+    roundsKindOf: { plan: 'плана', contract: 'договора', code: 'кода' } as Labels,
+    roundsFree: (n: number) =>
+      `${rp(n, 'повторное ревью', 'повторных ревью', 'повторных ревью')} неизменённого плана — без траты раунда`,
     open: (blocking: number, notes: number) => `открыто: блокирующих ${blocking}, заметок ${notes}`,
     acceptedLimits: (n: number) => `принято как ограничение: ${n}`,
     reviewer: (who: string) => `reviewer: ${who}`,
@@ -1157,6 +1162,17 @@ const ru = {
       'accepted-limitation': 'замечание принято как ограничение',
       'technical-answer': 'ответ на технический вопрос',
       continue: 'решено продолжать',
+      // Revision 8 (harness alpha.68).
+      diagnosis: 'разбор ведущего',
+      'diagnosis-addendum': 'дополнение разбора ведущего',
+      budget: 'бюджет поднят',
+      reset: 'новый предел попыток',
+      answer: 'ответ на вопрос',
+      'review-continue': 'ещё раунды ревью',
+      cancel: 'отмена',
+      reopen: 'переоткрытие',
+      'rework-abandoned': 'доработка оставлена',
+      reapproval: 'повторное согласование плана',
     } as Labels,
     by: (who: string) => `кто решил: ${who}`,
     revisit: (when: string) => `вернуться: ${when}`,
@@ -1589,6 +1605,96 @@ const ru = {
     action: {
       'environment.reconciled': 'окружение сверено',
     } as Labels,
+  },
+  r10: {
+    // Track: one tooltip per attempt group, single marks their own (P6-27).
+    groupHead: (attempt: number | undefined, rework: number | undefined) =>
+      [
+        rework !== undefined ? `Доработка ${rework}` : undefined,
+        attempt !== undefined ? `попытка ${attempt}` : undefined,
+      ]
+        .filter(Boolean)
+        .join(' · ')
+        .replace(/^./, (c) => c.toUpperCase()),
+    ahead: 'впереди',
+    passedMark: '✓',
+    failedMark: '✗',
+    current: (label: string, elapsed: string) =>
+      `сейчас: ${label}${elapsed ? `, идёт ${elapsed}` : ''}`,
+    caption: (label: string, attempt: number | undefined) =>
+      `сейчас: ${label}${attempt !== undefined ? ` (попытка ${attempt})` : ''}`,
+    captionWait: (label: string, state: string) => `сейчас: ${label} — ${state}`,
+    keys: 'Стрелки переходят между попытками и решениями; подробности — по фокусу или касанию.',
+    // Diagnosis kinds (harness alpha.68, P6-3).
+    optionalAhead: 'повтор: harness сам, ведущий может разобрать',
+    requiredAhead: 'обязательный разбор ведущего',
+    optionalDone: 'по желанию',
+    requiredDone: 'обязательный',
+    // Card: progress of the current attempt toward acceptance (P6-25).
+    attemptBadge: (n: number, max: number) => `попытка ${n} из ${max}`,
+    attemptBadgeCounted: (n: number, used: number, max: number) =>
+      `попытка ${n} · засчитано ${used} из ${max}`,
+    attemptBadgeWhy: {
+      last: 'последняя попытка',
+      spent: 'попытки израсходованы',
+      lead: 'ждёт ведущего',
+    } as Labels,
+    resets: (done: number, total: number, reasons: string) =>
+      `сбросы ведущего: ${done} из ${total}${reasons ? ` (${reasons})` : ''}`,
+    progressTitle: 'К приёмке',
+    progressRunning: (n: string, step: string, passed: number, of: number) =>
+      `${n}: идёт «${step}» — пройдено этапов ${passed} из ${of}`,
+    progressNext: (n: string) => `${n} ещё не началась`,
+    progressAccepted: 'Все этапы пройдены — принято',
+    progressFailed: (n: string, step: string) => `${n} не прошла: «${step}»`,
+    progressLabel: (n: string, pct: number) => `${n}: к приёмке ~${pct} %`,
+    retryAfter: (step: string) => `повтор после отказа: ${step}`,
+    accepted: 'принято',
+    // Card: per-attempt review (P6-10).
+    reviewTitle: 'ревью',
+    review: {
+      passed: 'одобрено',
+      failed: 'отклонено',
+      current: 'идёт',
+      waiting: 'ждёт',
+    } as Labels,
+    findings: (n: number) => rp(n, 'находка', 'находки', 'находок'),
+    reviewLine: (items: string) => `Ревью: ${items}`,
+    reviewNone: 'Ревью: ещё не было',
+    leadFinishing: 'Код принят · осталось немного: ведущий завершает работу',
+    finishingFor: (d: string) => `идёт уже ${d}`,
+    conditional: 'Цифра — по известному плану: если ведущий добавит задачи, она сдвинется назад.',
+    growthWhy: (why: string) => `почему: ${why}`,
+    stagesTitle: 'Выпуск по этапам',
+    stageKind: {
+      infra: 'инфраструктура',
+      product: 'продукт',
+      deploy: 'выкладка',
+      other: 'прочее',
+    } as Labels,
+    stageState: {
+      registered: 'задачи заведены',
+      partial: 'заведена часть задач',
+      unregistered: 'задачи ещё не заведены (оценка)',
+    } as Labels,
+    stageRow: (name: string, p: number, state: string) => `${name} — ${p} % (${state})`,
+    infraShare: (p: number) => `инфраструктура — ${p} % (оценка)`,
+    productUnplanned: 'продукт — ещё не спланирован',
+    // Revision 8: per-attempt review results, the reopen reason.
+    verdict: {
+      approved: 'одобрено',
+      rejected: 'отклонено',
+      invalid: 'ответ не по протоколу',
+    } as Labels,
+    notes: (n: number) => rp(n, 'заметка', 'заметки', 'заметок'),
+    integrationPhase: 'интеграция',
+    earlier: 'до доработки',
+    reopenedBudget: {
+      fresh: 'свой предел попыток',
+      carried: 'предел попыток перенесён',
+    } as Labels,
+    codeReview: (rounds: number, max: number | null) =>
+      `Дополнительное ревью кода (ведущий): раунды ${rounds}${max !== null ? ` из ${max}` : ''}`,
   },
 };
 
@@ -2295,6 +2401,10 @@ const en: Dict = {
     notApproved: 'not approved',
     rounds: (used: number, max: number | null) =>
       max === null ? `${used} rounds, no limit` : `rounds ${used} of ${max}`,
+    roundsLeft: (kind: string, n: number) => `${kind} review rounds left: ${n}`,
+    roundsKindOf: { plan: 'plan', contract: 'contract', code: 'code' },
+    roundsFree: (n: number) =>
+      `${n} ${n === 1 ? 're-review' : 're-reviews'} of an unchanged plan — no round spent`,
     open: (blocking: number, notes: number) => `open: ${blocking} blocking, ${notes} notes`,
     acceptedLimits: (n: number) => `accepted as a limitation: ${n}`,
     reviewer: (who: string) => `reviewer: ${who}`,
@@ -2341,6 +2451,16 @@ const en: Dict = {
       'accepted-limitation': 'finding accepted as a limitation',
       'technical-answer': 'technical question answered',
       continue: 'decided to continue',
+      diagnosis: 'lead diagnosis',
+      'diagnosis-addendum': 'lead diagnosis addendum',
+      budget: 'budget raised',
+      reset: 'new attempt limit',
+      answer: 'answer to a question',
+      'review-continue': 'more review rounds',
+      cancel: 'cancel',
+      reopen: 'reopen',
+      'rework-abandoned': 'rework abandoned',
+      reapproval: 'plan re-approved',
     },
     by: (who: string) => `decided by: ${who}`,
     revisit: (when: string) => `revisit: ${when}`,
@@ -2748,6 +2868,91 @@ const en: Dict = {
     action: {
       'environment.reconciled': 'environment reconciled',
     },
+  },
+  r10: {
+    groupHead: (attempt: number | undefined, rework: number | undefined) =>
+      [
+        rework !== undefined ? `Rework ${rework}` : undefined,
+        attempt !== undefined ? `attempt ${attempt}` : undefined,
+      ]
+        .filter(Boolean)
+        .join(' · ')
+        .replace(/^./, (c) => c.toUpperCase()),
+    ahead: 'ahead',
+    passedMark: '✓',
+    failedMark: '✗',
+    current: (label: string, elapsed: string) =>
+      `now: ${label}${elapsed ? `, running ${elapsed}` : ''}`,
+    caption: (label: string, attempt: number | undefined) =>
+      `now: ${label}${attempt !== undefined ? ` (attempt ${attempt})` : ''}`,
+    captionWait: (label: string, state: string) => `now: ${label} — ${state}`,
+    keys: 'Arrow keys move between attempts and decisions; focus or tap shows the details.',
+    optionalAhead: 'retry: the harness on its own, the lead may diagnose',
+    requiredAhead: 'required lead diagnosis',
+    optionalDone: 'optional',
+    requiredDone: 'required',
+    attemptBadge: (n: number, max: number) => `attempt ${n} of ${max}`,
+    attemptBadgeCounted: (n: number, used: number, max: number) =>
+      `attempt ${n} · ${used} of ${max} counted`,
+    attemptBadgeWhy: {
+      last: 'last attempt',
+      spent: 'attempts spent',
+      lead: 'waits for the lead',
+    },
+    resets: (done: number, total: number, reasons: string) =>
+      `lead resets: ${done} of ${total}${reasons ? ` (${reasons})` : ''}`,
+    progressTitle: 'Toward acceptance',
+    progressRunning: (n: string, step: string, passed: number, of: number) =>
+      `${n}: «${step}» running — ${passed} of ${of} stages passed`,
+    progressNext: (n: string) => `${n} has not started yet`,
+    progressAccepted: 'All stages passed — accepted',
+    progressFailed: (n: string, step: string) => `${n} failed at «${step}»`,
+    progressLabel: (n: string, pct: number) => `${n}: ~${pct} % toward acceptance`,
+    retryAfter: (step: string) => `retry after a failure at: ${step}`,
+    accepted: 'accepted',
+    reviewTitle: 'review',
+    review: {
+      passed: 'approved',
+      failed: 'rejected',
+      current: 'running',
+      waiting: 'waiting',
+    },
+    findings: (n: number) => `${n} ${n === 1 ? 'finding' : 'findings'}`,
+    reviewLine: (items: string) => `Review: ${items}`,
+    reviewNone: 'Review: none yet',
+    leadFinishing: 'Code accepted · a little left: the lead is finishing',
+    finishingFor: (d: string) => `for ${d} already`,
+    conditional: 'The figure is by the known plan: if the lead adds tasks, it moves back.',
+    growthWhy: (why: string) => `why: ${why}`,
+    stagesTitle: 'The release by stage',
+    stageKind: {
+      infra: 'infrastructure',
+      product: 'product',
+      deploy: 'deploy',
+      other: 'other',
+    },
+    stageState: {
+      registered: 'tasks registered',
+      partial: 'some tasks registered',
+      unregistered: 'tasks not registered yet (estimate)',
+    },
+    stageRow: (name: string, p: number, state: string) => `${name} — ${p} % (${state})`,
+    infraShare: (p: number) => `infrastructure — ${p} % (estimate)`,
+    productUnplanned: 'product — not planned yet',
+    verdict: {
+      approved: 'approved',
+      rejected: 'rejected',
+      invalid: 'reply off protocol',
+    },
+    notes: (n: number) => `${n} ${n === 1 ? 'note' : 'notes'}`,
+    integrationPhase: 'integration',
+    earlier: 'before the rework',
+    reopenedBudget: {
+      fresh: 'its own attempt limit',
+      carried: 'attempt limit carried over',
+    },
+    codeReview: (rounds: number, max: number | null) =>
+      `Extra code review (lead): rounds ${rounds}${max !== null ? ` of ${max}` : ''}`,
   },
 };
 

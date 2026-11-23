@@ -9,18 +9,22 @@
 
 import { useId, type ReactNode } from 'react';
 import type { ForecastView } from '../model/view.ts';
-import { dict, knownLabel, type Dict, type Lang } from '../model/dict.ts';
+import { dict, knownLabel, label, type Dict, type Lang } from '../model/dict.ts';
 import { Badge } from './ui/badge.tsx';
 import { formatRough } from '../model/format.ts';
 import { instantMs } from '../model/compat.ts';
 import { formatClock } from '../model/i18n.ts';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card.tsx';
 import { Progress } from './ui/progress.tsx';
+import { forecastAdditions, type OutlineStageView } from '../model/revision8.ts';
 
 const SIZE = 120;
 const STROKE = 12;
 const R = (SIZE - STROKE) / 2;
 const CIRC = 2 * Math.PI * R;
+
+/** The ring's fill while the lead finishes: a tail of at least 5 % stays visible. */
+const FINISH_RING_MAX = 95;
 
 const clamp = (x: number) => (Number.isFinite(x) ? Math.max(0, Math.min(1, x)) : 0);
 
@@ -29,10 +33,16 @@ function Ring({
   share,
   band,
   tone,
+  tail = false,
 }: {
   share: number | undefined;
   band?: number | undefined;
   tone: 'ok' | 'primary';
+  /**
+   * The lead finishes the release (code accepted, ui alpha.10, P6-5): the
+   * rest of the ring after `share` is a striped, breathing tail.
+   */
+  tail?: boolean;
 }) {
   const color = tone === 'ok' ? 'var(--hui-ok)' : 'var(--hui-accent)';
   const arc = (x: number) => `${clamp(x) * CIRC} ${CIRC}`;
@@ -68,6 +78,20 @@ function Ring({
           data-part="band"
         />
       ) : null}
+      {tail && share !== undefined && share < 1 ? (
+        <circle
+          cx={SIZE / 2}
+          cy={SIZE / 2}
+          r={R}
+          fill="none"
+          stroke={color}
+          strokeWidth={STROKE}
+          strokeDasharray={tailDashes(share)}
+          transform={`rotate(${share * 360 - 90} ${SIZE / 2} ${SIZE / 2})`}
+          className="hui-ring-tail"
+          data-part="tail"
+        />
+      ) : null}
       {share !== undefined && share > 0 ? (
         <circle
           cx={SIZE / 2}
@@ -76,7 +100,8 @@ function Ring({
           fill="none"
           stroke={color}
           strokeWidth={STROKE}
-          strokeLinecap={share >= 1 ? 'butt' : 'round'}
+          // Butt caps next to a tail: round ones would cover the finishing gap.
+          strokeLinecap={share >= 1 || tail ? 'butt' : 'round'}
           strokeDasharray={arc(share)}
           transform={`rotate(-90 ${SIZE / 2} ${SIZE / 2})`}
           data-part="fill"
@@ -84,6 +109,22 @@ function Ring({
       ) : null}
     </svg>
   );
+}
+
+/** Stripes of 4 / gap 4 along the rest of the ring after `share`, then a gap round the rest. */
+export function tailDashes(share: number): string {
+  const len = (1 - clamp(share)) * CIRC;
+  // A small gap after the solid fill, so the tail reads apart from it.
+  const out: number[] = [0, 3];
+  let used = 3;
+  while (used + 4 <= len) {
+    out.push(4, 3);
+    used += 7;
+  }
+  // Always at least one stripe, however short the rest is.
+  if (out.length === 2 && len > 3) out.push(len - 3, 0);
+  out.push(0, CIRC);
+  return out.map((x) => Math.round(x * 100) / 100).join(' ');
 }
 
 /** A whole-minute span, «2 ч 50 мин», «45 мин», «меньше минуты»: seconds would be noise here. */
@@ -287,6 +328,23 @@ export function ForecastRings({
   const percent = Math.max(0, Math.min(100, Math.round(p.percent)));
   // Revision 6: the release state, the approved-plan figure and the lead's share — as sent.
   const release = p.release;
+  // ui alpha.10 (P6-5): the code is accepted and the lead finishes — the ring
+  // stays below 100 with a tail; only `release done` closes it.
+  const finishing = release?.state === 'code-accepted';
+  // Review P1: while the lead finishes, the figure, its accessible value and
+  // the ring stay below 100 together; only `release done` reaches 100.
+  const shown = finishing ? Math.min(percent, 99) : percent;
+  // alpha.68: plan growth, the conditional figure, the infra share, the outline, the lead's stretch.
+  const more = forecastAdditions(forecast);
+  const finishMs = more.finishing
+    ? sinceMs(more.finishing.elapsedMs, more.finishing.since, now)
+    : undefined;
+  // Never show a lead estimate the lead has already exceeded (P6-5).
+  const leadOver =
+    more.finishing?.exceeded === true ||
+    (finishMs !== undefined &&
+      forecast.time.lead !== undefined &&
+      finishMs > forecast.time.lead.ms);
   const num = (x: number) =>
     new Intl.NumberFormat(lang === 'en' ? 'en' : 'ru', { maximumFractionDigits: 1 }).format(x);
   return (
@@ -299,15 +357,44 @@ export function ForecastRings({
           <Tile
             title={f.release}
             testid="ring-release"
-            ring={<Ring share={percent / 100} tone="ok" />}
-            center={f.percent(percent)}
+            ring={
+              <Ring
+                share={(finishing ? Math.min(shown, FINISH_RING_MAX) : shown) / 100}
+                tone="ok"
+                tail={finishing}
+              />
+            }
+            center={f.percent(shown)}
             sub={release?.state === 'code-accepted' ? t.r6.codeAccepted : f.doneWord}
-            valueNow={percent}
+            valueNow={shown}
             valueText={f.releaseText(p.line)}
           >
             <p className="hui:font-medium" data-testid="release-line">
               {p.line}
             </p>
+            {finishing ? (
+              <p data-testid="release-finishing">
+                {t.r10.leadFinishing}
+                {finishMs !== undefined
+                  ? ` (${t.r10.finishingFor(spanWords(finishMs, lang))})`
+                  : ''}
+              </p>
+            ) : null}
+            {more.conditional ? (
+              <p className="hui:text-xs hui:text-muted-foreground" data-testid="release-if">
+                {t.r10.conditional}
+              </p>
+            ) : null}
+            {more.growth ? (
+              <p className="hui:text-sm" data-testid="forecast-growth" data-by={more.growth.by}>
+                {more.growth.line}
+                {more.growth.reason ? (
+                  <span className="hui:block hui:text-xs hui:text-muted-foreground">
+                    {t.r10.growthWhy(more.growth.reason)}
+                  </span>
+                ) : null}
+              </p>
+            ) : null}
             {p.approved ? (
               <div className="hui:grid hui:gap-0.5" data-testid="forecast-figures">
                 <span className="hui-sr">{t.r6.twoFigures}: </span>
@@ -396,9 +483,14 @@ export function ForecastRings({
                 {t.r6.chain(forecast.time.chain, num(forecast.time.chain))}
               </p>
             ) : null}
-            {forecast.time.lead ? (
+            {forecast.time.lead && !leadOver ? (
               <p className="hui:text-xs hui:text-muted-foreground" data-testid="time-lead">
                 {forecast.time.lead.line}
+              </p>
+            ) : null}
+            {more.outlineTime ? (
+              <p className="hui:text-xs hui:text-muted-foreground" data-testid="time-outline">
+                {more.outlineTime.line}
               </p>
             ) : null}
             {r && (time.kind === 'known' || time.kind === 'noElapsed') ? (
@@ -411,6 +503,9 @@ export function ForecastRings({
             ) : null}
           </Tile>
         </div>
+        {more.infraShare || more.outline ? (
+          <ReleaseStages infra={more.infraShare} outline={more.outline} t={t} />
+        ) : null}
         {added.length ? (
           <div className="hui:text-sm" data-testid="forecast-added">
             <p className="hui:font-medium">{t.r5.added}</p>
@@ -464,5 +559,108 @@ export function ForecastRings({
         </details>
       </CardContent>
     </Card>
+  );
+}
+
+const STAGE_TONE: Record<string, string> = {
+  infra: 'hui:bg-series-1',
+  product: 'hui:bg-ok',
+  deploy: 'hui:bg-wait',
+  other: 'hui:bg-muted-foreground',
+};
+
+/**
+ * The release by stages (alpha.68, P6-8/P6-9): the lead's outline, one row
+ * per stage with the harness percent and whether its works are registered;
+ * without an outline, when all works are infrastructure, the estimated infra
+ * share against «продукт — ещё не спланирован»; and the hint that there is
+ * no outline. Every number and line is the harness's.
+ */
+function ReleaseStages({
+  infra,
+  outline,
+  t,
+}: {
+  infra: { share: number; line: string } | undefined;
+  outline: { state: string; stages?: OutlineStageView[]; line: string } | undefined;
+  t: Dict;
+}) {
+  const k = t.r10;
+  const stages = outline?.state === 'recorded' ? (outline.stages ?? []) : [];
+  const units = stages.reduce((n, s) => n + s.units, 0);
+  const infraPct = infra ? Math.round(infra.share * 100) : 0;
+  return (
+    <div className="hui:grid hui:gap-2 hui:text-sm" data-testid="forecast-stages">
+      <p className="hui:font-medium">{k.stagesTitle}</p>
+      {stages.length && units > 0 ? (
+        <>
+          <div
+            className="hui-stage-bar"
+            role="img"
+            aria-label={stages
+              .map((s) =>
+                k.stageRow(
+                  s.title ?? label(k.stageKind, s.kind),
+                  s.percent,
+                  label(k.stageState, s.state),
+                ),
+              )
+              .join('; ')}
+          >
+            {stages.map((s) => (
+              <span
+                key={s.id}
+                className="hui-stage-seg"
+                data-state={s.state}
+                style={{ flexGrow: s.units, flexBasis: 0 }}
+              >
+                <span
+                  className={'hui-stage-fill ' + (STAGE_TONE[s.kind] ?? STAGE_TONE.other)}
+                  style={{ width: `${Math.max(0, Math.min(100, s.percent))}%` }}
+                />
+              </span>
+            ))}
+          </div>
+          <ul className="hui:grid hui:list-none hui:gap-0.5">
+            {stages.map((s) => (
+              <li key={s.id} data-testid="forecast-stage" data-kind={s.kind} data-state={s.state}>
+                {k.stageRow(
+                  s.title ?? label(k.stageKind, s.kind),
+                  s.percent,
+                  label(k.stageState, s.state),
+                )}
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : infra ? (
+        <>
+          <div className="hui-stage-bar" role="img" aria-label={infra.line}>
+            <span className="hui-stage-seg" style={{ flexGrow: infraPct, flexBasis: 0 }}>
+              <span className="hui-stage-fill hui:bg-series-1" style={{ width: '100%' }} />
+            </span>
+            <span
+              className="hui-stage-seg"
+              data-state="unregistered"
+              style={{ flexGrow: 100 - infraPct, flexBasis: 0 }}
+            />
+          </div>
+          <ul className="hui:grid hui:list-none hui:gap-0.5">
+            <li data-testid="forecast-infra-share">{k.infraShare(infraPct)}</li>
+            <li data-state="unregistered">{k.productUnplanned}</li>
+          </ul>
+          <p className="hui:text-xs hui:text-muted-foreground">{infra.line}</p>
+        </>
+      ) : null}
+      {outline ? (
+        <p
+          className="hui:text-xs hui:text-muted-foreground"
+          data-testid="forecast-outline"
+          data-state={outline.state}
+        >
+          {outline.line}
+        </p>
+      ) : null}
+    </div>
   );
 }

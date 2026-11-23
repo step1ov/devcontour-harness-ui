@@ -4,14 +4,18 @@
 // state the harness names (planned grey, current green and pulsing, failed
 // red ✕, waiting amber ring, lead decision blue diamond, a person's decision
 // dark bar, rework solid violet / violet outline ahead, skipped muted) and
-// says the same in words. The card line is one focusable button: focus or a
-// tap opens the step list. No fetching, no writes.
+// says the same in words. On the card each attempt and each single mark is
+// its own button with its own tooltip (ui alpha.10, P6-27), with roving
+// focus and a caption «сейчас: …». No fetching, no writes.
 
 import { useId, useRef, useState } from 'react';
 import { dict, knownLabel, type Dict, type Lang } from '../model/dict.ts';
+import { formatElapsed } from '../model/format.ts';
 import {
   decisionActor,
+  diagnosisRequired,
   drawnSteps,
+  trackNow,
   trackGroups,
   type DrawnStep,
   type TrackGroup,
@@ -57,18 +61,87 @@ export function stepWords(d: DrawnStep, t: Dict): string {
   return `${head} — ${stateWord(d, t)}${s.reason ? ` (${s.reason})` : ''}`;
 }
 
-function groupWords(g: TrackGroup, t: Dict): string {
-  if (g.kind === 'single') return stepWords(g.steps[0]!, t);
-  const head = [
-    g.attempt !== undefined ? t.r6.trackAttempt(g.attempt) : undefined,
-    g.rework !== undefined ? t.r6.trackRework(g.rework) : undefined,
-  ]
-    .filter(Boolean)
-    .join(' · ');
-  const parts = g.steps.map(
-    (d) => `${d.step.label} — ${stateWord(d, t)}${d.step.reason ? ` (${d.step.reason})` : ''}`,
-  );
-  return `${head}: ${parts.join('; ')}`;
+/**
+ * The words of a step's label with the diagnosis kind (harness alpha.68,
+ * P6-3): a planned diagnosis says whether it is required («обязательный
+ * разбор ведущего») or optional («повтор: harness сам, ведущий может
+ * разобрать») — the harness label when it already says so; a waiting or
+ * taken one adds «обязательный» / «по желанию». Without the field: the
+ * harness label as is.
+ */
+export function stepLabel(d: Pick<DrawnStep, 'step' | 'state'>, t: Dict): string {
+  const required = diagnosisRequired(d.step);
+  const label = d.step.label;
+  if (required === undefined) return label;
+  const k = t.r10;
+  // Harness alpha.68 names the planned ones itself («повтор: harness сам, …»,
+  // «обязательный разбор ведущего»): its label as is.
+  if (label === k.optionalAhead || label === k.requiredAhead) return label;
+  if (d.state === 'planned') return required ? k.requiredAhead : k.optionalAhead;
+  return `${label} · ${required ? k.requiredDone : k.optionalDone}`;
+}
+
+const upper = (s: string) => s.replace(/^./, (c) => c.toUpperCase());
+
+interface TipContext {
+  t: Dict;
+  timeZone?: string | undefined;
+  now?: number | undefined;
+  /** When the current step started (`works[].stage.since`), for «идёт 3 мин». */
+  since?: string | undefined;
+  lang: Lang;
+}
+
+const clockPart = (at: string | undefined, c: TipContext) =>
+  at ? ` · ${clockOf(at, c.t, c.timeZone, c.now)}` : '';
+
+/**
+ * One tooltip for one segment of the line (owner request P6-27, refined):
+ * an attempt — «Попытка 2: код ✓ · проверки ✓ · ревью ✗ — причина · 14:31»,
+ * the current one «… · сейчас: ревью, идёт 3 мин», one ahead «Попытка 3:
+ * впереди»; a single mark (a diagnosis, a reset, a person's decision, the
+ * end) — its label, reason, state and time.
+ */
+export function groupTip(g: TrackGroup, c: TipContext): string {
+  const { t } = c;
+  const k = t.r10;
+  if (g.kind === 'single') {
+    const d = g.steps[0]!;
+    const words = [stepLabel(d, t), d.step.reason].filter(Boolean).join(' · ');
+    const state =
+      d.state === 'decision' || (d.state === 'passed' && d.step.kind === 'accepted')
+        ? ''
+        : ` — ${stateWord(d, t)}`;
+    return upper(`${words}${state}${clockPart(d.step.at, c)}`);
+  }
+  const head = k.groupHead(g.attempt, g.rework);
+  const parts: string[] = [];
+  let last: string | undefined;
+  for (const d of g.steps) {
+    const s = d.step;
+    if (s.at) last = s.at;
+    if (d.state === 'passed') parts.push(`${s.label} ${k.passedMark}`);
+    else if (d.state === 'failed')
+      parts.push(`${s.label} ${k.failedMark}${s.reason ? ` — ${s.reason}` : ''}`);
+    else if (d.state === 'current')
+      parts.push(
+        k.current(
+          s.label,
+          c.since && c.now !== undefined ? formatElapsed(c.since, c.now, c.lang) : '',
+        ),
+      );
+    else if (d.state === 'planned' || d.state === 'skipped') continue;
+    else parts.push(`${s.label} — ${stateWord(d, t)}${s.reason ? ` (${s.reason})` : ''}`);
+  }
+  return `${head || upper(k.ahead)}: ${parts.length ? parts.join(' · ') : k.ahead}${clockPart(last, c)}`;
+}
+
+/** The caption beside the line: «сейчас: ревью (попытка 3)», or the step that waits. */
+export function trackCaption(track: WorkTrack, t: Dict): string | undefined {
+  const d = trackNow(track);
+  if (!d) return undefined;
+  if (d.state === 'current') return t.r10.caption(stepLabel(d, t), d.step.attempt);
+  return t.r10.captionWait(stepLabel(d, t), stateWord(d, t));
 }
 
 /** The strongest tone of a group, for its outline: what the eye should catch first. */
@@ -87,84 +160,166 @@ const RANK: TrackTone[] = [
 const groupTone = (g: TrackGroup): TrackTone =>
   RANK.find((r) => g.steps.some((d) => d.tone === r)) ?? 'planned';
 
+/** The segment focused first: the current one, else the one that waits, else the last reached. */
+function firstFocus(groups: TrackGroup[]): number {
+  const has = (st: string) => groups.findIndex((g) => g.steps.some((d) => d.state === st));
+  const cur = has('current');
+  if (cur >= 0) return cur;
+  const wait = has('waiting');
+  if (wait >= 0) return wait;
+  for (let i = groups.length - 1; i >= 0; i--)
+    if (groups[i]!.steps.some((d) => d.state !== 'planned')) return i;
+  return 0;
+}
+
 /**
  * The compact path on a task card: one segment per attempt (its steps as
- * cells) and one mark per decision or end, inside one button. Focus, a tap
- * or hovering opens the step list (a tooltip tied with `aria-describedby`);
- * Escape closes it.
+ * cells) and one mark per decision or end. Each segment is a button with its
+ * own tooltip (focus, hover or a tap opens it; Escape closes it); the arrow
+ * keys, Home and End move between segments (one tab stop, roving focus). A
+ * caption beside the line says what goes on now. The full step list stays in
+ * the work detail (`TrackTable`).
  */
 export function TrackLine({
   track,
   lang = 'ru',
   name,
+  since,
+  now,
+  timeZone,
 }: {
   track: WorkTrack;
   lang?: Lang;
-  /** The work's name, for the button label. */
+  /** The work's name, for the line label. */
   name: string;
+  /** When the current stage started (`works[].stage.since`): «идёт 3 мин». */
+  since?: string | undefined;
+  now?: number | undefined;
+  timeZone?: string | undefined;
 }) {
   const t = dict(lang);
-  const id = useId();
-  const [open, setOpen] = useState(false);
+  const base = useId();
+  const groups = trackGroups(track);
+  const [focus, setFocus] = useState(() => firstFocus(groups));
+  const [open, setOpen] = useState<number | null>(null);
+  const [hover, setHover] = useState<number | null>(null);
   // The state before a tap: focus opens first, the click then must not close it.
   const before = useRef<boolean | undefined>(undefined);
-  const groups = trackGroups(track);
+  const buttons = useRef<(HTMLButtonElement | null)[]>([]);
   if (!groups.length) return null;
   const dropped =
     Number.isSafeInteger(track.truncated) && track.truncated! > 0 ? track.truncated! : 0;
+  const ctx: TipContext = { t, timeZone, now, since, lang };
+  const caption = trackCaption(track, t);
+  const tab = Math.min(focus, groups.length - 1);
+  const shown = hover ?? open;
+  const move = (to: number) => {
+    const i = Math.max(0, Math.min(groups.length - 1, to));
+    setFocus(i);
+    buttons.current[i]?.focus();
+  };
   return (
     <div className="hui-track" data-testid="task-track">
-      <span className="hui-track-root" data-open={open ? '' : undefined}>
-        <button
-          type="button"
-          className="hui-track-trigger"
-          aria-label={t.r6.trackLabel(name)}
-          aria-describedby={id}
-          aria-expanded={open}
-          onPointerDown={() => (before.current = open)}
-          onFocus={() => setOpen(true)}
-          onBlur={() => setOpen(false)}
-          onClick={() => {
-            const was = before.current;
-            before.current = undefined;
-            setOpen(was === undefined ? (o) => !o : !was);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Escape') setOpen(false);
-          }}
-        >
-          <span className="hui-track-line" aria-hidden="true">
-            {dropped ? (
-              <span className="hui-track-more" data-testid="track-earlier">
-                +{dropped}
-              </span>
-            ) : null}
-            {groups.map((g, i) => (
-              <span
-                key={i}
-                className="hui-track-group"
-                data-kind={g.kind}
-                data-tone={groupTone(g)}
-                data-rework={g.rework !== undefined ? '' : undefined}
-              >
-                <span className="hui-track-cells">
-                  {g.steps.map((d, k) => (
-                    <StatusDot key={k} tone={d.tone} shape={shapeOf(d)} data-state={d.state} />
-                  ))}
-                </span>
-              </span>
-            ))}
+      <div
+        className="hui-track-root"
+        role="toolbar"
+        aria-label={t.r6.trackLabel(name)}
+        aria-describedby={`${base}-keys`}
+        onMouseLeave={() => setHover(null)}
+      >
+        {dropped ? (
+          <span className="hui-track-more" data-testid="track-earlier">
+            <span aria-hidden="true">+{dropped}</span>
+            <span className="hui-sr"> {t.r6.trackEarlier(dropped)}</span>
           </span>
-        </button>
-        <span role="tooltip" id={id} className="hui-tooltip hui-track-tip" data-side="bottom">
-          <ol className="hui-track-steps">
-            {dropped ? <li>{t.r6.trackEarlier(dropped)}</li> : null}
-            {groups.map((g, i) => (
-              <li key={i}>{groupWords(g, t)}</li>
-            ))}
-          </ol>
+        ) : null}
+        {groups.map((g, i) => (
+          <button
+            key={i}
+            ref={(el) => {
+              buttons.current[i] = el;
+            }}
+            type="button"
+            className="hui-track-group hui-track-trigger"
+            data-kind={g.kind}
+            data-tone={groupTone(g)}
+            data-rework={g.rework !== undefined ? '' : undefined}
+            data-testid="track-group"
+            tabIndex={i === tab ? 0 : -1}
+            aria-label={
+              g.kind === 'attempt'
+                ? t.r10.groupHead(g.attempt, g.rework) || upper(t.r10.ahead)
+                : upper(stepLabel(g.steps[0]!, t))
+            }
+            aria-describedby={`${base}-${i}`}
+            aria-expanded={shown === i}
+            onMouseEnter={() => setHover(i)}
+            onPointerDown={() => (before.current = open === i)}
+            onFocus={() => {
+              setFocus(i);
+              setOpen(i);
+            }}
+            onBlur={() => setOpen((o) => (o === i ? null : o))}
+            onClick={() => {
+              const was = before.current;
+              before.current = undefined;
+              // A tap or click decides: the pointer resting on the segment does not keep it open.
+              setHover(null);
+              setOpen((o) => (was === undefined ? (o === i ? null : i) : was ? null : i));
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                setOpen(null);
+                setHover(null);
+              } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+                e.preventDefault();
+                move(i + 1);
+              } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+                e.preventDefault();
+                move(i - 1);
+              } else if (e.key === 'Home') {
+                e.preventDefault();
+                move(0);
+              } else if (e.key === 'End') {
+                e.preventDefault();
+                move(groups.length - 1);
+              }
+            }}
+          >
+            <span className="hui-track-cells" aria-hidden="true">
+              {g.steps.map((d, k) => (
+                <StatusDot
+                  key={k}
+                  tone={d.tone}
+                  shape={shapeOf(d)}
+                  data-state={d.state}
+                  data-optional={diagnosisRequired(d.step) === false ? '' : undefined}
+                />
+              ))}
+            </span>
+          </button>
+        ))}
+        {groups.map((g, i) => (
+          <span
+            key={i}
+            role="tooltip"
+            id={`${base}-${i}`}
+            className="hui-tooltip hui-track-tip"
+            data-side="bottom"
+            data-open={shown === i ? '' : undefined}
+          >
+            {groupTip(g, ctx)}
+          </span>
+        ))}
+        <span id={`${base}-keys`} className="hui-sr">
+          {t.r10.keys}
         </span>
-      </span>
+      </div>
+      {caption ? (
+        <span className="hui-track-caption" data-testid="track-caption">
+          {caption}
+        </span>
+      ) : null}
     </div>
   );
 }
@@ -240,7 +395,9 @@ export function TrackTable({
               <TableCell className="hui:tabular-nums hui:text-muted-foreground">{d.n}</TableCell>
               <TableCell>{d.step.attempt ?? '—'}</TableCell>
               <TableCell>
-                {d.step.kind === 'accepted' ? `${d.step.label} (${t.r6.trackEnd})` : d.step.label}
+                {d.step.kind === 'accepted'
+                  ? `${d.step.label} (${t.r6.trackEnd})`
+                  : stepLabel(d, t)}
                 {d.step.rework !== undefined ? (
                   <span className="hui-track-rework"> · {t.r6.trackRework(d.step.rework)}</span>
                 ) : null}

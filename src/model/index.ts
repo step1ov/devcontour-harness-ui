@@ -113,8 +113,16 @@ export {
   type TimelineStep,
 } from './tasks.ts';
 export {
+  ATTEMPT_PHASES,
   DECISION_KINDS,
   PHASE_KINDS,
+  attemptProgress,
+  attemptReviews,
+  diagnosisRequired,
+  leadResets,
+  trackNow,
+  type AttemptProgress,
+  type AttemptReview,
   drawnSteps,
   knownTrackState,
   trackAbsence,
@@ -125,6 +133,13 @@ export {
   type TrackTone,
 } from './track.ts';
 export { gateHoldsOf, plannedKeys } from './tasks.ts';
+export {
+  attemptReviewResults,
+  forecastAdditions,
+  reopenedOf,
+  stageProgressOf,
+  type ForecastAdditions,
+} from './revision8.ts';
 export {
   isInfraWork,
   setupElapsed,

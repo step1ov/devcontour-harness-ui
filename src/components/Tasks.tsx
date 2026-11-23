@@ -30,7 +30,15 @@ import {
   type TaskCard as Card_,
   type TaskPhase,
 } from '../model/tasks.ts';
-import type { OperatorView } from '../model/view.ts';
+import {
+  attemptProgress,
+  attemptReviews,
+  leadResets,
+  trackNow,
+  type AttemptProgress,
+} from '../model/track.ts';
+import type { OperatorView, WorkView } from '../model/view.ts';
+import { attemptReviewResults, reopenedOf, stageProgressOf } from '../model/revision8.ts';
 import {
   AcceptedLine,
   InfraBadge,
@@ -48,6 +56,7 @@ import {
 import { ReviewSubjectCard } from './Reviews.tsx';
 import { Badge, type Tone } from './ui/badge.tsx';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card.tsx';
+import { Tooltip } from './ui/tooltip.tsx';
 import { Progress } from './ui/progress.tsx';
 import { hasOverview, SetupScreen } from './Setup.tsx';
 import { TrackLine } from './Track.tsx';
@@ -229,6 +238,16 @@ function TaskCardView({
   // of «что задействовано» (whole, up to 300), else the stop's own `plain`.
   const holds = gateHoldsOf(view, w);
   const holdLine = (holds.own.length ? view.resources?.gates.heldLine : undefined) ?? holds.plain;
+  // ui alpha.10 (P6-25): the bar is the current attempt's way to acceptance.
+  const prog = attemptProgress(w.track, w.status);
+  // Revision 8: an accepted work a new plan revision reopened, in the harness's words.
+  const reopened = reopenedOf(w);
+  const resets = leadResets(w.track);
+  const now = trackNow(w.track);
+  const leadWaits =
+    Boolean(blockedEnv) ||
+    w.stage.needs?.actor === 'lead' ||
+    (now?.state === 'waiting' && now.step.actor === 'lead');
   return (
     <Card as="li" data-testid={`task-${w.id}`} className="hui-task">
       <CardHeader>
@@ -246,16 +265,40 @@ function TaskCardView({
           </Badge>
         ) : null}
         <InfraBadge kind={w.kind} lang={lang} />
+        <AttemptBadge w={w} prog={prog} phase={c.phase} t={t} leadWaits={leadWaits} />
       </CardHeader>
       <CardContent className="hui:gap-2 hui:text-sm">
         <p data-testid="task-now" data-status={c.phase === 'accepted' ? 'accepted' : undefined}>
           {nowText}
         </p>
         {w.planned ? <p className="hui-muted">{t.r6.plannedWork}</p> : null}
+        {reopened ? (
+          <p data-testid="task-reopened" data-status="blocked">
+            {reopened.reason}
+            {knownLabel(t.r10.reopenedBudget, reopened.budget) ? (
+              <span className="hui-muted">
+                {' · '}
+                {knownLabel(t.r10.reopenedBudget, reopened.budget)}
+              </span>
+            ) : null}
+          </p>
+        ) : null}
+        {w.track && !w.planned && c.phase !== 'cancelled' && c.phase !== 'planned' ? (
+          <AttemptBar prog={prog} percent={forecastPercent(view, w, prog, clock)} t={t} />
+        ) : null}
         {holdLine && holdLine !== firstBlocker?.plain?.trim() ? (
           <p data-testid="task-gate-held">{withWorkNames(view, holdLine)}</p>
         ) : null}
-        {w.track ? <TrackLine track={w.track} lang={lang} name={titleText ?? name} /> : null}
+        {w.track ? (
+          <TrackLine
+            track={w.track}
+            lang={lang}
+            name={titleText ?? name}
+            since={c.phase === 'running' ? w.stage.since : undefined}
+            now={clock}
+            timeZone={timeZone}
+          />
+        ) : null}
         {review ? (
           <p data-testid="task-source-review" data-status="blocked">
             <Badge tone="info">{t.r5.kindSourceReview}</Badge>{' '}
@@ -289,12 +332,19 @@ function TaskCardView({
               </span>
             ) : null}
           </span>
-          <Progress
-            value={Math.min(a.used, a.max)}
-            max={a.max}
-            label={k.attempts(a.used, a.max, a.left)}
-            className="hui:h-1.5"
-          />
+          {w.track ? null : (
+            <Progress
+              value={Math.min(a.used, a.max)}
+              max={a.max}
+              label={k.attempts(a.used, a.max, a.left)}
+              className="hui:h-1.5"
+            />
+          )}
+          {resets.done ? (
+            <span className="hui-muted" data-testid="task-resets">
+              {t.r10.resets(resets.done, resets.total, resets.reasons.join(', '))}
+            </span>
+          ) : null}
           {a.line ? (
             <span className="hui-muted">
               <AttemptsText line={a.line} t={t} />
@@ -312,18 +362,26 @@ function TaskCardView({
             </span>
           ) : null}
         </div>
-        <p data-testid="task-reviews">
-          {code.length ? k.reviewRounds(rounds, cap) : k.noReview}
-          {code.some((r) => r.open.blocking) ? (
-            <span className="hui-muted">
-              {' · '}
-              {t.reviews.open(
-                code.reduce((n, r) => n + r.open.blocking, 0),
-                code.reduce((n, r) => n + r.open.notes, 0),
-              )}
-            </span>
-          ) : null}
-        </p>
+        {w.track || attemptReviewResults(w) ? <ReviewLine w={w} t={t} /> : null}
+        {/* The lead's `harness review-code` rounds: separate, only when there are any. */}
+        {!(w.track || attemptReviewResults(w)) || code.length ? (
+          <p data-testid="task-reviews">
+            {code.length
+              ? w.track || attemptReviewResults(w)
+                ? t.r10.codeReview(rounds, cap)
+                : k.reviewRounds(rounds, cap)
+              : k.noReview}
+            {code.some((r) => r.open.blocking) ? (
+              <span className="hui-muted">
+                {' · '}
+                {t.reviews.open(
+                  code.reduce((n, r) => n + r.open.blocking, 0),
+                  code.reduce((n, r) => n + r.open.notes, 0),
+                )}
+              </span>
+            ) : null}
+          </p>
+        ) : null}
         <p
           className="hui:font-medium"
           data-testid="task-next"
@@ -397,5 +455,178 @@ function TaskCardView({
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+/**
+ * The harness readiness of the work's current attempt: the stage span the
+ * forecast gives (alpha.68 `stageProgress`, moved on within the stage by the
+ * clock against its typical duration), else the work's percent when the
+ * forecast names this attempt. Never 100 before acceptance.
+ */
+function forecastPercent(
+  view: OperatorView,
+  w: WorkView,
+  prog: AttemptProgress,
+  clock: number,
+): number | undefined {
+  if (prog.state !== 'running') return undefined;
+  const f = view.forecast?.progress.works?.find((x) => x.workId === w.id);
+  if (f?.rework) return undefined;
+  if (f?.attempt && prog.attempt !== undefined && f.attempt.n !== prog.attempt) return undefined;
+  const sp = stageProgressOf(view.forecast, w.id);
+  if (sp) {
+    const since = sp.since ? instantMs(sp.since) : NaN;
+    const within =
+      sp.typicalMs && Number.isFinite(since) && Number.isFinite(clock)
+        ? Math.max(0, Math.min(1, (clock - since) / sp.typicalMs))
+        : 0;
+    return Math.max(0, Math.min(99, Math.round((sp.from + (sp.to - sp.from) * within) * 100)));
+  }
+  if (!f || !Number.isFinite(f.percent)) return undefined;
+  return Math.max(0, Math.min(99, Math.round(f.percent)));
+}
+
+/**
+ * The current attempt toward acceptance (P6-25): code → checks → review →
+ * integration → accepted, the harness percent when the forecast names it,
+ * else the passed stages of the track; after a failure the bar starts again
+ * with «повтор после отказа: <этап>».
+ */
+function AttemptBar({
+  prog,
+  percent,
+  t,
+}: {
+  prog: AttemptProgress;
+  percent: number | undefined;
+  t: Dict;
+}) {
+  if (prog.state === 'none') return null;
+  const k = t.r10;
+  const head = k.groupHead(prog.attempt, prog.rework);
+  const pct =
+    prog.state === 'accepted'
+      ? 100
+      : prog.state === 'next'
+        ? 0
+        : (percent ?? Math.round((prog.passed / prog.of) * 100));
+  const text =
+    prog.state === 'accepted'
+      ? k.progressAccepted
+      : prog.state === 'running'
+        ? k.progressRunning(head, prog.step ?? '', prog.passed, prog.of)
+        : prog.state === 'next'
+          ? k.progressNext(head)
+          : k.progressFailed(head, prog.step ?? '');
+  return (
+    <div className="hui:grid hui:gap-1" data-testid="task-progress" data-state={prog.state}>
+      <span>{text}</span>
+      <Progress
+        value={pct}
+        max={100}
+        label={prog.state === 'accepted' ? k.progressAccepted : k.progressLabel(head, pct)}
+        className="hui:h-2"
+        indicatorClassName={prog.state === 'failed' ? 'hui:bg-bad' : 'hui:bg-ok'}
+      />
+      {prog.retryAfter && prog.state !== 'accepted' ? (
+        <span className="hui-muted" data-testid="task-retry-after">
+          {k.retryAfter(prog.retryAfter)}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * «попытка 2 из 3» in the card corner (P6-25): neutral; amber on the last
+ * attempt; red when the attempts are spent or the work waits for the lead.
+ * The tooltip repeats the attempts line of the card (mouse only: the same
+ * words are in the card).
+ */
+function AttemptBadge({
+  w,
+  prog,
+  phase,
+  t,
+  leadWaits,
+}: {
+  w: WorkView;
+  prog: AttemptProgress;
+  phase: TaskPhase;
+  t: Dict;
+  leadWaits: boolean;
+}) {
+  const a = w.attempts;
+  if (w.planned || phase === 'planned' || phase === 'cancelled') return null;
+  // Running: by the track, or by the work's own stage when the track is absent (review P4).
+  const running = prog.state === 'running' || phase === 'running';
+  // The attempt number is the track's; the budget is the harness counters (review P3):
+  // after an uncounted run attempt 3 may have used 2 of 3.
+  const n = running ? (prog.attempt ?? a.used) : a.used;
+  if (!n) return null;
+  const closed = phase === 'accepted';
+  // `used` includes a running counted attempt: none left while running — the last one.
+  const spent = !closed && a.left <= 0 && !running;
+  const why = closed
+    ? undefined
+    : leadWaits
+      ? 'lead'
+      : spent
+        ? 'spent'
+        : running && a.left <= 0
+          ? 'last'
+          : undefined;
+  const tone: Tone =
+    why === 'lead' || why === 'spent' ? 'bad' : why === 'last' ? 'warn' : 'neutral';
+  const resets = leadResets(w.track);
+  const tip = [
+    t.tasks.attempts(a.used, a.max, a.left),
+    resets.total ? t.r10.resets(resets.done, resets.total, resets.reasons.join(', ')) : undefined,
+  ]
+    .filter(Boolean)
+    .join('; ');
+  return (
+    <Tooltip content={tip} decorative className="hui:ml-auto">
+      <Badge tone={tone} data-testid="attempt-badge" data-why={why}>
+        {n === a.used ? t.r10.attemptBadge(n, a.max) : t.r10.attemptBadgeCounted(n, a.used, a.max)}
+        {why ? <span className="hui-sr"> — {t.r10.attemptBadgeWhy[why]}</span> : null}
+      </Badge>
+    </Tooltip>
+  );
+}
+
+/**
+ * The independent review of each attempt (P6-10): «Ревью: попытка 1 —
+ * отклонено, попытка 2 — одобрено», from the track's review steps.
+ */
+function ReviewLine({ w, t }: { w: WorkView; t: Dict }) {
+  const k = t.r10;
+  // Revision 8: the harness's own per-attempt results win over the track.
+  const sent = attemptReviewResults(w);
+  const items: string[] = sent
+    ? sent.map((r) => {
+        const head = [
+          k.groupHead(r.attempt, undefined).toLowerCase(),
+          r.phase === 'integration' ? k.integrationPhase : undefined,
+          r.earlier ? k.earlier : undefined,
+        ]
+          .filter(Boolean)
+          .join(', ');
+        const extra = [
+          r.findings ? k.findings(r.findings) : undefined,
+          r.notes ? k.notes(r.notes) : undefined,
+        ].filter(Boolean);
+        return `${head} — ${label(k.verdict, r.verdict)}${extra.length ? ` (${extra.join(', ')})` : ''}`;
+      })
+    : attemptReviews(w.track).map((r) => {
+        const head = k.groupHead(r.attempt, r.rework).toLowerCase();
+        const extra = r.findings !== undefined ? ` (${k.findings(r.findings)})` : '';
+        return `${head ? `${head} — ` : ''}${label(k.review, r.state)}${extra}`;
+      });
+  return (
+    <p data-testid="task-attempt-reviews" data-source={sent ? 'harness' : 'track'}>
+      {items.length ? k.reviewLine(items.join(', ')) : k.reviewNone}
+    </p>
   );
 }
