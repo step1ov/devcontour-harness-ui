@@ -1,9 +1,21 @@
 // The same document as an older harness sends it, for the compatibility
 // tests: tests/contract.test.ts validates these shapes against the copied
-// alpha.55, alpha.56, alpha.57, alpha.59, alpha.60, alpha.62 and alpha.65 schemas, so the screen and live tests that use them
+// alpha.55, alpha.56, alpha.57, alpha.59, alpha.60, alpha.62, alpha.65 and alpha.66 schemas, so the screen and live tests that use them
 // really feed the panel an old document, not a new one with a lower number.
 
 type Json = Record<string, any>;
+
+/**
+ * Harness alpha.66 (revision 6): none of the revision 7 fields — no setup
+ * progress (`stage.progress`) and no infrastructure works (`works[].kind`).
+ */
+export function asAlpha66<T>(doc: T): T {
+  const d = structuredClone(doc) as Json;
+  if (typeof d.viewRevision === 'number' && d.viewRevision > 6) d.viewRevision = 6;
+  if (d.stage) delete d.stage.progress;
+  for (const w of [...(d.works ?? []), ...(d.work ? [d.work] : [])]) delete w.kind;
+  return d as T;
+}
 
 /**
  * Harness alpha.65 (revision 5): none of the revision 6 fields — no decision
@@ -12,7 +24,7 @@ type Json = Record<string, any>;
  * approved plan, the lead's share, the release state, the chain or lead time.
  */
 export function asAlpha65<T>(doc: T): T {
-  const d = structuredClone(doc) as Json;
+  const d = asAlpha66(doc) as Json;
   if (typeof d.viewRevision === 'number' && d.viewRevision > 5) d.viewRevision = 5;
   for (const k of ['planned', 'lead', 'resources', 'previews']) delete d[k];
   if (d.settings) delete d.settings.decisions;

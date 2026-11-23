@@ -1549,6 +1549,47 @@ const ru = {
     } as Labels,
     decisionsOld: 'Объяснения решений передаёт harness 0.1.0-alpha.66 и новее.',
   },
+  r7: {
+    // Setup progress (harness alpha.67, `stage.progress`).
+    progressTitle: 'Ход настройки',
+    step: {
+      profile: 'профиль стека',
+      init: 'harness init',
+      doctor: 'doctor',
+      smoke: 'smoke окружения',
+      probe: 'проба исполнителя',
+      gates: 'gates на HEAD',
+      connector: 'связка с источником задач',
+    } as Labels,
+    stepState: {
+      done: 'готово',
+      failed: 'не прошло',
+      pending: 'ещё нет',
+      skipped: 'не нужно',
+      unknown: 'итог не записывается',
+    } as Labels,
+    stepAt: (at: string) => `записано ${at}`,
+    stepsTitle: 'Шаги настройки',
+    elapsed: (d: string) => `идёт ${d}`,
+    elapsedUnknown: 'сколько идёт настройка — неизвестно',
+    since: (at: string) => `с ${at}`,
+    budget: (d: string) => `бюджет ${d}`,
+    overBudget: 'Превышен бюджет настройки',
+    overBudgetWhy:
+      'Настройка идёт дольше бюджета. Новый код инфраструктуры — мосты окружения, обёртки gates, приёмочные тесты — пишут работами инфраструктуры в плане, а не в настройке.',
+    noSteps: 'Шагов настройки harness не прислал.',
+    // Infra works (`works[].kind: infra`).
+    infraBadge: 'инфраструктура',
+    infraWhy:
+      'Работа инфраструктуры harness: мосты окружения, обёртки gates, приёмочные тесты. Идёт обычным циклом — попытки, проверки, ревью.',
+    // The queue stands and the lead restarts it. Neutral: the harness line
+    // says whether to start now («запустите harness run») or after an answer.
+    leadMoveTitle: 'Очередь — за ведущим',
+    // Activity events the panel names.
+    action: {
+      'environment.reconciled': 'окружение сверено',
+    } as Labels,
+  },
 };
 
 export type Dict = typeof ru;
@@ -2671,6 +2712,42 @@ const en: Dict = {
       default: 'default',
     },
     decisionsOld: 'Decision explanations come from harness 0.1.0-alpha.66 and newer.',
+  },
+  r7: {
+    progressTitle: 'Setup progress',
+    step: {
+      profile: 'stack profile',
+      init: 'harness init',
+      doctor: 'doctor',
+      smoke: 'environment smoke',
+      probe: 'writer probe',
+      gates: 'gates on HEAD',
+      connector: 'task source connector',
+    },
+    stepState: {
+      done: 'done',
+      failed: 'failed',
+      pending: 'not yet',
+      skipped: 'not needed',
+      unknown: 'outcome not recorded',
+    },
+    stepAt: (at: string) => `recorded ${at}`,
+    stepsTitle: 'Setup steps',
+    elapsed: (d: string) => `running ${d}`,
+    elapsedUnknown: 'how long setup has run is unknown',
+    since: (at: string) => `since ${at}`,
+    budget: (d: string) => `budget ${d}`,
+    overBudget: 'Setup budget exceeded',
+    overBudgetWhy:
+      'Setup takes longer than its budget. New infrastructure code — environment bridges, gate wrappers, acceptance tests — goes into the plan as infra works, not into setup.',
+    noSteps: 'The harness sent no setup steps.',
+    infraBadge: 'infrastructure',
+    infraWhy:
+      'A harness infrastructure work: environment bridges, gate wrappers, acceptance tests. It goes through the usual cycle — attempts, checks, review.',
+    leadMoveTitle: 'The queue is up to the lead',
+    action: {
+      'environment.reconciled': 'environment reconciled',
+    },
   },
 };
 

@@ -30,8 +30,8 @@ test('a different major view version is refused with a reason', () => {
   assert.equal(check.ok ? '' : check.code, 'VIEW_VERSION_UNSUPPORTED');
 });
 
-test('revision 6 (harness alpha.66) is known; revisions 5, 4, 3, 2, 1 and 0 (alpha.65, .60–.62, .59, .57, .56, .55) too; only later ones are newer', () => {
-  assert.equal(KNOWN_VIEW_REVISION, 6);
+test('revision 7 (harness alpha.67) is known; revisions 6, 5, 4, 3, 2, 1 and 0 (alpha.66, .65, .60–.62, .59, .57, .56, .55) too; only later ones are newer', () => {
+  assert.equal(KNOWN_VIEW_REVISION, 7);
   assert.equal(fixture.viewRevision, 6);
   const c4now = checkView(fixture);
   assert.equal(c4now.ok && c4now.newerRevision, false);
@@ -61,7 +61,9 @@ test('revision 6 (harness alpha.66) is known; revisions 5, 4, 3, 2, 1 and 0 (alp
   const c6 = checkView({ ...fixture, viewRevision: 6 });
   assert.equal(c6.ok && c6.newerRevision, false);
   const c7 = checkView({ ...fixture, viewRevision: 7 });
-  assert.equal(c7.ok && c7.newerRevision, true);
+  assert.equal(c7.ok && c7.newerRevision, false);
+  const c8 = checkView({ ...fixture, viewRevision: 8 });
+  assert.equal(c8.ok && c8.newerRevision, true);
 });
 
 test('the gate checks the revision 4 fields the panel renders', () => {
@@ -165,7 +167,7 @@ test('the gate checks the revision 2 remote fields and the feed the panel render
 });
 
 test('a newer revision is accepted and flagged; unknown fields are ignored', () => {
-  const check = checkView({ ...fixture, viewRevision: 7, futureSection: { x: 1 } });
+  const check = checkView({ ...fixture, viewRevision: 8, futureSection: { x: 1 } });
   assert.equal(check.ok, true);
   assert.equal(check.ok && check.newerRevision, true);
 });

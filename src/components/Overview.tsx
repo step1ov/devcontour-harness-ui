@@ -64,6 +64,7 @@ import {
   StageLeftLine,
   WorkEta,
   AnswerBasisLine,
+  InfraBadge,
   AttemptsText,
   BlockerLine,
   Clipped,
@@ -112,7 +113,8 @@ export function Overview({
   const t = dict(lang);
   // Revision 5: a setup document (or a host's document before the harness
   // has a state) has no works, health or progress: the setup state, not a throw.
-  if (!hasOverview(view)) return <SetupScreen view={view} lang={lang} />;
+  if (!hasOverview(view))
+    return <SetupScreen view={view} lang={lang} now={now} timeZone={timeZone} />;
   const o = t.overview;
   const clock = now ?? instantMs(view.generatedAt);
   const links = { onOpenWork, workHref };
@@ -215,6 +217,13 @@ export function Overview({
       ? runner === 'not-running'
       : !health.controller.present && progress.running === 0 && harnessLeft > 0);
   const standingLine = progress.queue.line?.trim() || undefined;
+  // The queue stands and the lead restarts it: the harness line says when —
+  // now («запустите harness run: готово N задач») or after an answer
+  // («готовых задач нет — вопрос держит X»); the panel adds no instruction.
+  const leadMove =
+    standing &&
+    standingLine !== undefined &&
+    (progress.queue.restartBy === undefined || progress.queue.restartBy === 'lead');
   // Every harness work is finished; tasks outside the harness may still be
   // left (`outsideLeft`, from the forecast when there is one).
   const finished = progress.total > 0 && harnessLeft === 0;
@@ -291,7 +300,7 @@ export function Overview({
                   )}
                 </span>
               </span>
-            ) : standing ? (
+            ) : standing && !leadMove ? (
               <span data-status="blocked" data-testid="queue-who" className="hui:text-sm">
                 {standingLine ? (
                   <>
@@ -321,6 +330,21 @@ export function Overview({
               {o.acceptedOf(releaseDone, releaseTotal)}
             </span>
           </div>
+          {leadMove && standingLine ? (
+            // Harness alpha.67: the standing queue is the lead's, in its own
+            // line under the badges; the title is neutral, the harness line
+            // says whether to start a run now.
+            <div className="hui-lead-move" data-testid="lead-next-move">
+              <span className="hui-lead-move-label">{t.r7.leadMoveTitle}</span>
+              <p data-status="blocked" data-testid="queue-who" className="hui:m-0 hui:font-medium">
+                {standingLine}
+                {' — '}
+                <span className="hui-who">
+                  {t.r4.queueBy(actorLabel(t, progress.queue.restartBy ?? 'lead'))}
+                </span>
+              </p>
+            </div>
+          ) : null}
         </CardContent>
       </Card>
 
@@ -427,6 +451,7 @@ export function Overview({
                 ) : null}
                 <StageStatus w={w} lang={lang} linkProps={links} />
                 {w.planned ? <Badge tone="outline">{t.r6.plannedBadge}</Badge> : null}
+                <InfraBadge kind={w.kind} lang={lang} />
                 <WorkEta
                   w={w}
                   t={t}
@@ -674,6 +699,7 @@ export function Overview({
                       <strong>{workName(view, w.id)}</strong>
                     </WorkRef>
                     <Badge tone="info">{stageLabel(w.stage.name, lang)}</Badge>
+                    <InfraBadge kind={w.kind} lang={lang} />
                     {w.stage.step ? <Codes t={t} codes={[w.stage.step]} /> : null}
                     {w.liveness && w.liveness !== 'active' ? (
                       <Badge tone="warn">{label(t.liveness, w.liveness)}</Badge>

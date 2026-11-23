@@ -20,7 +20,7 @@ export type ViewCheck =
     };
 
 /** Highest `viewRevision` this build knows how to render in full. */
-export const KNOWN_VIEW_REVISION = 6;
+export const KNOWN_VIEW_REVISION = 7;
 
 type Obj = Record<string, unknown>;
 const isObject = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -123,6 +123,26 @@ const scalar = leaf(
 );
 const bilingual = obj({ ru: S, en: S });
 
+/**
+ * Setup progress (revision 7, harness alpha.67): every field is optional
+ * here, so a progress the harness reshapes later never refuses the whole
+ * view; the setup block reads what is there (`setupProgressOf`).
+ */
+const setupProgress = obj({
+  since: opt(I),
+  elapsedMs: opt(C),
+  budgetMs: opt(C),
+  overBudget: opt(B),
+  steps: opt(
+    arr(
+      obj({ id: S, state: opt(S), at: opt(I), elapsedMs: opt(C), line: opt(S), lineEn: opt(S) }),
+      20,
+    ),
+  ),
+  line: opt(S),
+  lineEn: opt(S),
+});
+
 const binding = obj({ runtime: S, model: opt(S), effort: opt(S) });
 const source = obj({ producer: S, producerVersion: S, stateVersion: N, token: S });
 const settings = obj({
@@ -180,6 +200,7 @@ const work = obj({
   planned: opt(B),
   restoredFrom: opt(S),
   restoredLine: opt(S),
+  kind: opt(S),
   stage: obj({
     name: S,
     step: opt(S),
@@ -468,7 +489,7 @@ const overview = obj({
       10,
     ),
   ),
-  stage: opt(obj({ name: S, lines: arr(S, 5) })),
+  stage: opt(obj({ name: S, lines: arr(S, 5), progress: opt(setupProgress) })),
   forecast: opt(
     obj({
       progress: obj({
@@ -680,7 +701,7 @@ const setupDoc = obj({
   viewRevision: C,
   generatedAt: I,
   source,
-  stage: obj({ name: S, lines: arr(S, 5) }),
+  stage: obj({ name: S, lines: arr(S, 5), progress: opt(setupProgress) }),
   setup: obj({ waitingFor: S }),
 });
 

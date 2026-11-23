@@ -1,10 +1,10 @@
 // Operator view: the read-only document the panel renders. The schema is
 // owned by devcontour-harness (`operatorViewSchema` in its
 // src/contracts/operator-view.ts, JSON Schema schemas/operator-view.schema.json
-// and schemas/work-detail-view.schema.json, harness 0.1.0-alpha.66, view
-// version 1, revision 6; every revision 1–6 field is optional, so alpha.55
+// and schemas/work-detail-view.schema.json, harness 0.1.0-alpha.67, view
+// version 1, revision 7; every revision 1–7 field is optional, so alpha.55
 // (revision 0), alpha.56 (1), alpha.57/58 (2), alpha.59 (3), alpha.60–.62
-// (4) and alpha.65 (5) documents have the same type). These types mirror it field by field; tests/contract.test.ts
+// (4), alpha.65 (5) and alpha.66 (6) documents have the same type). These types mirror it field by field; tests/contract.test.ts
 // validates the fixtures against copies of the harness JSON Schemas. A host
 // adapter that builds a view from its own store follows the same schema.
 // Pure types: no node:*, no React.
@@ -386,6 +386,13 @@ export interface WorkView {
    */
   restoredFrom?: 'cancelled-rework';
   restoredLine?: string;
+  /**
+   * Revision 7 (harness alpha.67): a harness infrastructure work (environment
+   * bridges, gate wrappers, acceptance tests in `.harness/`). Otherwise a
+   * normal task: attempts, gates, review, forecast and path. Absent = a
+   * product work (or an older harness).
+   */
+  kind?: 'infra' | (string & {});
   stage: {
     name: WorkStage;
     step?: string;
@@ -634,8 +641,49 @@ export interface SetupView {
   viewRevision: number;
   generatedAt: string;
   source: OperatorView['source'];
-  stage: { name: 'setup'; lines: string[] };
+  stage: { name: 'setup'; lines: string[]; progress?: SetupProgressView };
   setup: { waitingFor: 'project' | 'policy' };
+}
+
+/** A setup step (revision 7, harness alpha.67), in the harness order. */
+export type SetupStepId = 'profile' | 'init' | 'doctor' | 'smoke' | 'probe' | 'gates' | 'connector';
+
+/**
+ * `done`, `failed`, `pending` (not done yet), `skipped` (not needed: no
+ * connector, the tasks are graph files), `unknown` (the outcome is not
+ * recorded: doctor only reads). The panel reads any other value as `unknown`
+ * (`setupProgressOf`).
+ */
+export type SetupStepState = 'done' | 'failed' | 'pending' | 'skipped' | 'unknown';
+
+export interface SetupStepView {
+  id: SetupStepId;
+  state: SetupStepState;
+  /** When the step was last recorded. */
+  at?: string;
+  /** Duration of the step's last pass (smoke, gates), when recorded. */
+  elapsedMs?: number;
+  /** The harness line in Russian and in English (both are always sent). */
+  line: string;
+  lineEn: string;
+}
+
+/**
+ * Setup progress (revision 7, harness alpha.67, `stage.progress` of the
+ * overview and of the setup document), while there are no works yet: the
+ * steps with their state and time, the setup time against a soft budget
+ * (30 min by default). `line` is not one of `stage.lines`.
+ */
+export interface SetupProgressView {
+  /** Start of setup: the earliest record (`.harness/` files, the first smoke or gates). */
+  since?: string;
+  elapsedMs?: number;
+  budgetMs: number;
+  /** Setup takes longer than the budget: new infrastructure code goes into the plan as infra works. */
+  overBudget: boolean;
+  steps: SetupStepView[];
+  line: string;
+  lineEn: string;
 }
 
 /** Release forecast (revision 4, harness alpha.60, proposal P11): an observation, not a promise. */
@@ -791,6 +839,8 @@ export type ActivityAction =
   | 'review.escalated'
   | 'question.asked'
   | 'question.answered'
+  /** Harness alpha.67: `harness cleanup` reconciled a smoke environment record (neutral). */
+  | 'environment.reconciled'
   | (string & {});
 
 /**
@@ -882,7 +932,7 @@ export interface OperatorView {
    */
   sourceReviews?: SourceReview[];
   /** Project stage (revision 5): `setup` while there are no works yet. */
-  stage?: { name: 'setup' | 'work'; lines: string[] };
+  stage?: { name: 'setup' | 'work'; lines: string[]; progress?: SetupProgressView };
   /** Release forecast (revision 4). Absent = an older harness or an empty scope. */
   forecast?: ForecastView;
   /** Updates (revision 4). Absent = no updates config and no check. */

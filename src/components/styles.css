@@ -743,6 +743,25 @@
   .hui-dot[data-tone='planned'] {
     background: var(--hui-planned);
   }
+  /* A standing queue the lead restarts (harness alpha.67). */
+  .hui-lead-move {
+    display: grid;
+    gap: 2px;
+    padding: 6px 10px;
+    border-left: 3px solid var(--hui-warn);
+    border-radius: 4px;
+    background: var(--hui-warn-bg);
+  }
+  .hui-lead-move-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--hui-warn);
+  }
+  /* A setup step whose outcome is not recorded (doctor only reads): a thin ring. */
+  .hui-dot[data-tone='unknown'] {
+    background: transparent;
+    border: 1.5px solid var(--hui-muted);
+  }
   /* Reduced motion also for a host that renders TrackLine outside a .hui root. */
   @media (prefers-reduced-motion: reduce) {
     .hui-dot {

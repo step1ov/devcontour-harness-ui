@@ -125,3 +125,11 @@ export {
   type TrackTone,
 } from './track.ts';
 export { gateHoldsOf, plannedKeys } from './tasks.ts';
+export {
+  isInfraWork,
+  setupElapsed,
+  setupProgressOf,
+  setupStepTone,
+  type SetupProgressRead,
+  type SetupStepRead,
+} from './setup.ts';

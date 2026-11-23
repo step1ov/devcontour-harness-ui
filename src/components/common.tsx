@@ -524,3 +524,18 @@ export function safeHttpUrl(url: string | undefined): string | undefined {
     return undefined;
   }
 }
+
+/**
+ * Revision 7 (harness alpha.67): «инфраструктура» on a harness infrastructure
+ * work (`kind: 'infra'`); nothing for a product work or an older harness.
+ * Otherwise such a work is a normal task.
+ */
+export function InfraBadge({ kind, lang = 'ru' }: { kind?: string; lang?: Lang }) {
+  if (kind !== 'infra') return null;
+  const r7 = dict(lang).r7;
+  return (
+    <Badge tone="outline" data-testid="infra-badge" title={r7.infraWhy}>
+      {r7.infraBadge}
+    </Badge>
+  );
+}

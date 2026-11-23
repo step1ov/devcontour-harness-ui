@@ -140,7 +140,8 @@ export function LeadJournal({
   activityHref,
 }: LeadJournalProps) {
   const t = dict(lang);
-  if (!hasOverview(view)) return <SetupScreen view={view} lang={lang} />;
+  if (!hasOverview(view))
+    return <SetupScreen view={view} lang={lang} now={now} timeZone={timeZone} />;
   const links = { onOpenWork, workHref };
   const clock = now ?? instantMs(view.generatedAt);
   const l = view.lead;

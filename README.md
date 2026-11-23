@@ -15,7 +15,7 @@
 данные harness, а не пересказ агента: что ждёт вашего ответа, что идёт
 сейчас, как именно проверена работа и где лежит принятый результат.
 
-> Статус: `0.1.0-alpha.8`. Все экраны только для чтения: обзор, детали
+> Статус: `0.1.0-alpha.9`. Все экраны только для чтения: обзор, детали
 > работы, ревью, решения, кто что делал, настройки, история и здоровье, на
 > русском и английском. Данные — файл представления или живой
 > `harness view` (`--state`, harness `0.1.0-alpha.55` и новее, или `--repository`, harness `0.1.0-alpha.65` и новее). Схемой
@@ -40,9 +40,16 @@
 > путь задачи цветными шагами на карточке и строками в деталях, «Кто
 > принимает решения» в настройках; разбор ведущего после повторных отказов
 > показан как ход ведущего, а не «нужно от вас».
+> Выпуск `0.1.0-alpha.9` рассчитан на harness `0.1.0-alpha.67`: с
+> `0.1.0-alpha.67` (ревизия 7) — ход настройки на «Обзоре», пока задач нет
+> (шаги профиль, init, doctor, smoke, проба исполнителя, gates на HEAD,
+> связка — с состоянием и временем, время настройки против бюджета и
+> «превышен бюджет настройки»), значок «инфраструктура» у работ
+> инфраструктуры harness, а строка «Очередь стоит — никто не запущен:
+> запустите harness run…» — отдельной строкой «Очередь — за ведущим».
 > С alpha.55–.58 всё прочее работает, как раньше.
 > [Дизайн](docs/design.md) описывает схему, экраны, безопасность и этапы;
-> изменения — в заметках к выпускам [0.1.0-alpha.8](docs/release-notes/0.1.0-alpha.8.md), [0.1.0-alpha.7](docs/release-notes/0.1.0-alpha.7.md), [0.1.0-alpha.6](docs/release-notes/0.1.0-alpha.6.md), [0.1.0-alpha.5](docs/release-notes/0.1.0-alpha.5.md), [0.1.0-alpha.4](docs/release-notes/0.1.0-alpha.4.md), [0.1.0-alpha.3](docs/release-notes/0.1.0-alpha.3.md), [0.1.0-alpha.2](docs/release-notes/0.1.0-alpha.2.md)
+> изменения — в заметках к выпускам [0.1.0-alpha.9](docs/release-notes/0.1.0-alpha.9.md), [0.1.0-alpha.8](docs/release-notes/0.1.0-alpha.8.md), [0.1.0-alpha.7](docs/release-notes/0.1.0-alpha.7.md), [0.1.0-alpha.6](docs/release-notes/0.1.0-alpha.6.md), [0.1.0-alpha.5](docs/release-notes/0.1.0-alpha.5.md), [0.1.0-alpha.4](docs/release-notes/0.1.0-alpha.4.md), [0.1.0-alpha.3](docs/release-notes/0.1.0-alpha.3.md), [0.1.0-alpha.2](docs/release-notes/0.1.0-alpha.2.md)
 > и [0.1.0-alpha.1](docs/release-notes/0.1.0-alpha.1.md).
 
 ## Язык
@@ -60,7 +67,7 @@
 версия, как и у harness):
 
 ```sh
-npm install --save-dev --save-exact devcontour-harness@0.1.0-alpha.66 devcontour-harness-ui@0.1.0-alpha.8
+npm install --save-dev --save-exact devcontour-harness@0.1.0-alpha.67 devcontour-harness-ui@0.1.0-alpha.9
 npx devcontour-harness-ui --demo --lang ru      # демонстрационные данные
 # → {"ok":true,"url":"http://127.0.0.1:4790/","port":4790,"readOnly":true,...}
 ```

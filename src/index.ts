@@ -34,7 +34,15 @@ export {
 } from './components/Forecast.tsx';
 export { UPDATE_BANNER_STATES, UpdatesBanner, UpdatesSection } from './components/Updates.tsx';
 export { SourceQuestionItem, SourceReviewItem } from './components/Overview.tsx';
-export { SetupNote, SetupScreen, hasOverview, inSetup, stageLines } from './components/Setup.tsx';
+export {
+  SetupNote,
+  SetupProgress,
+  SetupScreen,
+  hasOverview,
+  inSetup,
+  stageLines,
+} from './components/Setup.tsx';
+export { InfraBadge } from './components/common.tsx';
 export { Term, type ScreenProps } from './components/common.tsx';
 // Revision 6 (harness 0.1.0-alpha.66): the lead, the task path, what is used, previews, who decides.
 export {
