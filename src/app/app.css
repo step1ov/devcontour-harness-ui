@@ -9,6 +9,17 @@
 :root[data-theme='dark'] {
   color-scheme: dark;
 }
+/* The top menu stays on top while scrolling (ui alpha.10): anchors and
+   focused targets scroll into view below it, by its measured height. */
+html {
+  scroll-padding-top: calc(var(--app-top-h, 64px) + 8px);
+}
+.app-top {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: var(--hui-surface);
+}
 body {
   margin: 0;
   background: var(--hui-bg);
@@ -129,10 +140,23 @@ main:focus {
   outline-offset: 2px;
 }
 @media (max-width: 639px) {
+  /* Brand and language on one row, the tabs below in one scrollable row: a short sticky menu. */
+  .app-nav {
+    padding: 6px 16px;
+    gap: 4px 12px;
+  }
   .app-brand {
-    width: 100%;
+    flex: 1 1 auto;
+  }
+  .app-nav ul {
+    order: 3;
+    flex: 1 1 100%;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
   }
   .app-tab {
     padding: 6px 8px;
+    white-space: nowrap;
   }
 }

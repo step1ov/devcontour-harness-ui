@@ -51,7 +51,16 @@ export {
   hasLeadPanel,
   type LeadJournalProps,
 } from './components/Lead.tsx';
-export { TrackLegend, TrackLine, TrackTable, stateWord, stepWords } from './components/Track.tsx';
+export {
+  TrackLegend,
+  TrackLine,
+  TrackTable,
+  groupTip,
+  stateWord,
+  stepLabel,
+  stepWords,
+  trackCaption,
+} from './components/Track.tsx';
 export { ResourcesPanel } from './components/Resources.tsx';
 export { PreviewsPanel, previewHref } from './components/Previews.tsx';
 export { DecisionsPanel, decisionValueText } from './components/Settings.tsx';

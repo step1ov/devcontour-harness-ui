@@ -113,8 +113,16 @@ export {
   type TimelineStep,
 } from './tasks.ts';
 export {
+  ATTEMPT_PHASES,
   DECISION_KINDS,
   PHASE_KINDS,
+  attemptProgress,
+  attemptReviews,
+  diagnosisRequired,
+  leadResets,
+  trackNow,
+  type AttemptProgress,
+  type AttemptReview,
   drawnSteps,
   knownTrackState,
   trackAbsence,

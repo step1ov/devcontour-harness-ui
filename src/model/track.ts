@@ -165,3 +165,169 @@ export function trackAbsence(
   if (w.track && Array.isArray(w.track.steps)) return 'present';
   return viewRevision >= 6 ? 'dropped' : 'old';
 }
+
+/** The phase steps of one attempt run, in order, ending at acceptance. */
+export const ATTEMPT_PHASES = ['code', 'checks', 'review', 'integration'] as const;
+
+/**
+ * Where the current attempt of a work stands on its way to acceptance (ui
+ * alpha.10, owner request P6-25): the track's own steps, counted. `state`:
+ * `running` — a step of the attempt is current; `next` — the next attempt
+ * has not started yet (a retry or the first run); `accepted`; `failed` — the
+ * last attempt failed and no attempt is ahead; `none` — nothing to say.
+ */
+export interface AttemptProgress {
+  state: 'running' | 'next' | 'accepted' | 'failed' | 'none';
+  attempt?: number;
+  rework?: number;
+  /** Phase steps of the attempt that passed, of `of` (4: code, checks, review, integration). */
+  passed: number;
+  of: number;
+  /** The step the attempt is on now (`running`) or failed at (`failed`): the harness label. */
+  step?: string;
+  /** The previous attempt failed at this step (harness label): «повтор после отказа ревью». */
+  retryAfter?: string;
+}
+
+/** The attempt groups of a track (phase steps only). */
+const attemptGroups = (track: WorkTrack) => trackGroups(track).filter((g) => g.kind === 'attempt');
+
+const failedStepOf = (g: TrackGroup | undefined) =>
+  g?.steps.find((d) => d.state === 'failed')?.step.label;
+
+/** The progress of the current attempt toward acceptance, from the track. */
+export function attemptProgress(track: WorkTrack | undefined, status?: string): AttemptProgress {
+  const of = ATTEMPT_PHASES.length;
+  if (!track || !Array.isArray(track.steps)) return { state: 'none', passed: 0, of };
+  const groups = attemptGroups(track);
+  const passedOf = (g: TrackGroup) => g.steps.filter((d) => d.state === 'passed').length;
+  const pick = (g: TrackGroup) => ({
+    ...(g.attempt !== undefined ? { attempt: g.attempt } : {}),
+    ...(g.rework !== undefined ? { rework: g.rework } : {}),
+  });
+  const cur = groups.findIndex((g) => g.steps.some((d) => d.state === 'current'));
+  if (cur >= 0) {
+    const g = groups[cur]!;
+    const before = failedStepOf(groups[cur - 1]);
+    return {
+      state: 'running',
+      ...pick(g),
+      passed: passedOf(g),
+      of,
+      step: g.steps.find((d) => d.state === 'current')!.step.label,
+      ...(before ? { retryAfter: before } : {}),
+    };
+  }
+  // Accepted: the harness says so (`done`), or the last step is a passed end.
+  const end = drawnSteps(track).at(-1);
+  if (status === 'done' || (end?.step.kind === 'accepted' && end.state === 'passed')) {
+    const done = [...groups].reverse().find((g) => g.steps.every((d) => d.state === 'passed'));
+    return { state: 'accepted', ...(done ? pick(done) : {}), passed: of, of };
+  }
+  // The first attempt ahead: every phase step planned.
+  const next = groups.findIndex((g) => g.steps.every((d) => d.state === 'planned'));
+  if (next >= 0) {
+    const before = failedStepOf(groups[next - 1]);
+    return {
+      state: 'next',
+      ...pick(groups[next]!),
+      passed: 0,
+      of,
+      ...(before ? { retryAfter: before } : {}),
+    };
+  }
+  const last = groups.at(-1);
+  if (last && failedStepOf(last))
+    return {
+      state: 'failed',
+      ...pick(last),
+      passed: passedOf(last),
+      of,
+      step: failedStepOf(last)!,
+    };
+  return { state: 'none', passed: 0, of };
+}
+
+/** One attempt's independent review, as the track records it (P6-10). */
+export interface AttemptReview {
+  attempt?: number;
+  rework?: number;
+  state: 'passed' | 'failed' | 'current' | 'waiting';
+  reason?: string;
+  /** Findings of the review, when the harness counts them on the step. */
+  findings?: number;
+}
+
+/**
+ * The review step of every attempt that reached review (passed, rejected or
+ * running now); planned and skipped review steps are not reviews.
+ */
+export function attemptReviews(track: WorkTrack | undefined): AttemptReview[] {
+  if (!track || !Array.isArray(track.steps)) return [];
+  const out: AttemptReview[] = [];
+  for (const d of drawnSteps(track)) {
+    const s = d.step;
+    if (s.kind !== 'review') continue;
+    if (
+      d.state !== 'passed' &&
+      d.state !== 'failed' &&
+      d.state !== 'current' &&
+      d.state !== 'waiting'
+    )
+      continue;
+    const findings = (s as { findings?: unknown }).findings;
+    out.push({
+      ...(s.attempt !== undefined ? { attempt: s.attempt } : {}),
+      ...(s.rework !== undefined ? { rework: s.rework } : {}),
+      state: d.state,
+      ...(s.reason ? { reason: s.reason } : {}),
+      ...(Number.isSafeInteger(findings) && (findings as number) >= 0
+        ? { findings: findings as number }
+        : {}),
+    });
+  }
+  return out;
+}
+
+/** What the work is doing now, for the caption beside the line: the current or waiting step. */
+export function trackNow(track: WorkTrack | undefined): DrawnStep | undefined {
+  if (!track || !Array.isArray(track.steps)) return undefined;
+  const steps = drawnSteps(track);
+  return steps.find((d) => d.state === 'current') ?? steps.find((d) => d.state === 'waiting');
+}
+
+/**
+ * The lead's resets on the track (P6-25 badge tooltip): those taken
+ * (`decision`) and the total the policy allows (taken + still planned), with
+ * the harness reason of each taken one («+3»).
+ */
+export function leadResets(track: WorkTrack | undefined): {
+  done: number;
+  total: number;
+  reasons: string[];
+} {
+  if (!track || !Array.isArray(track.steps)) return { done: 0, total: 0, reasons: [] };
+  const lead = drawnSteps(track).filter(
+    (d) => d.step.kind === 'reset' && decisionActor(d.step) !== 'user',
+  );
+  const done = lead.filter((d) => d.state === 'decision');
+  const planned = lead.filter((d) => d.state === 'planned');
+  return {
+    done: done.length,
+    total: done.length + planned.length,
+    reasons: done.map((d) => d.step.reason ?? '').filter(Boolean),
+  };
+}
+
+/**
+ * Whether the lead's diagnosis is required (harness alpha.68, P6-3):
+ * `true` — the work is held until the lead diagnoses; `false` — the harness
+ * retries by itself and the lead may diagnose. `undefined` — not said (an
+ * older harness, or not a diagnosis step).
+ */
+export function diagnosisRequired(step: Pick<TrackStep, 'kind'>): boolean | undefined {
+  if (step.kind !== 'diagnosis') return undefined;
+  // Read untyped until the final alpha.68 contract types it.
+  const required = (step as { required?: unknown }).required;
+  return typeof required === 'boolean' ? required : undefined;
+}

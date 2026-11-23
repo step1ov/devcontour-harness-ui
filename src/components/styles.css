@@ -768,10 +768,40 @@
       animation: none !important;
     }
   }
+  /* The card line (ui alpha.10): a toolbar of segments, each its own button and tooltip. */
+  .hui-track {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 10px;
+    min-width: 0;
+  }
   .hui-track-root {
     position: relative;
     display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
     max-width: 100%;
+  }
+  .hui-track-caption {
+    font-size: 12px;
+    color: var(--hui-muted);
+    overflow-wrap: anywhere;
+  }
+  .hui-track-trigger[aria-expanded='true'] .hui-track-cells {
+    background: var(--hui-muted-bg);
+  }
+  /* An optional lead diagnosis (harness alpha.68): a hollow dashed diamond. */
+  .hui-dot[data-shape='diamond'][data-optional] {
+    background: transparent;
+    border: 1.5px dashed var(--hui-planned);
+  }
+  .hui-dot[data-shape='diamond'][data-optional][data-tone='decision'] {
+    border-color: var(--hui-decision);
+  }
+  .hui-dot[data-shape='diamond'][data-optional][data-tone='waiting'] {
+    border-color: var(--hui-wait);
   }
   .hui-track-trigger {
     display: inline-flex;
@@ -795,8 +825,7 @@
     align-items: center;
     gap: 6px;
   }
-  .hui-track-root:hover > .hui-tooltip,
-  .hui-track-root[data-open] > .hui-tooltip {
+  .hui-track-root > .hui-track-tip[data-open] {
     display: block;
   }
   .hui-tooltip.hui-track-tip {

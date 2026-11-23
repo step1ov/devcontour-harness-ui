@@ -366,34 +366,57 @@ test('an open tab offers a reload when the panel server serves a new build (F-AF
   await expect(prompt.getByRole('button', { name: 'Обновить страницу' })).toBeVisible();
 });
 
-test('task path: one focusable line per card, focus or tap opens the steps, Escape closes', async ({
+test('task path: a toolbar of attempts, a tooltip each, arrows move, tap toggles, Escape closes', async ({
   page,
 }) => {
+  await page.clock.setFixedTime(new Date('2026-11-19T12:05:00Z'));
   await open(page, '#/tasks');
   const card = page.getByTestId('task-locale-format');
-  const trigger = card.getByRole('button', { name: 'Путь задачи Format dates by locale' });
-  await expect(trigger).toBeVisible();
-  const tip = card.getByRole('tooltip');
-  await expect(tip).toBeHidden();
-  // The steps are the button's description for assistive technology.
-  await expect(trigger).toHaveAccessibleDescription(
-    /разбор ведущего — решение \(D1: слабое покрытие\)[\s\S]*попытка 2: код — пройдено; проверки — идёт сейчас/,
+  const bar = card.getByRole('toolbar', { name: 'Путь задачи Format dates by locale' });
+  await expect(bar).toBeVisible();
+  await expect(card.getByTestId('track-caption')).toHaveText('сейчас: проверки (попытка 2)');
+  const current = bar.getByRole('button', { name: 'Попытка 2' });
+  const diagnosis = bar.getByRole('button', { name: 'Разбор ведущего' }).first();
+  // Each segment is described by its own tooltip, not by the whole list.
+  await expect(current).toHaveAccessibleDescription(
+    'Попытка 2: код ✓ · сейчас: проверки, идёт 12 мин 50 с',
   );
-  // Keyboard: Tab reaches it and the list opens; Escape closes it.
-  await trigger.focus();
-  await expect(tip).toBeVisible();
-  await expect(tip).toContainText('попытка 2: код — пройдено; проверки — идёт сейчас');
+  await expect(diagnosis).toHaveAccessibleDescription(
+    'Разбор ведущего · D1: слабое покрытие · 14:40',
+  );
+  await expect(card.getByRole('tooltip').filter({ visible: true })).toHaveCount(0);
+  // One tab stop: Tab from the card title lands on the current attempt.
+  await card.getByRole('link').first().focus();
+  await page.keyboard.press('Tab');
+  await expect(current).toBeFocused();
+  const tip = (name: RegExp) => card.getByRole('tooltip').filter({ hasText: name });
+  await expect(tip(/^Попытка 2:/)).toBeVisible();
+  // Arrows move between segments, and only the focused one shows its tooltip.
+  await page.keyboard.press('ArrowLeft');
+  await expect(diagnosis).toBeFocused();
+  await expect(tip(/^Разбор ведущего · D1/)).toBeVisible();
+  await expect(tip(/^Попытка 2:/)).toBeHidden();
+  await page.keyboard.press('Home');
+  await expect(tip(/^Попытка 1: код ✓ · проверки ✗ — проверки не прошли/)).toBeVisible();
   await page.keyboard.press('Escape');
-  await expect(tip).toBeHidden();
-  await expect(trigger).toHaveAttribute('aria-expanded', 'false');
-  // A tap (click) opens it and a second tap closes it.
+  await expect(card.getByRole('tooltip').filter({ visible: true })).toHaveCount(0);
+  // Tab leaves the line in one step (roving focus keeps one stop).
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('Tab');
+  await expect(bar.locator(':focus')).toHaveCount(0);
+  // A tap opens a segment's tooltip and a second tap closes it.
   await page.mouse.move(0, 0);
-  await trigger.blur();
-  await trigger.click();
-  await expect(trigger).toHaveAttribute('aria-expanded', 'true');
-  await expect(tip).toBeVisible();
-  await trigger.click();
-  await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+  await current.click();
+  await expect(current).toHaveAttribute('aria-expanded', 'true');
+  await expect(tip(/^Попытка 2:/)).toBeVisible();
+  await current.click();
+  await expect(current).toHaveAttribute('aria-expanded', 'false');
+  await page.mouse.move(0, 0);
+  await expect(tip(/^Попытка 2:/)).toBeHidden();
+  // Hover shows a tooltip for the pointer.
+  await diagnosis.hover();
+  await expect(tip(/^Разбор ведущего · D1/)).toBeVisible();
+  await page.mouse.move(0, 0);
   const dot = card.locator('.hui-dot[data-tone="current"]');
   await expect(dot).toHaveCount(1);
   expect(await dot.evaluate((el) => getComputedStyle(el).animationName)).toBe('hui-pulse');

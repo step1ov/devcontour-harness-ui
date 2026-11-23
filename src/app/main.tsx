@@ -458,8 +458,21 @@ const titleOf = (r: Route): string =>
 function Nav({ route }: { route: Route }) {
   const other = lang === 'ru' ? 'en' : 'ru';
   const current = navOf(route.screen);
+  const top = useRef<HTMLElement>(null);
+  useEffect(() => {
+    // The sticky menu's height: anchors scroll into view below it (`scroll-padding-top`).
+    const el = top.current;
+    if (!el) return;
+    const set = () =>
+      document.documentElement.style.setProperty('--app-top-h', `${el.offsetHeight}px`);
+    set();
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(set);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   return (
-    <header className="app-top hui:border-b hui:border-border hui:bg-card">
+    <header ref={top} className="app-top hui:border-b hui:border-border hui:bg-card">
       <nav className="app-nav" aria-label={t.nav.label}>
         <span className="app-brand">{t.app.title}</span>
         <ul>

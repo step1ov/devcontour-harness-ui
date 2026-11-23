@@ -1590,6 +1590,62 @@ const ru = {
       'environment.reconciled': 'окружение сверено',
     } as Labels,
   },
+  r10: {
+    // Track: one tooltip per attempt group, single marks their own (P6-27).
+    groupHead: (attempt: number | undefined, rework: number | undefined) =>
+      [
+        rework !== undefined ? `Доработка ${rework}` : undefined,
+        attempt !== undefined ? `попытка ${attempt}` : undefined,
+      ]
+        .filter(Boolean)
+        .join(' · ')
+        .replace(/^./, (c) => c.toUpperCase()),
+    ahead: 'впереди',
+    passedMark: '✓',
+    failedMark: '✗',
+    current: (label: string, elapsed: string) =>
+      `сейчас: ${label}${elapsed ? `, идёт ${elapsed}` : ''}`,
+    caption: (label: string, attempt: number | undefined) =>
+      `сейчас: ${label}${attempt !== undefined ? ` (попытка ${attempt})` : ''}`,
+    captionWait: (label: string, state: string) => `сейчас: ${label} — ${state}`,
+    keys: 'Стрелки переходят между попытками и решениями; подробности — по фокусу или касанию.',
+    // Diagnosis kinds (harness alpha.68, P6-3).
+    optionalAhead: 'повтор: harness сам, ведущий может разобрать',
+    requiredAhead: 'обязательный разбор ведущего',
+    optionalDone: 'по желанию',
+    requiredDone: 'обязательный',
+    // Card: progress of the current attempt toward acceptance (P6-25).
+    attemptBadge: (n: number, max: number) => `попытка ${n} из ${max}`,
+    attemptBadgeWhy: {
+      last: 'последняя попытка',
+      spent: 'попытки израсходованы',
+      lead: 'ждёт ведущего',
+    } as Labels,
+    resets: (done: number, total: number, reasons: string) =>
+      `сбросы ведущего: ${done} из ${total}${reasons ? ` (${reasons})` : ''}`,
+    progressTitle: 'К приёмке',
+    progressRunning: (n: string, step: string, passed: number, of: number) =>
+      `${n}: идёт «${step}» — пройдено этапов ${passed} из ${of}`,
+    progressNext: (n: string) => `${n} ещё не началась`,
+    progressAccepted: 'Все этапы пройдены — принято',
+    progressFailed: (n: string, step: string) => `${n} не прошла: «${step}»`,
+    progressLabel: (n: string, pct: number) => `${n}: к приёмке ~${pct} %`,
+    retryAfter: (step: string) => `повтор после отказа: ${step}`,
+    accepted: 'принято',
+    // Card: per-attempt review (P6-10).
+    reviewTitle: 'ревью',
+    review: {
+      passed: 'одобрено',
+      failed: 'отклонено',
+      current: 'идёт',
+      waiting: 'ждёт',
+    } as Labels,
+    findings: (n: number) => rp(n, 'находка', 'находки', 'находок'),
+    reviewLine: (items: string) => `Ревью: ${items}`,
+    reviewNone: 'Ревью: ещё не было',
+    codeReview: (rounds: number, max: number | null) =>
+      `Дополнительное ревью кода (ведущий): раунды ${rounds}${max !== null ? ` из ${max}` : ''}`,
+  },
 };
 
 export type Dict = typeof ru;
@@ -2748,6 +2804,58 @@ const en: Dict = {
     action: {
       'environment.reconciled': 'environment reconciled',
     },
+  },
+  r10: {
+    groupHead: (attempt: number | undefined, rework: number | undefined) =>
+      [
+        rework !== undefined ? `Rework ${rework}` : undefined,
+        attempt !== undefined ? `attempt ${attempt}` : undefined,
+      ]
+        .filter(Boolean)
+        .join(' · ')
+        .replace(/^./, (c) => c.toUpperCase()),
+    ahead: 'ahead',
+    passedMark: '✓',
+    failedMark: '✗',
+    current: (label: string, elapsed: string) =>
+      `now: ${label}${elapsed ? `, running ${elapsed}` : ''}`,
+    caption: (label: string, attempt: number | undefined) =>
+      `now: ${label}${attempt !== undefined ? ` (attempt ${attempt})` : ''}`,
+    captionWait: (label: string, state: string) => `now: ${label} — ${state}`,
+    keys: 'Arrow keys move between attempts and decisions; focus or tap shows the details.',
+    optionalAhead: 'retry: the harness on its own, the lead may diagnose',
+    requiredAhead: 'required lead diagnosis',
+    optionalDone: 'optional',
+    requiredDone: 'required',
+    attemptBadge: (n: number, max: number) => `attempt ${n} of ${max}`,
+    attemptBadgeWhy: {
+      last: 'last attempt',
+      spent: 'attempts spent',
+      lead: 'waits for the lead',
+    },
+    resets: (done: number, total: number, reasons: string) =>
+      `lead resets: ${done} of ${total}${reasons ? ` (${reasons})` : ''}`,
+    progressTitle: 'Toward acceptance',
+    progressRunning: (n: string, step: string, passed: number, of: number) =>
+      `${n}: «${step}» running — ${passed} of ${of} stages passed`,
+    progressNext: (n: string) => `${n} has not started yet`,
+    progressAccepted: 'All stages passed — accepted',
+    progressFailed: (n: string, step: string) => `${n} failed at «${step}»`,
+    progressLabel: (n: string, pct: number) => `${n}: ~${pct} % toward acceptance`,
+    retryAfter: (step: string) => `retry after a failure at: ${step}`,
+    accepted: 'accepted',
+    reviewTitle: 'review',
+    review: {
+      passed: 'approved',
+      failed: 'rejected',
+      current: 'running',
+      waiting: 'waiting',
+    },
+    findings: (n: number) => `${n} ${n === 1 ? 'finding' : 'findings'}`,
+    reviewLine: (items: string) => `Review: ${items}`,
+    reviewNone: 'Review: none yet',
+    codeReview: (rounds: number, max: number | null) =>
+      `Extra code review (lead): rounds ${rounds}${max !== null ? ` of ${max}` : ''}`,
   },
 };
 

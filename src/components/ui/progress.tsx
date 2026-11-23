@@ -16,6 +16,7 @@ export function Progress({
   segments,
   label,
   className,
+  indicatorClassName = 'hui:bg-ok',
 }: {
   value: number;
   max: number;
@@ -24,6 +25,8 @@ export function Progress({
   /** Accessible name and value text («1 of 4 accepted»). */
   label: string;
   className?: string;
+  /** The value's colour, a `hui:bg-*` utility (default ok green). */
+  indicatorClassName?: string;
 }) {
   const safeMax = max > 0 ? max : 1;
   const pct = (n: number) => `${Math.max(0, Math.min(100, (n / safeMax) * 100))}%`;
@@ -39,7 +42,7 @@ export function Progress({
       )}
     >
       <ProgressPrimitive.Indicator
-        className="hui:h-full hui:bg-ok"
+        className={cn('hui:h-full', indicatorClassName)}
         style={{ width: pct(value), flex: 'none' }}
       />
       {segments?.map((s, i) => (
