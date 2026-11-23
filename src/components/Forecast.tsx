@@ -9,13 +9,14 @@
 
 import { useId, type ReactNode } from 'react';
 import type { ForecastView } from '../model/view.ts';
-import { dict, knownLabel, type Dict, type Lang } from '../model/dict.ts';
+import { dict, knownLabel, label, type Dict, type Lang } from '../model/dict.ts';
 import { Badge } from './ui/badge.tsx';
 import { formatRough } from '../model/format.ts';
 import { instantMs } from '../model/compat.ts';
 import { formatClock } from '../model/i18n.ts';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card.tsx';
 import { Progress } from './ui/progress.tsx';
+import { forecastAdditions, type OutlineStageView } from '../model/revision8.ts';
 
 const SIZE = 120;
 const STROKE = 12;
@@ -325,6 +326,17 @@ export function ForecastRings({
   // ui alpha.10 (P6-5): the code is accepted and the lead finishes — the ring
   // stays below 100 with a tail; only `release done` closes it.
   const finishing = release?.state === 'code-accepted';
+  // alpha.68: plan growth, the conditional figure, the infra share, the outline, the lead's stretch.
+  const more = forecastAdditions(forecast);
+  const finishMs = more.finishing
+    ? sinceMs(more.finishing.elapsedMs, more.finishing.since, now)
+    : undefined;
+  // Never show a lead estimate the lead has already exceeded (P6-5).
+  const leadOver =
+    more.finishing?.exceeded === true ||
+    (finishMs !== undefined &&
+      forecast.time.lead !== undefined &&
+      finishMs > forecast.time.lead.ms);
   const num = (x: number) =>
     new Intl.NumberFormat(lang === 'en' ? 'en' : 'ru', { maximumFractionDigits: 1 }).format(x);
   return (
@@ -352,7 +364,29 @@ export function ForecastRings({
             <p className="hui:font-medium" data-testid="release-line">
               {p.line}
             </p>
-            {finishing ? <p data-testid="release-finishing">{t.r10.leadFinishing}</p> : null}
+            {finishing ? (
+              <p data-testid="release-finishing">
+                {t.r10.leadFinishing}
+                {finishMs !== undefined
+                  ? ` (${t.r10.finishingFor(spanWords(finishMs, lang))})`
+                  : ''}
+              </p>
+            ) : null}
+            {more.conditional ? (
+              <p className="hui:text-xs hui:text-muted-foreground" data-testid="release-if">
+                {t.r10.conditional}
+              </p>
+            ) : null}
+            {more.growth ? (
+              <p className="hui:text-sm" data-testid="forecast-growth" data-by={more.growth.by}>
+                {more.growth.line}
+                {more.growth.reason ? (
+                  <span className="hui:block hui:text-xs hui:text-muted-foreground">
+                    {t.r10.growthWhy(more.growth.reason)}
+                  </span>
+                ) : null}
+              </p>
+            ) : null}
             {p.approved ? (
               <div className="hui:grid hui:gap-0.5" data-testid="forecast-figures">
                 <span className="hui-sr">{t.r6.twoFigures}: </span>
@@ -441,9 +475,14 @@ export function ForecastRings({
                 {t.r6.chain(forecast.time.chain, num(forecast.time.chain))}
               </p>
             ) : null}
-            {forecast.time.lead ? (
+            {forecast.time.lead && !leadOver ? (
               <p className="hui:text-xs hui:text-muted-foreground" data-testid="time-lead">
                 {forecast.time.lead.line}
+              </p>
+            ) : null}
+            {more.outlineTime ? (
+              <p className="hui:text-xs hui:text-muted-foreground" data-testid="time-outline">
+                {more.outlineTime.line}
               </p>
             ) : null}
             {r && (time.kind === 'known' || time.kind === 'noElapsed') ? (
@@ -456,6 +495,9 @@ export function ForecastRings({
             ) : null}
           </Tile>
         </div>
+        {more.infraShare || more.outline ? (
+          <ReleaseStages infra={more.infraShare} outline={more.outline} t={t} />
+        ) : null}
         {added.length ? (
           <div className="hui:text-sm" data-testid="forecast-added">
             <p className="hui:font-medium">{t.r5.added}</p>
@@ -509,5 +551,108 @@ export function ForecastRings({
         </details>
       </CardContent>
     </Card>
+  );
+}
+
+const STAGE_TONE: Record<string, string> = {
+  infra: 'hui:bg-series-1',
+  product: 'hui:bg-ok',
+  deploy: 'hui:bg-wait',
+  other: 'hui:bg-muted-foreground',
+};
+
+/**
+ * The release by stages (alpha.68, P6-8/P6-9): the lead's outline, one row
+ * per stage with the harness percent and whether its works are registered;
+ * without an outline, when all works are infrastructure, the estimated infra
+ * share against «продукт — ещё не спланирован»; and the hint that there is
+ * no outline. Every number and line is the harness's.
+ */
+function ReleaseStages({
+  infra,
+  outline,
+  t,
+}: {
+  infra: { share: number; line: string } | undefined;
+  outline: { state: string; stages?: OutlineStageView[]; line: string } | undefined;
+  t: Dict;
+}) {
+  const k = t.r10;
+  const stages = outline?.state === 'recorded' ? (outline.stages ?? []) : [];
+  const units = stages.reduce((n, s) => n + s.units, 0);
+  const infraPct = infra ? Math.round(infra.share * 100) : 0;
+  return (
+    <div className="hui:grid hui:gap-2 hui:text-sm" data-testid="forecast-stages">
+      <p className="hui:font-medium">{k.stagesTitle}</p>
+      {stages.length && units > 0 ? (
+        <>
+          <div
+            className="hui-stage-bar"
+            role="img"
+            aria-label={stages
+              .map((s) =>
+                k.stageRow(
+                  s.title ?? label(k.stageKind, s.kind),
+                  s.percent,
+                  label(k.stageState, s.state),
+                ),
+              )
+              .join('; ')}
+          >
+            {stages.map((s) => (
+              <span
+                key={s.id}
+                className="hui-stage-seg"
+                data-state={s.state}
+                style={{ flexGrow: s.units, flexBasis: 0 }}
+              >
+                <span
+                  className={'hui-stage-fill ' + (STAGE_TONE[s.kind] ?? STAGE_TONE.other)}
+                  style={{ width: `${Math.max(0, Math.min(100, s.percent))}%` }}
+                />
+              </span>
+            ))}
+          </div>
+          <ul className="hui:grid hui:list-none hui:gap-0.5">
+            {stages.map((s) => (
+              <li key={s.id} data-testid="forecast-stage" data-kind={s.kind} data-state={s.state}>
+                {k.stageRow(
+                  s.title ?? label(k.stageKind, s.kind),
+                  s.percent,
+                  label(k.stageState, s.state),
+                )}
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : infra ? (
+        <>
+          <div className="hui-stage-bar" role="img" aria-label={infra.line}>
+            <span className="hui-stage-seg" style={{ flexGrow: infraPct, flexBasis: 0 }}>
+              <span className="hui-stage-fill hui:bg-series-1" style={{ width: '100%' }} />
+            </span>
+            <span
+              className="hui-stage-seg"
+              data-state="unregistered"
+              style={{ flexGrow: 100 - infraPct, flexBasis: 0 }}
+            />
+          </div>
+          <ul className="hui:grid hui:list-none hui:gap-0.5">
+            <li data-testid="forecast-infra-share">{k.infraShare(infraPct)}</li>
+            <li data-state="unregistered">{k.productUnplanned}</li>
+          </ul>
+          <p className="hui:text-xs hui:text-muted-foreground">{infra.line}</p>
+        </>
+      ) : null}
+      {outline ? (
+        <p
+          className="hui:text-xs hui:text-muted-foreground"
+          data-testid="forecast-outline"
+          data-state={outline.state}
+        >
+          {outline.line}
+        </p>
+      ) : null}
+    </div>
   );
 }

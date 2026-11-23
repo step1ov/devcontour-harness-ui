@@ -4,6 +4,10 @@
 // (P6-10). Runs against --demo (playwright.config).
 import { AxeBuilder } from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
+import { spawn } from 'node:child_process';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const axeOf = (page: Page) => new AxeBuilder({ page: page as never });
 
@@ -93,3 +97,164 @@ test('a task card: the current attempt toward acceptance, the badge, the review 
     running.locator('.hui-tooltip').filter({ hasText: 'Попытки: израсходовано 2 из 3' }),
   ).toBeVisible();
 });
+
+async function startCli(file: string) {
+  const child = spawn(process.execPath, ['dist/lib/cli.js', '--lang', 'ru', '--view', file], {
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  const url = await new Promise<string>((ok, fail) => {
+    let out = '';
+    child.stdout.on('data', (c) => {
+      out += c;
+      if (out.includes('\n')) ok(JSON.parse(out.split('\n')[0]!).url);
+    });
+    child.once('exit', (code) => fail(new Error(`cli exited ${code}`)));
+  });
+  return {
+    url: url.replace(/\/?$/, '/'),
+    stop: () =>
+      new Promise<void>((ok) => {
+        child.once('exit', () => ok());
+        child.kill('SIGTERM');
+      }),
+  };
+}
+
+for (const scheme of ['light', 'dark'] as const)
+  test(`revision 8 data: stages, growth, reopened, attempt reviews, decisions (${scheme})`, async ({
+    page,
+  }) => {
+    await page.emulateMedia({ colorScheme: scheme });
+    await page.clock.setFixedTime(new Date('2026-11-19T12:05:00Z'));
+    const dir = mkdtempSync(join(tmpdir(), 'hui-e2e-a10-'));
+    const file = join(dir, 'view.json');
+    const v = JSON.parse(readFileSync('fixtures/ru/view.sample.json', 'utf8'));
+    v.viewRevision = 8;
+    Object.assign(v.forecast.progress, {
+      growth: {
+        at: '2026-11-19T11:01:00.000Z',
+        added: ['photo-gate-handoff'],
+        before: 95,
+        after: 80,
+        by: 'works',
+        line: 'план вырос: +photo-gate-handoff (было 95 % → стало 80 %)',
+      },
+    });
+    v.forecast.outline = {
+      state: 'recorded',
+      revision: 1,
+      units: 10,
+      stages: [
+        {
+          id: 'infra',
+          kind: 'infra',
+          state: 'registered',
+          units: 3,
+          registered: 3,
+          percent: 100,
+          components: [],
+        },
+        {
+          id: 'product',
+          kind: 'product',
+          state: 'partial',
+          units: 5,
+          registered: 2,
+          percent: 20,
+          components: [],
+        },
+        {
+          id: 'deploy',
+          kind: 'deploy',
+          state: 'unregistered',
+          units: 2,
+          registered: 0,
+          percent: 0,
+          components: [],
+        },
+      ],
+      line: 'план выпуска: 3 этапа, ~10 задач; зарегистрировано ~5, ещё нет ~5',
+    };
+    const w = v.works.find((x: { id: string }) => x.id === 'import-csv');
+    w.attemptReviews = [
+      {
+        attempt: 1,
+        phase: 'candidate',
+        verdict: 'rejected',
+        findings: 3,
+        notes: 0,
+        at: '2026-11-19T10:40:00.000Z',
+      },
+      {
+        attempt: 2,
+        phase: 'candidate',
+        verdict: 'rejected',
+        findings: 1,
+        notes: 1,
+        at: '2026-11-19T11:35:00.000Z',
+      },
+    ];
+    v.works.find((x: { id: string }) => x.id === 'add-greeting').reopened = {
+      at: '2026-11-19T11:00:00.000Z',
+      by: 'lead',
+      revision: 2,
+      budget: 'fresh',
+      acceptedSha: '3b1f9e0aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      spent: 1,
+      reason:
+        'переоткрыта ведущим: доработка после приёмки (принятый результат 3b1f9e0 не включён)',
+    };
+    v.decisions.unshift({
+      id: 'diagnosis:0123456789abcdef',
+      kind: 'diagnosis',
+      by: 'lead',
+      at: '2026-11-19T11:40:50.000Z',
+      workId: 'locale-format',
+      subject: 'D1',
+      temporary: false,
+      title: 'слабое покрытие · по желанию',
+      reason: 'тест не ловит лишний импорт',
+    });
+    writeFileSync(file, JSON.stringify(v));
+    const cli = await startCli(file);
+    try {
+      await page.goto(cli.url + '?lang=ru#/');
+      await expect(page.getByTestId('forecast-stages')).toContainText(
+        'продукт — 20 % (заведена часть задач)',
+      );
+      await expect(page.getByTestId('forecast-growth')).toHaveText(
+        'план вырос: +photo-gate-handoff (было 95 % → стало 80 %)',
+      );
+      await noScrollNoAxe(page);
+      await page.goto(cli.url + '?lang=ru#/tasks');
+      await expect(
+        page.getByTestId('task-import-csv').getByTestId('task-attempt-reviews'),
+      ).toHaveText(
+        'Ревью: попытка 1 — отклонено (3 находки), попытка 2 — отклонено (1 находка, 1 заметка)',
+      );
+      await expect(
+        page.getByTestId('task-add-greeting').getByTestId('task-reopened'),
+      ).toContainText('переоткрыта ведущим: доработка после приёмки');
+      await noScrollNoAxe(page);
+      await page.goto(cli.url + '?lang=ru#/decisions');
+      await expect(page.getByTestId('decision-diagnosis:0123456789abcdef')).toContainText(
+        'разбор ведущего по D1',
+      );
+      await noScrollNoAxe(page);
+    } finally {
+      await cli.stop();
+      const rmDir: string = dir;
+      if (rmDir.startsWith(join(tmpdir(), 'hui-e2e-a10-')))
+        rmSync(rmDir, { recursive: true, force: true });
+    }
+  });
+
+async function noScrollNoAxe(page: Page) {
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
+  expect(overflow, 'horizontal scroll').toBeLessThanOrEqual(0);
+  const axe = await axeOf(page).analyze();
+  const serious = axe.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical');
+  expect(serious.map((v) => `${v.id}: ${v.nodes.map((n) => n.target).join(' ')}`)).toEqual([]);
+}

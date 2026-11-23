@@ -63,18 +63,22 @@ export function stepWords(d: DrawnStep, t: Dict): string {
 
 /**
  * The words of a step's label with the diagnosis kind (harness alpha.68,
- * P6-3): a diagnosis still ahead or waiting says whether it is required
- * («обязательный разбор ведущего») or optional («повтор: harness сам,
- * ведущий может разобрать»); a taken one adds «по желанию» / «обязательный».
- * Without the field: the harness label as is.
+ * P6-3): a planned diagnosis says whether it is required («обязательный
+ * разбор ведущего») or optional («повтор: harness сам, ведущий может
+ * разобрать») — the harness label when it already says so; a waiting or
+ * taken one adds «обязательный» / «по желанию». Without the field: the
+ * harness label as is.
  */
 export function stepLabel(d: Pick<DrawnStep, 'step' | 'state'>, t: Dict): string {
   const required = diagnosisRequired(d.step);
-  if (required === undefined) return d.step.label;
+  const label = d.step.label;
+  if (required === undefined) return label;
   const k = t.r10;
-  if (d.state === 'planned' || d.state === 'waiting')
-    return required ? k.requiredAhead : k.optionalAhead;
-  return `${d.step.label} · ${required ? k.requiredDone : k.optionalDone}`;
+  // Harness alpha.68 names the planned ones itself («повтор: harness сам, …»,
+  // «обязательный разбор ведущего»): its label as is.
+  if (label === k.optionalAhead || label === k.requiredAhead) return label;
+  if (d.state === 'planned') return required ? k.requiredAhead : k.optionalAhead;
+  return `${label} · ${required ? k.requiredDone : k.optionalDone}`;
 }
 
 const upper = (s: string) => s.replace(/^./, (c) => c.toUpperCase());

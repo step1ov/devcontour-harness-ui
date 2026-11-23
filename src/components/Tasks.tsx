@@ -38,6 +38,7 @@ import {
   type AttemptProgress,
 } from '../model/track.ts';
 import type { OperatorView, WorkView } from '../model/view.ts';
+import { attemptReviewResults, reopenedOf, stageProgressOf } from '../model/revision8.ts';
 import {
   AcceptedLine,
   InfraBadge,
@@ -239,6 +240,8 @@ function TaskCardView({
   const holdLine = (holds.own.length ? view.resources?.gates.heldLine : undefined) ?? holds.plain;
   // ui alpha.10 (P6-25): the bar is the current attempt's way to acceptance.
   const prog = attemptProgress(w.track, w.status);
+  // Revision 8: an accepted work a new plan revision reopened, in the harness's words.
+  const reopened = reopenedOf(w);
   const resets = leadResets(w.track);
   const now = trackNow(w.track);
   const leadWaits =
@@ -269,8 +272,19 @@ function TaskCardView({
           {nowText}
         </p>
         {w.planned ? <p className="hui-muted">{t.r6.plannedWork}</p> : null}
+        {reopened ? (
+          <p data-testid="task-reopened" data-status="blocked">
+            {reopened.reason}
+            {knownLabel(t.r10.reopenedBudget, reopened.budget) ? (
+              <span className="hui-muted">
+                {' · '}
+                {knownLabel(t.r10.reopenedBudget, reopened.budget)}
+              </span>
+            ) : null}
+          </p>
+        ) : null}
         {w.track && !w.planned && c.phase !== 'cancelled' && c.phase !== 'planned' ? (
-          <AttemptBar prog={prog} percent={forecastPercent(view, w, prog)} t={t} />
+          <AttemptBar prog={prog} percent={forecastPercent(view, w, prog, clock)} t={t} />
         ) : null}
         {holdLine && holdLine !== firstBlocker?.plain?.trim() ? (
           <p data-testid="task-gate-held">{withWorkNames(view, holdLine)}</p>
@@ -348,12 +362,12 @@ function TaskCardView({
             </span>
           ) : null}
         </div>
-        {w.track ? <ReviewLine w={w} t={t} /> : null}
+        {w.track || attemptReviewResults(w) ? <ReviewLine w={w} t={t} /> : null}
         {/* The lead's `harness review-code` rounds: separate, only when there are any. */}
-        {!w.track || code.length ? (
+        {!(w.track || attemptReviewResults(w)) || code.length ? (
           <p data-testid="task-reviews">
             {code.length
-              ? w.track
+              ? w.track || attemptReviewResults(w)
                 ? t.r10.codeReview(rounds, cap)
                 : k.reviewRounds(rounds, cap)
               : k.noReview}
@@ -444,16 +458,32 @@ function TaskCardView({
   );
 }
 
-/** The harness readiness of the work's current attempt (`forecast.progress.works[]`), if it names this attempt. */
+/**
+ * The harness readiness of the work's current attempt: the stage span the
+ * forecast gives (alpha.68 `stageProgress`, moved on within the stage by the
+ * clock against its typical duration), else the work's percent when the
+ * forecast names this attempt. Never 100 before acceptance.
+ */
 function forecastPercent(
   view: OperatorView,
   w: WorkView,
   prog: AttemptProgress,
+  clock: number,
 ): number | undefined {
-  const f = view.forecast?.progress.works?.find((x) => x.workId === w.id);
-  if (!f || !Number.isFinite(f.percent) || f.rework) return undefined;
   if (prog.state !== 'running') return undefined;
-  if (f.attempt && prog.attempt !== undefined && f.attempt.n !== prog.attempt) return undefined;
+  const f = view.forecast?.progress.works?.find((x) => x.workId === w.id);
+  if (f?.rework) return undefined;
+  if (f?.attempt && prog.attempt !== undefined && f.attempt.n !== prog.attempt) return undefined;
+  const sp = stageProgressOf(view.forecast, w.id);
+  if (sp) {
+    const since = sp.since ? instantMs(sp.since) : NaN;
+    const within =
+      sp.typicalMs && Number.isFinite(since) && Number.isFinite(clock)
+        ? Math.max(0, Math.min(1, (clock - since) / sp.typicalMs))
+        : 0;
+    return Math.max(0, Math.min(99, Math.round((sp.from + (sp.to - sp.from) * within) * 100)));
+  }
+  if (!f || !Number.isFinite(f.percent)) return undefined;
   return Math.max(0, Math.min(99, Math.round(f.percent)));
 }
 
@@ -568,22 +598,31 @@ function AttemptBadge({
  */
 function ReviewLine({ w, t }: { w: WorkView; t: Dict }) {
   const k = t.r10;
-  const items = attemptReviews(w.track);
+  // Revision 8: the harness's own per-attempt results win over the track.
+  const sent = attemptReviewResults(w);
+  const items: string[] = sent
+    ? sent.map((r) => {
+        const head = [
+          k.groupHead(r.attempt, undefined).toLowerCase(),
+          r.phase === 'integration' ? k.integrationPhase : undefined,
+          r.earlier ? k.earlier : undefined,
+        ]
+          .filter(Boolean)
+          .join(', ');
+        const extra = [
+          r.findings ? k.findings(r.findings) : undefined,
+          r.notes ? k.notes(r.notes) : undefined,
+        ].filter(Boolean);
+        return `${head} — ${label(k.verdict, r.verdict)}${extra.length ? ` (${extra.join(', ')})` : ''}`;
+      })
+    : attemptReviews(w.track).map((r) => {
+        const head = k.groupHead(r.attempt, r.rework).toLowerCase();
+        const extra = r.findings !== undefined ? ` (${k.findings(r.findings)})` : '';
+        return `${head ? `${head} — ` : ''}${label(k.review, r.state)}${extra}`;
+      });
   return (
-    <p data-testid="task-attempt-reviews">
-      {items.length
-        ? k.reviewLine(
-            items
-              .map((r) => {
-                const head = k.groupHead(r.attempt, r.rework).toLowerCase();
-                const extra = [
-                  r.findings !== undefined ? k.findings(r.findings) : undefined,
-                ].filter(Boolean);
-                return `${head ? `${head} — ` : ''}${label(k.review, r.state)}${extra.length ? ` (${extra.join(', ')})` : ''}`;
-              })
-              .join(', '),
-          )
-        : k.reviewNone}
+    <p data-testid="task-attempt-reviews" data-source={sent ? 'harness' : 'track'}>
+      {items.length ? k.reviewLine(items.join(', ')) : k.reviewNone}
     </p>
   );
 }

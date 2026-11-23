@@ -134,6 +134,14 @@ export {
 } from './track.ts';
 export { gateHoldsOf, plannedKeys } from './tasks.ts';
 export {
+  attemptReviewResults,
+  forecastAdditions,
+  reopenedOf,
+  stageProgressOf,
+  type AttemptReviewResult,
+  type ReopenedView,
+} from './revision8.ts';
+export {
   isInfraWork,
   setupElapsed,
   setupProgressOf,

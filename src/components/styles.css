@@ -757,6 +757,29 @@
     font-weight: 600;
     color: var(--hui-warn);
   }
+  /* The release by stage (alpha.68 outline): one segment per stage, filled by its percent. */
+  .hui-stage-bar {
+    display: flex;
+    gap: 3px;
+    height: 10px;
+    width: 100%;
+  }
+  .hui-stage-seg {
+    position: relative;
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--hui-track);
+    min-width: 6px;
+  }
+  .hui-stage-seg[data-state='unregistered'] {
+    background: repeating-linear-gradient(135deg, var(--hui-track) 0 4px, transparent 4px 8px);
+    outline: 1px dashed var(--hui-planned);
+    outline-offset: -1px;
+  }
+  .hui-stage-fill {
+    display: block;
+    height: 100%;
+  }
   /* The lead finishes the release (ui alpha.10): a striped tail that breathes. */
   .hui-ring-tail {
     stroke-opacity: 0.55;

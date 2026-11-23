@@ -364,3 +364,336 @@ test('P6-5: code accepted, the lead finishing — the ring stays below 100 with 
   assert.match(css, /\.hui-ring-tail \{\s*stroke-opacity: 0\.55;\s*animation: hui-breathe/);
   assert.match(css, /prefers-reduced-motion: reduce\) \{\s*\.hui-ring-tail \{\s*animation: none/);
 });
+
+test('revision 8: the harness per-attempt review results win over the track', () => {
+  const v = structuredClone(ru);
+  const w = v.works.find((x: Json) => x.id === 'import-csv');
+  w.attemptReviews = [
+    {
+      attempt: 1,
+      phase: 'candidate',
+      verdict: 'rejected',
+      findings: 3,
+      notes: 1,
+      at: '2026-11-19T10:40:00.000Z',
+      earlier: true,
+    },
+    {
+      attempt: 2,
+      phase: 'candidate',
+      verdict: 'rejected',
+      findings: 0,
+      notes: 0,
+      at: '2026-11-19T11:35:00.000Z',
+    },
+    {
+      attempt: 2,
+      phase: 'integration',
+      verdict: 'approved',
+      findings: 0,
+      notes: 0,
+      at: '2026-11-19T11:36:00.000Z',
+    },
+    {
+      attempt: 3,
+      phase: 'candidate',
+      verdict: 'invalid',
+      findings: 0,
+      notes: 0,
+      at: '2026-11-19T11:37:00.000Z',
+    },
+    { attempt: 'x', phase: 'candidate', verdict: 'approved', findings: 0, notes: 0 },
+  ];
+  const m = card(viewOf(v), 'import-csv');
+  assert.match(m, /data-testid="task-attempt-reviews" data-source="harness"/);
+  assert.match(
+    shown(m),
+    /Ревью: попытка 1, до доработки — отклонено \(3 находки, 1 заметка\), попытка 2 — отклонено, попытка 2, интеграция — одобрено, попытка 3 — ответ не по протоколу/,
+  );
+  // An empty list: no review yet, by the harness's word.
+  w.attemptReviews = [];
+  assert.match(shown(card(viewOf(v), 'import-csv')), /Ревью: ещё не было/);
+  // Without the field (revision 7): from the track, as before.
+  assert.match(card(viewRu, 'import-csv'), /data-source="track"/);
+});
+
+test('revision 8: a reopened work says why, in the harness words, with its attempt limit', () => {
+  const v = structuredClone(ru);
+  const w = v.works.find((x: Json) => x.id === 'add-greeting');
+  w.reopened = {
+    at: '2026-11-19T11:00:00.000Z',
+    by: 'lead',
+    revision: 2,
+    budget: 'fresh',
+    acceptedSha: '3b1f9e0aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    spent: 1,
+    reason: 'переоткрыта ведущим: доработка после приёмки (принятый результат 3b1f9e0 не включён)',
+  };
+  assert.match(
+    shown(card(viewOf(v), 'add-greeting')),
+    /переоткрыта ведущим: доработка после приёмки \(принятый результат 3b1f9e0 не включён\) · свой предел попыток/,
+  );
+  w.reopened.budget = 'later-kind';
+  const later = shown(card(viewOf(v), 'add-greeting'));
+  assert.match(later, /не включён\)/);
+  assert.doesNotMatch(later, /не включён\) ·/);
+  delete w.reopened;
+  assert.doesNotMatch(card(viewOf(v), 'add-greeting'), /task-reopened/);
+});
+
+test('revision 8: the harness diagnosis labels stay as sent; waiting and taken ones say which', () => {
+  const steps = drawnSteps({
+    steps: [
+      {
+        kind: 'diagnosis',
+        state: 'planned',
+        actor: 'lead',
+        label: 'повтор: harness сам, ведущий может разобрать',
+        required: false,
+      } as never,
+      {
+        kind: 'diagnosis',
+        state: 'waiting',
+        actor: 'lead',
+        label: 'разбор ведущего',
+        required: true,
+      } as never,
+      {
+        kind: 'diagnosis',
+        state: 'decision',
+        actor: 'lead',
+        label: 'разбор ведущего',
+        required: true,
+      } as never,
+    ],
+  });
+  assert.equal(stepLabel(steps[0]!, t), 'повтор: harness сам, ведущий может разобрать');
+  assert.equal(stepLabel(steps[1]!, t), 'разбор ведущего · обязательный');
+  assert.equal(stepLabel(steps[2]!, t), 'разбор ведущего · обязательный');
+});
+
+test('revision 8 (P6-26): the decisions the harness fills render with their kinds and actors', async () => {
+  const { Decisions } = await import('../src/index.ts');
+  const v = structuredClone(ru);
+  v.decisions = [
+    {
+      id: 'diagnosis:0123456789abcdef',
+      kind: 'diagnosis',
+      by: 'lead',
+      at: '2026-11-19T11:40:50.000Z',
+      workId: 'locale-format',
+      subject: 'D1',
+      temporary: false,
+      title: 'слабое покрытие · по желанию',
+      reason: 'тест не ловит лишний импорт',
+    },
+    {
+      id: 'reset:0123456789abcdef',
+      kind: 'reset',
+      by: 'operator',
+      at: '2026-11-19T11:38:00.000Z',
+      workId: 'export-csv',
+      temporary: false,
+      title: '+1',
+    },
+    {
+      id: 'cancel:0123456789abcdef',
+      kind: 'cancel',
+      by: 'operator',
+      at: '2026-11-19T11:20:00.000Z',
+      workId: 'docs-page',
+      temporary: false,
+    },
+    {
+      id: 'reapproval:0123456789abcdef',
+      kind: 'reapproval',
+      by: 'lead',
+      at: '2026-11-19T11:10:00.000Z',
+      subject: 'g1',
+      temporary: false,
+      reason: 'новая задача в плане',
+    },
+    {
+      id: 'later:0123456789abcdef',
+      kind: 'later-kind',
+      by: 'lead',
+      at: '2026-11-19T11:00:00.000Z',
+      temporary: false,
+    },
+  ];
+  const m = shown(html(<Decisions view={viewOf(v)} lang="ru" timeZone={TZ} />));
+  assert.match(m, /Все решения \(5\)/);
+  assert.match(
+    m,
+    /11:40 разбор ведущего по D1 \( locale-format \) · кто решил: ведущий слабое покрытие · по желанию причина: тест не ловит лишний импорт/,
+  );
+  assert.match(m, /11:38 новый предел попыток \( export-csv \) · кто решил: вы \+1/);
+  assert.match(m, /11:20 отмена \( docs-page \) · кто решил: вы/);
+  assert.match(m, /повторное согласование плана по g1/);
+  // An unknown kind is shown as its code.
+  assert.match(m, /11:00 later-kind/);
+  assert.match(m, /Временных решений нет/);
+});
+
+test('alpha.68 forecast: the lead stretch with its live time, no exceeded estimate, the conditional figure, plan growth', async () => {
+  const { Overview } = await import('../src/index.ts');
+  const v = structuredClone(ru);
+  Object.assign(v.forecast.progress, {
+    percent: 95,
+    conditional: true,
+    release: { state: 'code-accepted', line: 'код принят, ведущий работает' },
+    growth: {
+      at: '2026-11-19T11:01:00.000Z',
+      added: ['photo-gate-handoff'],
+      before: 95,
+      after: 80,
+      by: 'outline',
+      reason: 'передача секрета из жизненного цикла',
+      line: 'план вырос: +photo-gate-handoff (было 95 % → стало 80 %)',
+    },
+  });
+  // The lead's usual 30 min, the stretch started 40 min before the viewer's clock.
+  v.forecast.time.finishing = { since: '2026-11-19T11:25:00.000Z', elapsedMs: 60_000 };
+  const now = Date.parse('2026-11-19T12:05:00.000Z');
+  const m = shown(html(<Overview view={viewOf(v)} lang="ru" now={now} />));
+  assert.match(m, /Код принят · осталось немного: ведущий завершает работу \(идёт уже 40 мин\)/);
+  assert.doesNotMatch(m, /работа ведущего ~30 мин/);
+  assert.match(
+    m,
+    /Цифра — по известному плану: если ведущий добавит задачи, она сдвинется назад\./,
+  );
+  assert.match(
+    m,
+    /план вырос: \+photo-gate-handoff \(было 95 % → стало 80 %\) почему: передача секрета из жизненного цикла/,
+  );
+  // Within the estimate: the lead line stays.
+  v.forecast.time.finishing = { since: '2026-11-19T12:00:00.000Z', elapsedMs: 60_000 };
+  assert.match(
+    shown(html(<Overview view={viewOf(v)} lang="ru" now={now} />)),
+    /работа ведущего ~30 мин/,
+  );
+  // The harness says it is exceeded: hidden whatever the clock.
+  v.forecast.time.finishing.exceeded = true;
+  assert.doesNotMatch(
+    shown(html(<Overview view={viewOf(v)} lang="ru" now={now} />)),
+    /работа ведущего ~30 мин/,
+  );
+  // A revision 7 document: none of these lines.
+  const old = html(<Overview view={viewRu} lang="ru" now={now} />);
+  for (const id of ['release-if', 'forecast-growth', 'forecast-stages', 'time-outline'])
+    assert.doesNotMatch(old, new RegExp(`data-testid="${id}"`));
+});
+
+test('alpha.68 forecast: stages of the release outline, the infra share without one, the no-outline hint', async () => {
+  const { Overview } = await import('../src/index.ts');
+  const v = structuredClone(ru);
+  v.forecast.outline = {
+    state: 'recorded',
+    revision: 1,
+    units: 10,
+    stages: [
+      {
+        id: 'infra',
+        kind: 'infra',
+        state: 'registered',
+        units: 3,
+        registered: 3,
+        percent: 100,
+        components: [],
+      },
+      {
+        id: 'product',
+        title: 'Фото в карточке',
+        kind: 'product',
+        state: 'partial',
+        units: 5,
+        registered: 2,
+        percent: 20,
+        components: [],
+      },
+      {
+        id: 'deploy',
+        kind: 'deploy',
+        state: 'unregistered',
+        units: 2,
+        registered: 0,
+        percent: 0,
+        components: [],
+      },
+    ],
+    line: 'план выпуска: 3 этапа, ~10 задач; зарегистрировано ~5, ещё нет ~5',
+  };
+  v.forecast.time.outline = {
+    units: 5,
+    basis: 'default',
+    line: 'по плану выпуска ещё ~5 задач: ~1–3 ч (оценка по размеру)',
+  };
+  const m = html(<Overview view={viewOf(v)} lang="ru" />);
+  const t1 = shown(m);
+  assert.match(
+    t1,
+    /Выпуск по этапам инфраструктура — 100 % \(задачи заведены\) Фото в карточке — 20 % \(заведена часть задач\) выкладка — 0 % \(задачи ещё не заведены \(оценка\)\)/,
+  );
+  assert.match(t1, /план выпуска: 3 этапа, ~10 задач; зарегистрировано ~5, ещё нет ~5/);
+  assert.match(t1, /по плану выпуска ещё ~5 задач: ~1–3 ч \(оценка по размеру\)/);
+  // Segments grow by the stage volume and fill by its percent.
+  assert.match(
+    m,
+    /data-state="partial" style="flex-grow:5;flex-basis:0"><span class="hui-stage-fill hui:bg-ok" style="width:20%"/,
+  );
+  assert.match(m, /role="img" aria-label="инфраструктура — 100 %/);
+  // No outline, all works infra: the estimated infra share against an unplanned product.
+  const i = structuredClone(ru);
+  i.forecast.progress.infraShare = {
+    share: 0.3,
+    line: 'инфраструктура — 30 % выпуска (оценка), продукт ещё не спланирован',
+  };
+  i.forecast.outline = {
+    state: 'missing',
+    code: 'RELEASE_OUTLINE_MISSING',
+    line: 'плана выпуска нет — прогноз по одному графу: ведущий записывает его командой harness lead outline --file F',
+  };
+  const n = html(<Overview view={viewOf(i)} lang="ru" />);
+  assert.match(shown(n), /инфраструктура — 30 % \(оценка\) продукт — ещё не спланирован/);
+  assert.match(n, /flex-grow:30;flex-basis:0/);
+  assert.match(n, /data-testid="forecast-outline" data-state="missing"/);
+  assert.match(shown(n), /плана выпуска нет — прогноз по одному графу/);
+  // A malformed outline stage is skipped, not thrown on.
+  v.forecast.outline.stages.push({
+    id: 'bad',
+    kind: 'other',
+    state: 'partial',
+    units: -1,
+    registered: 0,
+    percent: 0,
+  });
+  assert.doesNotMatch(shown(html(<Overview view={viewOf(v)} lang="ru" />)), /прочее/);
+});
+
+test('alpha.68 card bar: the stage span of the forecast, moved on by the clock against its typical time', () => {
+  const v = structuredClone(ru);
+  v.forecast.progress.works = [
+    {
+      workId: 'locale-format',
+      percent: 25,
+      attempt: { n: 2, max: 3 },
+      stageProgress: {
+        stage: 'checks',
+        from: 0.25,
+        to: 0.5,
+        since: '2026-11-19T11:52:10.000Z',
+        typicalMs: 600_000,
+        samples: 6,
+      },
+      line: 'DEMO-2: ~25 %',
+    },
+  ];
+  const at = (iso: string) => {
+    const m = html(<Tasks view={viewOf(v)} lang="ru" timeZone={TZ} now={Date.parse(iso)} />);
+    return /aria-valuetext="Попытка 2: к приёмке ~(\d+) %"/.exec(m)![1];
+  };
+  assert.equal(at('2026-11-19T11:52:10.000Z'), '25');
+  assert.equal(at('2026-11-19T11:57:10.000Z'), '38');
+  // Past the typical time: the stage end, not beyond.
+  assert.equal(at('2026-11-19T13:00:00.000Z'), '50');
+});
