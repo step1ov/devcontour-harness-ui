@@ -343,6 +343,10 @@ export function ForecastRings({
   const review = releaseReviewOf(forecast);
   const waitsReview = releaseWaitsForReview(forecast);
   const shown = finishing || waitsReview ? Math.min(percent, 99) : percent;
+  // Review P3: under the review cap the visible line and the accessible value
+  // say the capped figure and why, never the harness's «100 %».
+  const line =
+    waitsReview && (shown < percent || /100\s?%/.test(p.line)) ? t.r11.cappedLine(shown) : p.line;
   // alpha.68: plan growth, the conditional figure, the infra share, the outline, the lead's stretch.
   const more = forecastAdditions(forecast);
   const finishMs = more.finishing
@@ -376,10 +380,10 @@ export function ForecastRings({
             center={f.percent(shown)}
             sub={release?.state === 'code-accepted' ? t.r6.codeAccepted : f.doneWord}
             valueNow={shown}
-            valueText={f.releaseText(p.line)}
+            valueText={f.releaseText(line)}
           >
             <p className="hui:font-medium" data-testid="release-line">
-              {p.line}
+              {line}
             </p>
             {finishing ? (
               <p data-testid="release-finishing">
@@ -407,8 +411,14 @@ export function ForecastRings({
             {p.approved ? (
               <div className="hui:grid hui:gap-0.5" data-testid="forecast-figures">
                 <span className="hui-sr">{t.r6.twoFigures}: </span>
-                <span data-testid="figure-approved">{t.r6.approvedFigure(p.approved.percent)}</span>
-                <span data-testid="figure-planned">{t.r6.plannedFigure(p.percent)}</span>
+                <span data-testid="figure-approved">
+                  {t.r6.approvedFigure(
+                    waitsReview ? Math.min(p.approved.percent, 99) : p.approved.percent,
+                  )}
+                </span>
+                <span data-testid="figure-planned">
+                  {t.r6.plannedFigure(waitsReview ? shown : p.percent)}
+                </span>
                 {p.planned ? (
                   <span className="hui:text-xs hui:text-muted-foreground">{p.planned.line}</span>
                 ) : null}

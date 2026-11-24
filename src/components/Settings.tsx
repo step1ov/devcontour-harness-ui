@@ -377,7 +377,20 @@ export function HarnessModePanel({ view, lang = 'ru' }: { view: OperatorView; la
   if (!m) return null;
   const t = dict(lang);
   const r = t.r11;
-  const guard = m.mode === 'strict' ? r.guardStrict : m.writeGuard ? r.guardOn : r.guardOff;
+  // Strict mode: only the isolation the harness reports (`resources.isolation.sandbox`);
+  // `isolation.mode: none` disables the sandbox, and without the field nothing is claimed.
+  const sandbox = view.resources?.isolation.sandbox;
+  const strictOff = m.mode === 'strict' && sandbox === 'none';
+  const guard =
+    m.mode === 'strict'
+      ? sandbox === 'os'
+        ? r.guardStrict
+        : sandbox === 'none'
+          ? r.guardStrictNone
+          : r.guardStrictUnknown
+      : m.writeGuard
+        ? r.guardOn
+        : r.guardOff;
   return (
     <div
       className="hui-panel"
@@ -392,7 +405,7 @@ export function HarnessModePanel({ view, lang = 'ru' }: { view: OperatorView; la
       </p>
       <p
         data-testid="harness-mode-guard"
-        data-status={m.mode === 'light' && !m.writeGuard ? 'blocked' : undefined}
+        data-status={(m.mode === 'light' && !m.writeGuard) || strictOff ? 'blocked' : undefined}
       >
         {guard}
       </p>

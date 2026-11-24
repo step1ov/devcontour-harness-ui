@@ -1713,6 +1713,9 @@ const ru = {
     guardOff:
       'Защиты записи нет: исполнитель и проверки могут писать вне дерева попытки (harness doctor называет причину).',
     guardStrict: 'Песочница ОС: исполнитель и проверки изолированы, как в прежнем режиме.',
+    guardStrictNone:
+      'Строгий режим без песочницы ОС (isolation.mode: none): исполнитель и проверки не изолированы.',
+    guardStrictUnknown: 'Строгий режим; изоляцию исполнителя и проверок представление не называет.',
     roundsUnlimited: (used: number) => `раундов ${used}, без предела`,
     roundsUnlimitedWhy: 'облегчённый режим; бюджет — время и стоимость выпуска',
     roundCapUnlimited: (cap: number) => `без предела (облегчённый режим; в строгом — ${cap})`,
@@ -1735,6 +1738,8 @@ const ru = {
       attempt: 'по ранней попытке',
     } as Labels,
     releaseCapped: 'Выпуск не покажет 100 %, пока ревью выпуска не одобрено.',
+    cappedLine: (p: number) => `готово ~${p} % — выпуск ждёт одобрения ревью выпуска`,
+    approvedEarlier: (state: string) => `одобрено ранее · ${state}`,
     heldCause: {
       'gate-definition': 'проверка не назвала причину — исправить команду проверки, ход ведущего',
       'sandbox-process-list':
@@ -3014,6 +3019,10 @@ const en: Dict = {
     guardOff:
       'No write guard: the writer and the checks may write outside the attempt tree (harness doctor names the cause).',
     guardStrict: 'OS sandbox: the writer and the checks are isolated, as in the former mode.',
+    guardStrictNone:
+      'Strict mode without the OS sandbox (isolation.mode: none): the writer and the checks are not isolated.',
+    guardStrictUnknown:
+      'Strict mode; the view does not name the isolation of the writer and the checks.',
     roundsUnlimited: (used: number) => `${used} rounds, no limit`,
     roundsUnlimitedWhy: 'light mode; the budget is the release time and cost',
     roundCapUnlimited: (cap: number) => `no limit (light mode; ${cap} in strict)`,
@@ -3036,6 +3045,8 @@ const en: Dict = {
       attempt: 'from an early attempt',
     },
     releaseCapped: 'The release shows no 100 % until the release review is approved.',
+    cappedLine: (p: number) => `~${p} % done — the release waits for the release review approval`,
+    approvedEarlier: (state: string) => `approved earlier · ${state}`,
     heldCause: {
       'gate-definition': 'the check named no cause — fix the check command, the lead’s move',
       'sandbox-process-list':

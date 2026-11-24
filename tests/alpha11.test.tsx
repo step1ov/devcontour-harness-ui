@@ -411,3 +411,109 @@ test('a held gate names its cause: «проверка не назвала при
   assert.doesNotMatch(html(<ResourcesPanel view={old} lang="ru" />), /resources-held-cause/);
   assert.doesNotMatch(html(<Tasks view={old} lang="ru" timeZone={TZ} />), /task-gate-cause/);
 });
+
+test('review P1: strict mode claims OS isolation only when the harness reports the sandbox', () => {
+  const strict = (sandbox: 'os' | 'none' | undefined) =>
+    html(
+      <HarnessModePanel
+        view={r9((d) => {
+          d.settings.harnessMode = { mode: 'strict', default: false, writeGuard: false };
+          if (sandbox) d.resources.isolation.sandbox = sandbox;
+          else delete d.resources;
+        })}
+        lang="ru"
+      />,
+    );
+  assert.match(
+    part(strict('os'), 'harness-mode-guard'),
+    /^Песочница ОС: исполнитель и проверки изолированы/,
+  );
+  const none = strict('none');
+  assert.match(part(none, 'harness-mode-guard'), /без песочницы ОС \(isolation\.mode: none\)/);
+  assert.doesNotMatch(none, /изолированы, как/);
+  assert.match(none, /data-testid="harness-mode-guard" data-status="blocked"/);
+  const absent = strict(undefined);
+  assert.match(
+    part(absent, 'harness-mode-guard'),
+    /изоляцию исполнителя и проверок представление не называет/,
+  );
+  assert.doesNotMatch(absent, /изолированы/);
+});
+
+test('review P2: a release round approved earlier is not shown as the current acceptance when stale', () => {
+  const v = r9((d) => {
+    const rel = d.reviews.find((x: Json) => x.kind === 'release');
+    rel.approved = true;
+    rel.open = { blocking: 0, notes: 0 };
+    Object.assign(d.forecast.progress.release.review, { status: 'stale', open: 0, blocking: 0 });
+  });
+  for (const m of [
+    html(<Reviews view={v} lang="ru" timeZone={TZ} />),
+    html(<Tasks view={v} lang="ru" timeZone={TZ} />),
+  ]) {
+    const card = part(m, 'review-release-release');
+    assert.match(card, /^выпуск одобрено ранее · устарело/);
+    const at = m.indexOf('data-testid="review-release-release"');
+    const badge = m.slice(
+      m.indexOf('data-testid="review-verdict"', at) - 40,
+      m.indexOf('data-testid="review-verdict"', at),
+    );
+    assert.match(badge, /hui-warn/);
+    assert.doesNotMatch(badge, /hui-ok/);
+  }
+  // Approved now: green «одобрено»; the plan subject is untouched.
+  const ok = r9((d) => {
+    d.reviews.find((x: Json) => x.kind === 'release').approved = true;
+    d.forecast.progress.release.review.status = 'approved';
+  });
+  const m = html(<Reviews view={ok} lang="ru" timeZone={TZ} />);
+  assert.match(part(m, 'review-release-release'), /^выпуск одобрено /);
+  assert.doesNotMatch(m, /одобрено ранее/);
+  assert.match(
+    part(html(<Reviews view={v} lang="ru" timeZone={TZ} />), 'review-plan-g1'),
+    /^план одобрено/,
+  );
+});
+
+test('review P3: under the review cap the line and the accessible value say the capped figure, never 100 %', () => {
+  const v = r9((d) => {
+    d.forecast.progress.percent = 100;
+    d.forecast.progress.release.state = 'done';
+    d.forecast.progress.line = 'готово 100 %, осталось задач: 0 из 6';
+    Object.assign(d.forecast.progress.release.review, {
+      status: 'not-run',
+      round: undefined,
+      open: undefined,
+      blocking: undefined,
+    });
+  });
+  const m = html(
+    <ForecastRings forecast={v.forecast!} lang="ru" now={Date.parse(v.generatedAt)} />,
+  );
+  const tile = part(m, 'ring-release');
+  assert.equal(part(m, 'release-line'), 'готово ~99 % — выпуск ждёт одобрения ревью выпуска');
+  assert.match(m, /aria-valuetext="До релиза: готово ~99 % — выпуск ждёт одобрения ревью выпуска"/);
+  assert.match(m, /aria-valuenow="99"/);
+  const ring = m.slice(
+    m.indexOf('data-testid="ring-release"'),
+    m.indexOf('data-testid="release-review"'),
+  );
+  assert.doesNotMatch(ring.replace(/<[^>]+>/g, ' '), /100\s?%/);
+  assert.doesNotMatch(ring, /aria-valuetext="[^"]*100\s?%/);
+  assert.ok(tile.length > 0);
+  // Approved: the harness line as sent.
+  const ok = r9((d) => {
+    d.forecast.progress.percent = 100;
+    d.forecast.progress.release.state = 'done';
+    d.forecast.progress.line = 'готово 100 %, осталось задач: 0 из 6';
+    d.forecast.progress.release.review.status = 'approved';
+  });
+  const o = html(<ForecastRings forecast={ok.forecast!} lang="ru" />);
+  assert.equal(part(o, 'release-line'), 'готово 100 %, осталось задач: 0 из 6');
+  // English.
+  const e = html(<ForecastRings forecast={v.forecast!} lang="en" />);
+  assert.equal(
+    part(e, 'release-line'),
+    '~99 % done — the release waits for the release review approval',
+  );
+});

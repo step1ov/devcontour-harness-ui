@@ -54,7 +54,7 @@ import {
   type ScreenProps,
 } from './common.tsx';
 import { ReviewSubjectCard } from './Reviews.tsx';
-import { heldCauses, reviewRoundsUnlimited } from '../model/revision9.ts';
+import { heldCauses, releaseReviewOf, reviewRoundsUnlimited } from '../model/revision9.ts';
 import { Badge, type Tone } from './ui/badge.tsx';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card.tsx';
 import { Tooltip } from './ui/tooltip.tsx';
@@ -166,6 +166,7 @@ export function Tasks({ view, lang = 'ru', now, onOpenWork, workHref, timeZone }
               links={links}
               collapsed
               unlimited={reviewRoundsUnlimited(view)}
+              releaseStatus={releaseReviewOf(view.forecast)?.status}
             />
           ))}
         </Block>

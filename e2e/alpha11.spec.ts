@@ -195,3 +195,32 @@ test('the demo (an older view) has no mode badge and no release review block', a
   await expect(page.getByTestId('harness-mode')).toHaveCount(0);
   await expect(page.getByTestId('release-review')).toHaveCount(0);
 });
+
+test('review fixes: a stale release approval and a capped 100 % in the browser', async ({
+  page,
+}) => {
+  const v = revision9({ status: 'stale', open: 0, blocking: 0 });
+  const rel = v.reviews.find((x: { kind: string }) => x.kind === 'release');
+  rel.approved = true;
+  rel.open = { blocking: 0, notes: 0 };
+  v.forecast.progress.percent = 100;
+  v.forecast.progress.line = 'готово 100 %, осталось задач: 0 из 6';
+  await withView(v, async (url) => {
+    await page.goto(url + '?lang=ru#/');
+    await expect(page.getByTestId('release-line')).toHaveText(
+      'готово ~99 % — выпуск ждёт одобрения ревью выпуска',
+    );
+    const ring = page.getByTestId('ring-release').getByRole('progressbar');
+    await expect(ring).toHaveAttribute('aria-valuenow', '99');
+    await expect(ring).toHaveAttribute(
+      'aria-valuetext',
+      'До релиза: готово ~99 % — выпуск ждёт одобрения ревью выпуска',
+    );
+    await noScrollNoAxe(page);
+    await page.goto(url + '?lang=ru#/tasks');
+    await expect(
+      page.getByTestId('review-release-release').getByTestId('review-verdict'),
+    ).toHaveText('одобрено ранее · устарело');
+    await noScrollNoAxe(page);
+  });
+});

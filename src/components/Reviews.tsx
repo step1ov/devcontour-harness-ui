@@ -3,10 +3,15 @@
 // for the operator. Pure render of an `OperatorView`.
 
 import type { Dict, Lang } from '../model/dict.ts';
-import { dict, label } from '../model/dict.ts';
+import { dict, knownLabel, label } from '../model/dict.ts';
 import { formatUsd } from '../model/format.ts';
 import type { Escalation, OperatorView, ReviewSubjectView } from '../model/view.ts';
-import { reviewRoundsUnlimited, roundsWithoutLimit } from '../model/revision9.ts';
+import {
+  releaseReviewOf,
+  reviewRoundsUnlimited,
+  roundsWithoutLimit,
+  type ReleaseReviewView,
+} from '../model/revision9.ts';
 import {
   Clipped,
   Codes,
@@ -33,6 +38,7 @@ export function ReviewSubjectCard({
   links,
   collapsed,
   unlimited = false,
+  releaseStatus,
 }: {
   r: ReviewSubjectView;
   lang: Lang;
@@ -40,15 +46,34 @@ export function ReviewSubjectCard({
   collapsed?: boolean;
   /** `settings.thresholds.reviewRoundsUnlimited` (revision 9): plan rounds without a limit. */
   unlimited?: boolean;
+  /**
+   * Revision 9: the current release acceptance (`forecast.progress.release.review.status`).
+   * A release round approved earlier is not the current acceptance when it is stale.
+   */
+  releaseStatus?: ReleaseReviewView['status'] | undefined;
 }) {
   const t = dict(lang);
   const v = t.reviews;
+  const earlier =
+    r.kind === 'release' &&
+    r.approved &&
+    releaseStatus !== undefined &&
+    releaseStatus !== 'approved';
   return (
     <article className="hui-panel hui-card" data-testid={`review-${r.kind}-${r.subject}`}>
       <div className="hui-row">
         <strong>{label(v.kind, r.kind)}</strong>
-        <span className={'hui-badge ' + (r.approved ? 'hui-ok' : 'hui-warn')}>
-          {r.approved ? v.approved : v.notApproved}
+        <span
+          className={'hui-badge ' + (r.approved && !earlier ? 'hui-ok' : 'hui-warn')}
+          data-testid="review-verdict"
+        >
+          {earlier
+            ? t.r11.approvedEarlier(
+                knownLabel(t.r11.releaseReview, releaseStatus!) ?? releaseStatus!,
+              )
+            : r.approved
+              ? v.approved
+              : v.notApproved}
         </span>
         {r.workId ? <WorkRef id={r.workId} {...links} /> : null}
         {r.sameVendor ? <span className="hui-badge hui-warn">{v.sameVendor}</span> : null}
@@ -149,6 +174,7 @@ export function Reviews({
   const v = t.reviews;
   const links = { onOpenWork, workHref };
   const unlimited = reviewRoundsUnlimited(view);
+  const releaseStatus = releaseReviewOf(view.forecast)?.status;
   return (
     <section className="hui hui-reviews" aria-labelledby="hui-reviews-title" lang={lang}>
       <Heading t={t} term="review" level={2} id="hui-reviews-title">
@@ -207,6 +233,7 @@ export function Reviews({
               links={links}
               collapsed={Boolean(collapseFindings)}
               unlimited={unlimited}
+              releaseStatus={releaseStatus}
             />
           ))}
         </>
