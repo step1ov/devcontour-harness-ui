@@ -67,6 +67,12 @@ function ReleaseLine({ view, lang }: { view: OperatorView; lang: Lang }) {
         {knownLabel(t.r6.releaseState, r.state) ?? r.state}
       </Badge>
       {r.line !== knownLabel(t.r6.releaseState, r.state) ? <> {r.line}</> : null}
+      {r.review ? (
+        // Revision 9: the release acceptance review, in the harness's words.
+        <span className="hui:block hui:text-xs" data-testid="lead-release-review">
+          {t.r11.releaseReviewTitle}: {r.review.line}
+        </span>
+      ) : null}
     </p>
   );
 }

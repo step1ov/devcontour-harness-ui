@@ -17,6 +17,11 @@ import { formatClock } from '../model/i18n.ts';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card.tsx';
 import { Progress } from './ui/progress.tsx';
 import { forecastAdditions, type OutlineStageView } from '../model/revision8.ts';
+import {
+  releaseReviewOf,
+  releaseWaitsForReview,
+  type ReleaseReviewView,
+} from '../model/revision9.ts';
 
 const SIZE = 120;
 const STROKE = 12;
@@ -333,7 +338,15 @@ export function ForecastRings({
   const finishing = release?.state === 'code-accepted';
   // Review P1: while the lead finishes, the figure, its accessible value and
   // the ring stay below 100 together; only `release done` reaches 100.
-  const shown = finishing ? Math.min(percent, 99) : percent;
+  // Revision 9: a required release review not approved yet holds the release
+  // below 100 too (the harness caps it; the panel never contradicts it).
+  const review = releaseReviewOf(forecast);
+  const waitsReview = releaseWaitsForReview(forecast);
+  const shown = finishing || waitsReview ? Math.min(percent, 99) : percent;
+  // Review P3: under the review cap the visible line and the accessible value
+  // say the capped figure and why, never the harness's «100 %».
+  const line =
+    waitsReview && (shown < percent || /100\s?%/.test(p.line)) ? t.r11.cappedLine(shown) : p.line;
   // alpha.68: plan growth, the conditional figure, the infra share, the outline, the lead's stretch.
   const more = forecastAdditions(forecast);
   const finishMs = more.finishing
@@ -367,10 +380,10 @@ export function ForecastRings({
             center={f.percent(shown)}
             sub={release?.state === 'code-accepted' ? t.r6.codeAccepted : f.doneWord}
             valueNow={shown}
-            valueText={f.releaseText(p.line)}
+            valueText={f.releaseText(line)}
           >
             <p className="hui:font-medium" data-testid="release-line">
-              {p.line}
+              {line}
             </p>
             {finishing ? (
               <p data-testid="release-finishing">
@@ -398,8 +411,14 @@ export function ForecastRings({
             {p.approved ? (
               <div className="hui:grid hui:gap-0.5" data-testid="forecast-figures">
                 <span className="hui-sr">{t.r6.twoFigures}: </span>
-                <span data-testid="figure-approved">{t.r6.approvedFigure(p.approved.percent)}</span>
-                <span data-testid="figure-planned">{t.r6.plannedFigure(p.percent)}</span>
+                <span data-testid="figure-approved">
+                  {t.r6.approvedFigure(
+                    waitsReview ? Math.min(p.approved.percent, 99) : p.approved.percent,
+                  )}
+                </span>
+                <span data-testid="figure-planned">
+                  {t.r6.plannedFigure(waitsReview ? shown : p.percent)}
+                </span>
                 {p.planned ? (
                   <span className="hui:text-xs hui:text-muted-foreground">{p.planned.line}</span>
                 ) : null}
@@ -422,6 +441,13 @@ export function ForecastRings({
                   <span className="hui:text-xs hui:text-muted-foreground">{release.line}</span>
                 ) : null}
               </p>
+            ) : null}
+            {review ? (
+              <ReleaseReview
+                review={review}
+                lang={lang}
+                capped={waitsReview && (finishing || percent >= 99)}
+              />
             ) : null}
             {p.lead ? (
               <details className="hui-term" data-testid="forecast-lead">
@@ -659,6 +685,90 @@ function ReleaseStages({
           data-state={outline.state}
         >
           {outline.line}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/** Tone of the release review state: approved — ok, blocking findings — bad, else warn. */
+const reviewTone = (r: ReleaseReviewView) =>
+  r.status === 'approved'
+    ? 'ok'
+    : r.status === 'findings' && (r.blocking ?? 0) > 0
+      ? 'bad'
+      : r.status === 'not-run' && !r.required
+        ? 'neutral'
+        : 'warn';
+
+/**
+ * «Ревью выпуска» (revision 9, harness 0.1.0-alpha.69): the acceptance review
+ * of the release — its state (не запускалось / устарело / замечания N /
+ * одобрено), the round, whether `release done` waits for it, the release
+ * base and the harness line. Every value is the harness's.
+ */
+export function ReleaseReview({
+  review,
+  lang = 'ru',
+  capped = false,
+}: {
+  review: ReleaseReviewView;
+  lang?: Lang;
+  /** The code is accepted and only the review holds the release: say why it is not 100 %. */
+  capped?: boolean;
+}) {
+  const r = dict(lang).r11;
+  const state =
+    review.status === 'findings'
+      ? r.releaseFindings(review.open ?? review.blocking ?? 0, review.blocking)
+      : (knownLabel(r.releaseReview, review.status) ?? review.status);
+  const base = review.base
+    ? r.releaseBase(
+        review.base,
+        review.baseSource ? (knownLabel(r.baseSource, review.baseSource) ?? review.baseSource) : '',
+      )
+    : undefined;
+  return (
+    <div
+      className="hui-release-review hui:grid hui:gap-0.5 hui:rounded-md hui:border hui:border-border hui:p-2 hui:text-start"
+      data-testid="release-review"
+      data-status={review.status}
+      data-required={review.required ? 'true' : 'false'}
+    >
+      <p className="hui:m-0">
+        <span className="hui:font-medium">{r.releaseReviewTitle}:</span>{' '}
+        <Badge tone={reviewTone(review)} data-testid="release-review-state">
+          {state}
+        </Badge>
+        {review.round !== undefined ? (
+          <span className="hui:text-xs hui:text-muted-foreground">
+            {' '}
+            · {r.releaseRound(review.round)}
+          </span>
+        ) : null}
+      </p>
+      {review.status !== 'approved' ? (
+        <p className="hui:m-0 hui:text-sm" data-testid="release-review-required">
+          {review.required ? r.releaseRequired : r.releaseAdvisory}
+        </p>
+      ) : null}
+      {capped ? (
+        <p className="hui:m-0 hui:text-sm" data-testid="release-review-capped">
+          {r.releaseCapped}
+        </p>
+      ) : null}
+      <p
+        className="hui:m-0 hui:text-xs hui:text-muted-foreground"
+        data-testid="release-review-line"
+      >
+        {review.line}
+      </p>
+      {base ? (
+        <p
+          className="hui:m-0 hui:text-xs hui:text-muted-foreground"
+          data-testid="release-review-base"
+        >
+          {base}
         </p>
       ) : null}
     </div>

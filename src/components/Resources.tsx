@@ -4,7 +4,7 @@
 // commands) and the checks — every line in the harness's plain words. The
 // counts of a service are the harness's numbers. Pure render.
 
-import { dict, type Lang } from '../model/dict.ts';
+import { dict, knownLabel, type Lang } from '../model/dict.ts';
 import type { OperatorView } from '../model/view.ts';
 import { Badge } from './ui/badge.tsx';
 import { Block, clockOf } from './common.tsx';
@@ -110,6 +110,13 @@ export function ResourcesPanel({
                           {h.repositoryId}/{h.gate}
                         </code>{' '}
                         · {h.workId}
+                        {h.cause ? (
+                          // Revision 9: the cause of the hold; an unknown one as its code.
+                          <span data-testid="resources-held-cause" data-cause={h.cause}>
+                            {' — '}
+                            {knownLabel(t.r11.heldCause, h.cause) ?? h.cause}
+                          </span>
+                        ) : null}
                       </li>
                     ))}
                   </ul>

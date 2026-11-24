@@ -1105,14 +1105,19 @@ const ru = {
   reviews: {
     label: 'Ревью',
     none: 'Ревью пока не было.',
-    kind: { plan: 'план', contract: 'договор', code: 'код' } as Labels,
+    kind: { plan: 'план', contract: 'договор', code: 'код', release: 'выпуск' } as Labels,
     approved: 'одобрено',
     notApproved: 'не одобрено',
     rounds: (used: number, max: number | null) =>
       max === null ? `раундов ${used}, без предела` : `раунды ${used} из ${max}`,
     // Revision 8: rounds left to the limit and free re-reviews of an unchanged plan.
     roundsLeft: (kind: string, n: number) => `раундов ревью ${kind}: осталось ${n}`,
-    roundsKindOf: { plan: 'плана', contract: 'договора', code: 'кода' } as Labels,
+    roundsKindOf: {
+      plan: 'плана',
+      contract: 'договора',
+      code: 'кода',
+      release: 'выпуска',
+    } as Labels,
     roundsFree: (n: number) =>
       `${rp(n, 'повторное ревью', 'повторных ревью', 'повторных ревью')} неизменённого плана — без траты раунда`,
     open: (blocking: number, notes: number) => `открыто: блокирующих ${blocking}, заметок ${notes}`,
@@ -1695,6 +1700,55 @@ const ru = {
     } as Labels,
     codeReview: (rounds: number, max: number | null) =>
       `Дополнительное ревью кода (ведущий): раунды ${rounds}${max !== null ? ` из ${max}` : ''}`,
+  },
+  // ui alpha.11 (view revision 9, harness 0.1.0-alpha.69).
+  r11: {
+    modeTitle: 'Режим harness',
+    mode: { light: 'облегчённый', strict: 'строгий' } as Labels,
+    modeBadge: (mode: string) => `режим: ${mode}`,
+    modeDefault: 'по умолчанию',
+    modeChosen: 'выбран в политике',
+    guardOn:
+      'Защита записи: исполнитель и проверки пишут только в своё дерево попытки, свой временный каталог и кеши (от случайных ошибок, не граница безопасности).',
+    guardOff:
+      'Защиты записи нет: исполнитель и проверки могут писать вне дерева попытки (harness doctor называет причину).',
+    guardStrict: 'Песочница ОС: исполнитель и проверки изолированы, как в прежнем режиме.',
+    guardStrictNone:
+      'Строгий режим без песочницы ОС (isolation.mode: none): исполнитель и проверки не изолированы.',
+    guardStrictUnknown: 'Строгий режим; изоляцию исполнителя и проверок представление не называет.',
+    roundsUnlimited: (used: number) => `раундов ${used}, без предела`,
+    roundsUnlimitedWhy: 'облегчённый режим; бюджет — время и стоимость выпуска',
+    roundCapUnlimited: (cap: number) => `без предела (облегчённый режим; в строгом — ${cap})`,
+    releaseReviewTitle: 'Ревью выпуска',
+    releaseReview: {
+      'not-run': 'не запускалось',
+      stale: 'устарело',
+      findings: 'замечания',
+      approved: 'одобрено',
+    } as Labels,
+    releaseFindings: (open: number, blocking: number | undefined) =>
+      `замечания ${open}${blocking !== undefined ? ` (блокирующих ${blocking})` : ''}`,
+    releaseRound: (n: number) => `раунд ${n}`,
+    releaseRequired: 'обязательно: release done ждёт одобрения',
+    releaseAdvisory: 'совет: выпуск не держит',
+    releaseBase: (base: string, from: string) => `база выпуска ${base}${from ? ` (${from})` : ''}`,
+    baseSource: {
+      register: 'при регистрации графа',
+      outline: 'по плану выпуска',
+      attempt: 'по ранней попытке',
+    } as Labels,
+    releaseCapped: 'Выпуск не покажет 100 %, пока ревью выпуска не одобрено.',
+    cappedLine: (p: number) => `готово ~${p} % — выпуск ждёт одобрения ревью выпуска`,
+    approvedEarlier: (state: string) => `одобрено ранее · ${state}`,
+    heldCause: {
+      'gate-definition': 'проверка не назвала причину — исправить команду проверки, ход ведущего',
+      'sandbox-process-list':
+        'проверка вызывает список процессов, а в песочнице проверок его нет — поменять проверку, ход ведущего',
+      'sandbox-signal':
+        'проверка посылает сигнал процессу вне своей песочницы — поменять проверку, ход ведущего',
+      'sandbox-browser':
+        'проверка запускает браузер, а в песочнице проверок он не стартует — поменять проверку, ход ведущего',
+    } as Labels,
   },
 };
 
@@ -2396,13 +2450,13 @@ const en: Dict = {
   reviews: {
     label: 'Reviews',
     none: 'No reviews yet.',
-    kind: { plan: 'plan', contract: 'contract', code: 'code' },
+    kind: { plan: 'plan', contract: 'contract', code: 'code', release: 'release' },
     approved: 'approved',
     notApproved: 'not approved',
     rounds: (used: number, max: number | null) =>
       max === null ? `${used} rounds, no limit` : `rounds ${used} of ${max}`,
     roundsLeft: (kind: string, n: number) => `${kind} review rounds left: ${n}`,
-    roundsKindOf: { plan: 'plan', contract: 'contract', code: 'code' },
+    roundsKindOf: { plan: 'plan', contract: 'contract', code: 'code', release: 'release' },
     roundsFree: (n: number) =>
       `${n} ${n === 1 ? 're-review' : 're-reviews'} of an unchanged plan — no round spent`,
     open: (blocking: number, notes: number) => `open: ${blocking} blocking, ${notes} notes`,
@@ -2953,6 +3007,55 @@ const en: Dict = {
     },
     codeReview: (rounds: number, max: number | null) =>
       `Extra code review (lead): rounds ${rounds}${max !== null ? ` of ${max}` : ''}`,
+  },
+  r11: {
+    modeTitle: 'Harness mode',
+    mode: { light: 'light', strict: 'strict' },
+    modeBadge: (mode: string) => `mode: ${mode}`,
+    modeDefault: 'default',
+    modeChosen: 'set in the policy',
+    guardOn:
+      'Write guard: the writer and the checks write only to their attempt tree, their own temporary directory and caches (against accidents, not a security boundary).',
+    guardOff:
+      'No write guard: the writer and the checks may write outside the attempt tree (harness doctor names the cause).',
+    guardStrict: 'OS sandbox: the writer and the checks are isolated, as in the former mode.',
+    guardStrictNone:
+      'Strict mode without the OS sandbox (isolation.mode: none): the writer and the checks are not isolated.',
+    guardStrictUnknown:
+      'Strict mode; the view does not name the isolation of the writer and the checks.',
+    roundsUnlimited: (used: number) => `${used} rounds, no limit`,
+    roundsUnlimitedWhy: 'light mode; the budget is the release time and cost',
+    roundCapUnlimited: (cap: number) => `no limit (light mode; ${cap} in strict)`,
+    releaseReviewTitle: 'Release review',
+    releaseReview: {
+      'not-run': 'not run',
+      stale: 'stale',
+      findings: 'findings',
+      approved: 'approved',
+    },
+    releaseFindings: (open: number, blocking: number | undefined) =>
+      `${open} ${open === 1 ? 'finding' : 'findings'}${blocking !== undefined ? ` (${blocking} blocking)` : ''}`,
+    releaseRound: (n: number) => `round ${n}`,
+    releaseRequired: 'required: release done waits for approval',
+    releaseAdvisory: 'advisory: does not hold the release',
+    releaseBase: (base: string, from: string) => `release base ${base}${from ? ` (${from})` : ''}`,
+    baseSource: {
+      register: 'at graph registration',
+      outline: 'from the release outline',
+      attempt: 'from an early attempt',
+    },
+    releaseCapped: 'The release shows no 100 % until the release review is approved.',
+    cappedLine: (p: number) => `~${p} % done — the release waits for the release review approval`,
+    approvedEarlier: (state: string) => `approved earlier · ${state}`,
+    heldCause: {
+      'gate-definition': 'the check named no cause — fix the check command, the lead’s move',
+      'sandbox-process-list':
+        'the check lists processes, and the check sandbox has no process list — change the check, the lead’s move',
+      'sandbox-signal':
+        'the check signals a process outside its sandbox — change the check, the lead’s move',
+      'sandbox-browser':
+        'the check starts a browser, and it does not start in the check sandbox — change the check, the lead’s move',
+    },
   },
 };
 

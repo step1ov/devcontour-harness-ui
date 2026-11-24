@@ -15,6 +15,7 @@ import { Clipped, Heading, type ScreenProps } from './common.tsx';
 import { UpdatesSection } from './Updates.tsx';
 import { instantMs } from '../model/compat.ts';
 import { hasOverview, SetupScreen } from './Setup.tsx';
+import { harnessModeOf, reviewRoundsUnlimited } from '../model/revision9.ts';
 
 /** Theme choice of the viewer: follow the system, or light, or dark. */
 export type ThemeChoice = 'system' | 'light' | 'dark';
@@ -147,6 +148,8 @@ export function Settings({ view, lang = 'ru', theme = 'system', onThemeChange }:
         </div>
       ) : null}
 
+      <HarnessModePanel view={view} lang={lang} />
+
       <div className="hui-panel" data-testid="settings-who">
         <Heading t={t} term="writer">
           {v.who}
@@ -228,7 +231,14 @@ export function Settings({ view, lang = 'ru', theme = 'system', onThemeChange }:
           {row(v.maxAttempts, String(th.maxAttempts), 'thresholds.maxAttempts')}
           {row(v.repairBudget, String(th.repairBudget), 'thresholds.repairBudget')}
           {row(v.maxNeutral, String(th.maxNeutralFailures), 'thresholds.maxNeutralFailures')}
-          {row(v.roundCap, String(th.reviewRoundCap), 'thresholds.reviewRoundCap')}
+          {row(
+            v.roundCap,
+            // Revision 9: light mode lifts the plan review limit; the cap is the strict one.
+            reviewRoundsUnlimited(view)
+              ? t.r11.roundCapUnlimited(th.reviewRoundCap)
+              : String(th.reviewRoundCap),
+            'thresholds.reviewRoundCap',
+          )}
           {row(
             v.escalationRounds,
             String(th.reviewEscalationRounds),
@@ -354,6 +364,51 @@ export function DecisionsPanel({ view, lang = 'ru' }: { view: OperatorView; lang
           </div>
         ))}
       </dl>
+    </div>
+  );
+}
+
+/**
+ * The harness mode (revision 9, harness 0.1.0-alpha.69): light (the default)
+ * or strict, and one line on the write guard. Nothing for an older harness.
+ */
+export function HarnessModePanel({ view, lang = 'ru' }: { view: OperatorView; lang?: Lang }) {
+  const m = harnessModeOf(view);
+  if (!m) return null;
+  const t = dict(lang);
+  const r = t.r11;
+  // Strict mode: only the isolation the harness reports (`resources.isolation.sandbox`);
+  // `isolation.mode: none` disables the sandbox, and without the field nothing is claimed.
+  const sandbox = view.resources?.isolation.sandbox;
+  const strictOff = m.mode === 'strict' && sandbox === 'none';
+  const guard =
+    m.mode === 'strict'
+      ? sandbox === 'os'
+        ? r.guardStrict
+        : sandbox === 'none'
+          ? r.guardStrictNone
+          : r.guardStrictUnknown
+      : m.writeGuard
+        ? r.guardOn
+        : r.guardOff;
+  return (
+    <div
+      className="hui-panel"
+      data-testid="settings-harness-mode"
+      data-mode={m.mode}
+      data-guard={m.writeGuard ? 'on' : 'off'}
+    >
+      <Heading t={t}>{r.modeTitle}</Heading>
+      <p>
+        <strong data-testid="harness-mode-name">{label(r.mode, m.mode)}</strong>
+        <span className="hui-muted"> · {m.default ? r.modeDefault : r.modeChosen}</span>
+      </p>
+      <p
+        data-testid="harness-mode-guard"
+        data-status={(m.mode === 'light' && !m.writeGuard) || strictOff ? 'blocked' : undefined}
+      >
+        {guard}
+      </p>
     </div>
   );
 }

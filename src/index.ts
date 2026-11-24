@@ -64,3 +64,6 @@ export {
 export { ResourcesPanel } from './components/Resources.tsx';
 export { PreviewsPanel, previewHref } from './components/Previews.tsx';
 export { DecisionsPanel, decisionValueText } from './components/Settings.tsx';
+// Revision 9 (harness 0.1.0-alpha.69): the harness mode and the release acceptance review.
+export { HarnessModePanel } from './components/Settings.tsx';
+export { ReleaseReview } from './components/Forecast.tsx';
