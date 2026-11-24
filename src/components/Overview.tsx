@@ -55,6 +55,7 @@ import { PreviewsPanel } from './Previews.tsx';
 import { ResourcesPanel } from './Resources.tsx';
 import { hasOverview, SetupScreen } from './Setup.tsx';
 import { Badge, type Tone } from './ui/badge.tsx';
+import { harnessModeOf } from '../model/revision9.ts';
 import { Card, CardContent } from './ui/card.tsx';
 import { Progress } from './ui/progress.tsx';
 import {
@@ -186,6 +187,7 @@ export function Overview({
     lang,
   );
   const overall = overallProgress(view);
+  const mode = harnessModeOf(view);
   const scope = scopeOf(view);
   // Revision 6: planned tasks are listed apart, as on the Tasks screen (each task once).
   const { planned, outside } = plannedSplit(view, scope);
@@ -329,6 +331,12 @@ export function Overview({
             <span className="hui:text-sm hui:text-muted-foreground">
               {o.acceptedOf(releaseDone, releaseTotal)}
             </span>
+            {mode ? (
+              // Revision 9 (harness alpha.69): light (the default) or strict.
+              <Badge tone="outline" data-testid="harness-mode" data-mode={mode.mode}>
+                {t.r11.modeBadge(label(t.r11.mode, mode.mode))}
+              </Badge>
+            ) : null}
           </div>
           {leadMove && standingLine ? (
             // Harness alpha.67: the standing queue is the lead's, in its own

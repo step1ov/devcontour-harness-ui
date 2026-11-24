@@ -6,6 +6,7 @@ import type { Dict, Lang } from '../model/dict.ts';
 import { dict, label } from '../model/dict.ts';
 import { formatUsd } from '../model/format.ts';
 import type { Escalation, OperatorView, ReviewSubjectView } from '../model/view.ts';
+import { reviewRoundsUnlimited, roundsWithoutLimit } from '../model/revision9.ts';
 import {
   Clipped,
   Codes,
@@ -31,11 +32,14 @@ export function ReviewSubjectCard({
   lang,
   links,
   collapsed,
+  unlimited = false,
 }: {
   r: ReviewSubjectView;
   lang: Lang;
   links: Pick<ScreenProps, 'onOpenWork' | 'workHref'>;
   collapsed?: boolean;
+  /** `settings.thresholds.reviewRoundsUnlimited` (revision 9): plan rounds without a limit. */
+  unlimited?: boolean;
 }) {
   const t = dict(lang);
   const v = t.reviews;
@@ -53,7 +57,7 @@ export function ReviewSubjectCard({
       {r.line ? <p className="hui-muted">{r.line}</p> : null}
       <ul className="hui-facts">
         <li data-testid="review-rounds">
-          <RoundsText r={r} t={t} />
+          <RoundsText r={r} t={t} unlimited={unlimited} />
         </li>
         <li>{v.open(r.open.blocking, r.open.notes)}</li>
         <li>{v.acceptedLimits(r.accepted)}</li>
@@ -144,6 +148,7 @@ export function Reviews({
   const t = dict(lang);
   const v = t.reviews;
   const links = { onOpenWork, workHref };
+  const unlimited = reviewRoundsUnlimited(view);
   return (
     <section className="hui hui-reviews" aria-labelledby="hui-reviews-title" lang={lang}>
       <Heading t={t} term="review" level={2} id="hui-reviews-title">
@@ -185,7 +190,7 @@ export function Reviews({
                   </td>
                   <td data-label={v.col.kind}>{label(v.kind, r.kind)}</td>
                   <td data-label={v.col.rounds}>
-                    <RoundsText r={r} t={t} />
+                    <RoundsText r={r} t={t} unlimited={unlimited} />
                   </td>
                   <td data-label={v.col.open}>{v.open(r.open.blocking, r.open.notes)}</td>
                   <td data-label={v.col.accepted}>{r.accepted}</td>
@@ -201,6 +206,7 @@ export function Reviews({
               lang={lang}
               links={links}
               collapsed={Boolean(collapseFindings)}
+              unlimited={unlimited}
             />
           ))}
         </>
@@ -214,14 +220,33 @@ export function Reviews({
 /**
  * Rounds of a review subject against its limit; revision 8 adds the rounds
  * left («раундов ревью плана: осталось K», warn at 0) and the free
- * re-reviews of an unchanged plan that spent no round.
+ * re-reviews of an unchanged plan that spent no round. Revision 9: in light
+ * mode (`unlimited`) plan and contract rounds read «раундов N, без предела»
+ * with the reason, and no rounds-left count.
  */
-export function RoundsText({ r, t }: { r: ReviewSubjectView; t: Dict }) {
+export function RoundsText({
+  r,
+  t,
+  unlimited = false,
+}: {
+  r: ReviewSubjectView;
+  t: Dict;
+  unlimited?: boolean;
+}) {
   const v = t.reviews;
-  const left = r.rounds.remaining;
+  const light = unlimited && (r.kind === 'plan' || r.kind === 'contract');
+  const left = light ? undefined : r.rounds.remaining;
   return (
     <>
-      {v.rounds(r.rounds.used, r.rounds.max)}
+      {roundsWithoutLimit(r, unlimited)
+        ? t.r11.roundsUnlimited(r.rounds.used)
+        : v.rounds(r.rounds.used, r.rounds.max)}
+      {light ? (
+        <span className="hui-muted" data-testid="rounds-unlimited">
+          {' · '}
+          {t.r11.roundsUnlimitedWhy}
+        </span>
+      ) : null}
       {typeof left === 'number' ? (
         <span data-testid="rounds-left" data-status={left === 0 ? 'blocked' : undefined}>
           {' · '}

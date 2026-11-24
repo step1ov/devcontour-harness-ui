@@ -54,6 +54,7 @@ import {
   type ScreenProps,
 } from './common.tsx';
 import { ReviewSubjectCard } from './Reviews.tsx';
+import { heldCauses, reviewRoundsUnlimited } from '../model/revision9.ts';
 import { Badge, type Tone } from './ui/badge.tsx';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card.tsx';
 import { Tooltip } from './ui/tooltip.tsx';
@@ -164,6 +165,7 @@ export function Tasks({ view, lang = 'ru', now, onOpenWork, workHref, timeZone }
               lang={lang}
               links={links}
               collapsed
+              unlimited={reviewRoundsUnlimited(view)}
             />
           ))}
         </Block>
@@ -238,6 +240,10 @@ function TaskCardView({
   // of «что задействовано» (whole, up to 300), else the stop's own `plain`.
   const holds = gateHoldsOf(view, w);
   const holdLine = (holds.own.length ? view.resources?.gates.heldLine : undefined) ?? holds.plain;
+  const causeLines = heldCauses(view, w.id).flatMap((x) => {
+    const l = knownLabel(t.r11.heldCause, x);
+    return l ? [l] : [];
+  });
   // ui alpha.10 (P6-25): the bar is the current attempt's way to acceptance.
   const prog = attemptProgress(w.track, w.status);
   // Revision 8: an accepted work a new plan revision reopened, in the harness's words.
@@ -288,6 +294,12 @@ function TaskCardView({
         ) : null}
         {holdLine && holdLine !== firstBlocker?.plain?.trim() ? (
           <p data-testid="task-gate-held">{withWorkNames(view, holdLine)}</p>
+        ) : null}
+        {causeLines.length ? (
+          // Revision 9: why the gate this work's attempt held is held, in the panel's words.
+          <p data-testid="task-gate-cause" data-status="blocked">
+            {causeLines.join('; ')}
+          </p>
         ) : null}
         {w.track ? (
           <TrackLine
