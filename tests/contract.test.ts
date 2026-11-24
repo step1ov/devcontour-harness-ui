@@ -1,9 +1,12 @@
 // Contract with devcontour-harness: the view schema is owned by the harness.
 // tests/contract/harness/*.schema.json are verbatim copies of the harness
 // schemas (schemas/operator-view.schema.json, schemas/work-detail-view.schema.json
-// and schemas/setup-view.schema.json of 0.1.0-alpha.69, view revision 9);
-// empty-state.view.json is a real `harness view --lang en` envelope of that
-// version for a state that does not exist yet (examples/two-vendors policy),
+// and schemas/setup-view.schema.json of 0.1.0-alpha.70, view revision 10, from
+// its release branch before the release). The envelopes there are still the
+// alpha.69 ones (revision 9) until a released alpha.70 CLI regenerates them;
+// tests/contract/harness-0.1.0-alpha.69/ keeps the alpha.69 schemas with the
+// same envelopes. empty-state.view.json is a real `harness view --lang en` envelope of
+// 0.1.0-alpha.69 for a state that does not exist yet (examples/two-vendors policy),
 // setup-state.view.json a real `harness view --repository <empty dir> --lang en`
 // (the setup document) and setup-progress.view.json a real `harness view
 // --repository <dir> --lang en` right after `harness init` (an overview at the
@@ -65,6 +68,12 @@ import {
   type HarnessModeView,
   type HeldGateCause,
   type ReleaseReviewView,
+  type CostAmountView,
+  type CostRole,
+  type CostsView,
+  type ProposalView,
+  type ReleaseDocsView,
+  type SecondPassView,
   type OutlineComponentView,
   type OutlineStageView,
   type ReopenedView,
@@ -104,6 +113,7 @@ import {
   asAlpha66,
 } from './legacy.ts';
 import { instantMs } from '../src/model/compat.ts';
+import { revision10View as revision10Demo, revision9View as revision9Demo } from './revision10.ts';
 
 type Json = Record<string, any>;
 const read = (rel: string): Json =>
@@ -636,6 +646,121 @@ test('revision 9 fields: valid under the alpha.69 schemas, refused by alpha.68, 
   detail.reviews.push(structuredClone(v.reviews.at(-1)));
   assert.deepEqual(validate(detailSchema, detail), []);
   assert.match(validate(detailSchema68, detail).join(), /reviews\[\d+\]\.kind: not in enum/);
+  assert.equal(checkWorkDetail(detail).ok, true);
+});
+
+const overviewSchema69 = read('./contract/harness-0.1.0-alpha.69/operator-view.schema.json');
+const detailSchema69 = read('./contract/harness-0.1.0-alpha.69/work-detail-view.schema.json');
+const setupSchema69 = read('./contract/harness-0.1.0-alpha.69/setup-view.schema.json');
+
+test('alpha.69 documents (revision 9) stay valid under the alpha.70 schemas and pass the gate', () => {
+  // The real envelopes in harness/ are still the alpha.69 ones (a released
+  // alpha.70 CLI regenerates them); the copies in harness-0.1.0-alpha.69/ are the same.
+  for (const [name, env, schema, old] of [
+    [
+      'empty',
+      read('./contract/harness-0.1.0-alpha.69/empty-state.view.json'),
+      overviewSchema,
+      overviewSchema69,
+    ],
+    [
+      'setup',
+      read('./contract/harness-0.1.0-alpha.69/setup-state.view.json'),
+      setupSchema,
+      setupSchema69,
+    ],
+    [
+      'progress',
+      read('./contract/harness-0.1.0-alpha.69/setup-progress.view.json'),
+      overviewSchema,
+      overviewSchema69,
+    ],
+  ] as const) {
+    assert.equal(env.data.viewRevision, 9, name);
+    assert.equal(env.data.source.producerVersion, '0.1.0-alpha.69', name);
+    assert.deepEqual(validate(old, env.data), [], name);
+    assert.deepEqual(validate(schema, env.data), [], name);
+    const c = checkOverview(env.data);
+    assert.equal(c.ok, true, `${name}: ${c.ok ? '' : c.message}`);
+    assert.equal(c.ok && c.newerRevision, false, name);
+    if (c.ok && !('setup' in c)) assert.equal(c.view.costs, undefined, name);
+  }
+  const v9 = revision9Demo();
+  assert.deepEqual(validate(overviewSchema69, v9), []);
+  assert.deepEqual(validate(overviewSchema, v9), []);
+  assert.equal(checkView(v9).ok, true);
+});
+
+test('revision 10 fields: valid under the alpha.70 schemas, refused by alpha.69, checked by the gate', () => {
+  const v = revision10Demo();
+  assert.deepEqual(validate(overviewSchema, v), []);
+  const old = validate(overviewSchema69, v).join();
+  for (const f of ['costs', 'secondPass', 'proposals', 'reference', 'docs'])
+    assert.match(old, new RegExp(`unknown field ${f}`), f);
+  const c = checkView(v);
+  assert.equal(c.ok, true, c.ok ? '' : c.message);
+  assert.equal(c.ok && c.newerRevision, false);
+  // A revision 11 document is read and flagged as newer.
+  const later = checkView({ ...structuredClone(v), viewRevision: 11 });
+  assert.equal(later.ok && later.newerRevision, true);
+  const bad = (f: (d: Json) => void) => {
+    const d = structuredClone(v);
+    f(d);
+    return checkView(d).ok;
+  };
+  const work = (d: Json) => d.works.find((w: Json) => w.id === 'locale-format');
+  assert.equal(
+    bad((d) => (d.costs.total.usd = '3.75')),
+    false,
+  );
+  assert.equal(
+    bad((d) => (d.costs.release.usd = -1)),
+    false,
+  );
+  assert.equal(
+    bad((d) => (d.costs.release.since = 'yesterday')),
+    false,
+  );
+  assert.equal(
+    bad((d) => delete d.costs.byModel),
+    false,
+  );
+  assert.equal(
+    bad((d) => (d.costs.byWork[0].attempts[0].calls = 1.5)),
+    false,
+  );
+  assert.equal(
+    bad((d) => (work(d).attemptReviews[0].secondPass.refuted = -1)),
+    false,
+  );
+  assert.equal(
+    bad((d) => (work(d).proposals[0].attempt = 'one')),
+    false,
+  );
+  assert.equal(
+    bad((d) => (work(d).attempts.lastFailure.reference = 5)),
+    false,
+  );
+  assert.equal(
+    bad((d) => (d.forecast.progress.release.docs.works = 'w1')),
+    false,
+  );
+  // An unknown role or docs status of a later harness is read, shown as its code.
+  assert.equal(
+    bad((d) => (d.costs.byRole[0].role = 'later-role')),
+    true,
+  );
+  assert.equal(
+    bad((d) => (d.forecast.progress.release.docs.status = 'later')),
+    true,
+  );
+  // The work detail embeds the same work: its new fields pass the detail schema and gate.
+  const detail = structuredClone(workFixture);
+  detail.viewRevision = 10;
+  detail.work.attemptReviews = structuredClone(work(v).attemptReviews);
+  detail.work.proposals = structuredClone(work(v).proposals);
+  assert.deepEqual(validate(detailSchema, detail), []);
+  assert.match(validate(detailSchema69, detail).join(), /unknown field (secondPass|proposals)/);
   assert.equal(checkWorkDetail(detail).ok, true);
 });
 
@@ -1380,6 +1505,7 @@ function schemaKind(n: Json): string {
 type Truncated = NonNullable<OperatorView['truncated']>;
 type DetailTruncated = NonNullable<WorkDetailView['truncated']>;
 const ov = 'properties';
+const costAmountShape = { usd: 'req:n', bound: 'req:s', calls: 'req:n' } as const;
 const shapes: [string, Json, Record<string, string>][] = [
   [
     'OperatorView',
@@ -1411,7 +1537,58 @@ const shapes: [string, Json, Record<string, string>][] = [
       lead: 'opt:o',
       resources: 'opt:o',
       previews: 'opt:a<o>',
+      costs: 'opt:o',
       truncated: 'opt:o',
+    }),
+  ],
+  [
+    'costs',
+    overviewSchema[ov].costs,
+    shape<CostsView>({
+      total: 'req:o',
+      release: 'req:o',
+      byRole: 'req:a<o>',
+      byModel: 'req:a<o>',
+      byWork: 'req:a<o>',
+    }),
+  ],
+  ['costs.total', overviewSchema[ov].costs[ov].total, shape<CostAmountView>(costAmountShape)],
+  [
+    'costs.release',
+    overviewSchema[ov].costs[ov].release,
+    shape<CostsView['release']>({ ...costAmountShape, since: 'opt:s' }),
+  ],
+  [
+    'costs.byRole[]',
+    overviewSchema[ov].costs[ov].byRole.items,
+    shape<CostsView['byRole'][number]>({ ...costAmountShape, role: 'req:s' }),
+  ],
+  [
+    'costs.byModel[]',
+    overviewSchema[ov].costs[ov].byModel.items,
+    shape<CostsView['byModel'][number]>({
+      ...costAmountShape,
+      runtime: 'req:s',
+      vendor: 'req:s',
+      model: 'req:s',
+    }),
+  ],
+  [
+    'costs.byWork[]',
+    overviewSchema[ov].costs[ov].byWork.items,
+    shape<CostsView['byWork'][number]>({
+      ...costAmountShape,
+      workId: 'req:s',
+      attempts: 'req:a<o>',
+    }),
+  ],
+  [
+    'costs.byWork[].attempts[]',
+    overviewSchema[ov].costs[ov].byWork.items[ov].attempts.items,
+    shape<CostsView['byWork'][number]['attempts'][number]>({
+      ...costAmountShape,
+      runId: 'req:s',
+      attempt: 'opt:n',
     }),
   ],
   [
@@ -1645,6 +1822,29 @@ const shapes: [string, Json, Record<string, string>][] = [
       track: 'opt:o',
       reopened: 'opt:o',
       attemptReviews: 'opt:a<o>',
+      proposals: 'opt:a<o>',
+    }),
+  ],
+  [
+    'works[].proposals[]',
+    overviewSchema[ov].works.items[ov].proposals.items,
+    shape<ProposalView>({
+      id: 'req:s',
+      kind: 'req:s',
+      status: 'req:s',
+      attempt: 'req:n',
+      title: 'opt:s',
+    }),
+  ],
+  [
+    'works[].attemptReviews[].secondPass',
+    overviewSchema[ov].works.items[ov].attemptReviews.items[ov].secondPass,
+    shape<SecondPassView>({
+      mode: 'req:s',
+      status: 'req:s',
+      refuted: 'req:n',
+      missed: 'req:n',
+      overturned: 'opt:b',
     }),
   ],
   [
@@ -1671,6 +1871,7 @@ const shapes: [string, Json, Record<string, string>][] = [
       notes: 'req:n',
       at: 'req:s',
       earlier: 'opt:b',
+      secondPass: 'opt:o',
     }),
   ],
   [
@@ -1756,6 +1957,7 @@ const shapes: [string, Json, Record<string, string>][] = [
       at: 'opt:s',
       kind: 'opt:s',
       counted: 'opt:b',
+      reference: 'opt:s',
     }),
   ],
   [
@@ -2237,6 +2439,18 @@ const shapes: [string, Json, Record<string, string>][] = [
       summary: 'opt:s',
       line: 'req:s',
       review: 'opt:o',
+      docs: 'opt:o',
+    }),
+  ],
+  [
+    'forecast.progress.release.docs',
+    overviewSchema[ov].forecast[ov].progress[ov].release[ov].docs,
+    shape<ReleaseDocsView>({
+      mode: 'req:s',
+      status: 'req:s',
+      works: 'req:a<s>',
+      missingRoots: 'opt:a<s>',
+      line: 'opt:s',
     }),
   ],
   [
@@ -2807,6 +3021,53 @@ const vocabularies: [string, Json, string[]][] = [
     'forecast.progress.release.review.baseSource',
     overviewSchema[ov].forecast[ov].progress[ov].release[ov].review[ov].baseSource,
     vocab<NonNullable<ReleaseReviewView['baseSource']>>()(['register', 'outline', 'attempt']),
+  ],
+  [
+    'works[].attemptReviews[].secondPass.mode',
+    overviewSchema[ov].works.items[ov].attemptReviews.items[ov].secondPass[ov].mode,
+    vocab<SecondPassView['mode']>()(['on-reject', 'always']),
+  ],
+  [
+    'works[].attemptReviews[].secondPass.status',
+    overviewSchema[ov].works.items[ov].attemptReviews.items[ov].secondPass[ov].status,
+    vocab<SecondPassView['status']>()(['ran', 'failed']),
+  ],
+  [
+    'works[].proposals[].kind',
+    overviewSchema[ov].works.items[ov].proposals.items[ov].kind,
+    vocab<ProposalView['kind']>()(['follow-up', 'split']),
+  ],
+  [
+    'works[].proposals[].status',
+    overviewSchema[ov].works.items[ov].proposals.items[ov].status,
+    vocab<ProposalView['status']>()(['proposed', 'accepted', 'rejected']),
+  ],
+  [
+    'forecast.progress.release.docs.mode',
+    overviewSchema[ov].forecast[ov].progress[ov].release[ov].docs[ov].mode,
+    vocab<ReleaseDocsView['mode']>()(['required', 'advisory', 'off']),
+  ],
+  [
+    'forecast.progress.release.docs.status',
+    overviewSchema[ov].forecast[ov].progress[ov].release[ov].docs[ov].status,
+    vocab<ReleaseDocsView['status']>()([
+      'off',
+      'no-works',
+      'missing',
+      'not-after-roots',
+      'pending',
+      'done',
+    ]),
+  ],
+  [
+    'costs.bound',
+    overviewSchema[ov].costs[ov].total[ov].bound,
+    vocab<CostAmountView['bound']>()(['exact', 'lower']),
+  ],
+  [
+    'costs.byRole[].role',
+    overviewSchema[ov].costs[ov].byRole.items[ov].role,
+    vocab<CostRole>()(['writer', 'reviewer', 'planner', 'lead', 'other']),
   ],
   [
     'settings.harnessMode.mode',

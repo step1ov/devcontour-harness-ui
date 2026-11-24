@@ -479,6 +479,11 @@ export interface WorkView {
       kind?: string;
       /** Whether the attempt counts against the limit (revision 4). Absent = unknown. */
       counted?: boolean;
+      /**
+       * Revision 10 (harness alpha.70): the failure-cause reference,
+       * `docs/failure-causes.md#kind-<class>` or `#cause-<cause>`.
+       */
+      reference?: string;
     };
   };
   liveness?: 'active' | 'quiet' | 'stalled';
@@ -500,6 +505,38 @@ export interface WorkView {
   reopened?: ReopenedView;
   /** Revision 8: the last applied independent review round per attempt and phase, at most 40. */
   attemptReviews?: AttemptReviewResult[];
+  /**
+   * Revision 10: the writer's follow-up tasks and split proposals, at most
+   * 20, with the lead's decision (`harness proposal`; the panel only shows them).
+   */
+  proposals?: ProposalView[];
+}
+
+/** `works[].proposals[]` (revision 10). */
+export interface ProposalView {
+  id: string;
+  /** `follow-up` — a task for the rest outside the criteria; `split` — split the work. */
+  kind: 'follow-up' | 'split';
+  status: 'proposed' | 'accepted' | 'rejected';
+  /** The attempt that proposed it. */
+  attempt: number;
+  title?: string;
+}
+
+/**
+ * `works[].attemptReviews[].secondPass` (revision 10): the second review
+ * pass tries to refute each blocking finding of the first.
+ */
+export interface SecondPassView {
+  mode: 'on-reject' | 'always';
+  /** `failed` — the second call failed; the first pass stands. */
+  status: 'ran' | 'failed';
+  /** Findings of the first pass the second refuted. */
+  refuted: number;
+  /** Findings the first pass missed (`always` only). */
+  missed: number;
+  /** The rejection of the first pass was lifted. */
+  overturned?: true;
 }
 
 /** `works[].reopened` (revision 8): why an accepted work is in work again. */
@@ -530,6 +567,8 @@ export interface AttemptReviewResult {
   at: string;
   /** An attempt of the earlier (accepted) revision of the work, before the rework. */
   earlier?: true;
+  /** Revision 10: the second review pass; absent = one pass or an older harness. */
+  secondPass?: SecondPassView;
 }
 
 /** `forecast.progress.works[].stageProgress` (revision 8): the running attempt's stage. */
@@ -841,6 +880,19 @@ export interface ReleaseReviewView {
   line: string;
 }
 
+/**
+ * `forecast.progress.release.docs` (revision 10, harness 0.1.0-alpha.70):
+ * a work labelled `docs`, after every root work, accepted before the release
+ * acceptance. `works` — the docs works; `missingRoots` — roots it does not follow.
+ */
+export interface ReleaseDocsView {
+  mode: 'required' | 'advisory' | 'off';
+  status: 'off' | 'no-works' | 'missing' | 'not-after-roots' | 'pending' | 'done';
+  works: string[];
+  missingRoots?: string[];
+  line?: string;
+}
+
 /** Release forecast (revision 4, harness alpha.60, proposal P11): an observation, not a promise. */
 export interface ForecastView {
   progress: {
@@ -925,6 +977,8 @@ export interface ForecastView {
       line: string;
       /** Revision 9: the release acceptance review; absent = an older harness. */
       review?: ReleaseReviewView;
+      /** Revision 10: the docs step of the release; absent = off or an older harness. */
+      docs?: ReleaseDocsView;
     };
   };
   time: {
@@ -1123,6 +1177,8 @@ export interface OperatorView {
   resources?: ResourcesView;
   /** Harness alpha.66: running previews of the result, at least 1 and at most 20. Absent = none runs. */
   previews?: PreviewView[];
+  /** Revision 10: spend by work and attempt, role and model. Absent = an older harness. */
+  costs?: CostsView;
   /** Entries omitted by the projection's per-list limits, by list. */
   truncated?: Partial<
     Record<
@@ -1365,4 +1421,30 @@ export interface WorkDetailView {
       number
     >
   >;
+}
+
+/** A sum of call costs (revision 10). `lower`: some calls have no price, the sum is a lower bound. */
+export interface CostAmountView {
+  usd: number;
+  bound: 'exact' | 'lower';
+  calls: number;
+}
+
+export type CostRole = 'writer' | 'reviewer' | 'planner' | 'lead' | 'other';
+
+/**
+ * `costs` (revision 10, harness 0.1.0-alpha.70): the whole install
+ * (`total`), the current release (`release`, calls after the last `release
+ * done`; `since` — that moment, absent = all calls), by role, by model with
+ * its vendor and by work with its attempts. Sorted by spend by the harness.
+ */
+export interface CostsView {
+  total: CostAmountView;
+  release: CostAmountView & { since?: string };
+  byRole: ({ role: CostRole } & CostAmountView)[];
+  byModel: ({ runtime: string; vendor: string; model: string } & CostAmountView)[];
+  byWork: ({
+    workId: string;
+    attempts: ({ runId: string; attempt?: number } & CostAmountView)[];
+  } & CostAmountView)[];
 }

@@ -149,6 +149,16 @@ export {
   roundsWithoutLimit,
 } from './revision9.ts';
 export {
+  costsOf,
+  failureReferenceAnchor,
+  failureReferenceHref,
+  FAILURE_CAUSES_BASE,
+  isLowerBound,
+  proposalsOf,
+  releaseDocsOf,
+  workCostOf,
+} from './revision10.ts';
+export {
   isInfraWork,
   setupElapsed,
   setupProgressOf,
