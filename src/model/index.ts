@@ -141,6 +141,14 @@ export {
   type ForecastAdditions,
 } from './revision8.ts';
 export {
+  harnessModeOf,
+  heldCauses,
+  releaseReviewOf,
+  releaseWaitsForReview,
+  reviewRoundsUnlimited,
+  roundsWithoutLimit,
+} from './revision9.ts';
+export {
   isInfraWork,
   setupElapsed,
   setupProgressOf,

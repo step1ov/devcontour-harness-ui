@@ -1,14 +1,15 @@
 // Contract with devcontour-harness: the view schema is owned by the harness.
 // tests/contract/harness/*.schema.json are verbatim copies of the harness
 // schemas (schemas/operator-view.schema.json, schemas/work-detail-view.schema.json
-// and schemas/setup-view.schema.json of 0.1.0-alpha.68, view revision 8);
+// and schemas/setup-view.schema.json of 0.1.0-alpha.69, view revision 9);
 // empty-state.view.json is a real `harness view --lang en` envelope of that
 // version for a state that does not exist yet (examples/two-vendors policy),
 // setup-state.view.json a real `harness view --repository <empty dir> --lang en`
 // (the setup document) and setup-progress.view.json a real `harness view
 // --repository <dir> --lang en` right after `harness init` (an overview at the
 // setup stage with `stage.progress`), made with the built CLI of the
-// released 0.1.0-alpha.68. tests/contract/harness-0.1.0-alpha.67/ keeps the same
+// released 0.1.0-alpha.69. tests/contract/harness-0.1.0-alpha.68/ keeps the same
+// files of 0.1.0-alpha.68 (revision 8); tests/contract/harness-0.1.0-alpha.67/ keeps the same
 // files of 0.1.0-alpha.67 (revision 7); tests/contract/harness-0.1.0-alpha.66/ keeps the same
 // files of 0.1.0-alpha.66 (revision 6); tests/contract/harness-0.1.0-alpha.65/ keeps the same
 // files of 0.1.0-alpha.65 (revision 5); tests/contract/harness-0.1.0-alpha.62/ keeps the same
@@ -61,6 +62,9 @@ import {
   type ForecastGrowthView,
   type ForecastOutlineView,
   type ForecastView,
+  type HarnessModeView,
+  type HeldGateCause,
+  type ReleaseReviewView,
   type OutlineComponentView,
   type OutlineStageView,
   type ReopenedView,
@@ -113,8 +117,8 @@ const harnessEmpty = read('./contract/harness/empty-state.view.json');
 const setupSchema = read('./contract/harness/setup-view.schema.json');
 const harnessSetup = read('./contract/harness/setup-state.view.json');
 const harnessProgress = read('./contract/harness/setup-progress.view.json');
-/** The producer of the alpha.68 copies. */
-const ALPHA68 = /^0\.1\.0-alpha\.68$/;
+/** The producer of the alpha.69 copies. */
+const ALPHA69 = /^0\.1\.0-alpha\.69$/;
 const overviewSchema62 = read('./contract/harness-0.1.0-alpha.62/operator-view.schema.json');
 const detailSchema62 = read('./contract/harness-0.1.0-alpha.62/work-detail-view.schema.json');
 const harnessEmpty62 = read('./contract/harness-0.1.0-alpha.62/empty-state.view.json');
@@ -152,8 +156,15 @@ test('both fixtures and a real harness document are valid under the harness sche
   for (const f of ['work.sample.json', 'work.accepted.sample.json'])
     assert.deepEqual(validate(detailSchema, read('../fixtures/ru/' + f)), [], f);
   assert.equal(harnessEmpty.ok, true);
-  assert.equal(harnessEmpty.data.viewRevision, 8);
-  assert.match(harnessEmpty.data.source.producerVersion, ALPHA68);
+  assert.equal(harnessEmpty.data.viewRevision, 9);
+  // Revision 9: a policy without the field is in light mode, by default, with the write guard.
+  assert.deepEqual(harnessEmpty.data.settings.harnessMode, {
+    mode: 'light',
+    default: true,
+    writeGuard: true,
+  });
+  assert.equal(harnessEmpty.data.settings.thresholds.reviewRoundsUnlimited, true);
+  assert.match(harnessEmpty.data.source.producerVersion, ALPHA69);
   // Revision 6: who decides, with the harness's own words in both languages.
   assert.equal(harnessEmpty.data.settings.decisions.items[0].key, 'maxAttempts');
   assert.match(harnessEmpty.data.settings.decisions.summary.en, /you decide/);
@@ -235,11 +246,11 @@ test('alpha.57/58 documents (revision 2) stay valid under the alpha.59 schemas a
   }
 });
 
-test('the setup document of harness alpha.68 is valid, passes the setup gate and is not an overview', () => {
+test('the setup document of harness alpha.69 is valid, passes the setup gate and is not an overview', () => {
   assert.equal(harnessSetup.ok, true);
   const doc = harnessSetup.data;
-  assert.equal(doc.viewRevision, 8);
-  assert.match(doc.source.producerVersion, ALPHA68);
+  assert.equal(doc.viewRevision, 9);
+  assert.match(doc.source.producerVersion, ALPHA69);
   // An empty directory has no `.harness/`: no setup progress yet.
   assert.equal(Object.hasOwn(doc.stage, 'progress'), false);
   assert.deepEqual(validate(setupSchema, doc), []);
@@ -273,11 +284,14 @@ const setupSchema66 = read('./contract/harness-0.1.0-alpha.66/setup-view.schema.
 const harnessEmpty66 = read('./contract/harness-0.1.0-alpha.66/empty-state.view.json');
 const harnessSetup66 = read('./contract/harness-0.1.0-alpha.66/setup-state.view.json');
 
-test('a real alpha.68 overview right after harness init carries the setup progress', () => {
+test('a real alpha.69 overview right after harness init carries the setup progress', () => {
   assert.equal(harnessProgress.ok, true);
   const doc = harnessProgress.data;
-  assert.equal(doc.viewRevision, 8);
-  assert.match(doc.source.producerVersion, ALPHA68);
+  assert.equal(doc.viewRevision, 9);
+  // harness init writes no harnessMode: light mode by default.
+  assert.deepEqual(doc.settings.harnessMode, { mode: 'light', default: true, writeGuard: true });
+  assert.equal(doc.settings.thresholds.reviewRoundsUnlimited, true);
+  assert.match(doc.source.producerVersion, ALPHA69);
   assert.deepEqual(validate(overviewSchema, doc), []);
   assert.deepEqual(doc.works, []);
   assert.equal(doc.stage.name, 'setup');
@@ -289,7 +303,7 @@ test('a real alpha.68 overview right after harness init carries the setup progre
   );
   assert.equal(p.budgetMs, 30 * 60_000);
   assert.equal(p.overBudget, false);
-  // Alpha.68: the setup clock starts at this setup's first recorded step, not
+  // From alpha.68: the setup clock starts at this setup's first recorded step, not
   // at the oldest file of an inherited `.harness/` — right after init, seconds.
   assert.ok(p.elapsedMs < 60_000, String(p.elapsedMs));
   assert.ok(instantMs(p.since) <= instantMs(doc.generatedAt));
@@ -311,7 +325,7 @@ const harnessEmpty67 = read('./contract/harness-0.1.0-alpha.67/empty-state.view.
 const harnessSetup67 = read('./contract/harness-0.1.0-alpha.67/setup-state.view.json');
 const harnessProgress67 = read('./contract/harness-0.1.0-alpha.67/setup-progress.view.json');
 
-test('alpha.67 documents (revision 7) stay valid under the alpha.68 schemas and pass the gate', () => {
+test('alpha.67 documents (revision 7) stay valid under the alpha.69 schemas and pass the gate', () => {
   for (const [name, env, schema, old] of [
     ['empty', harnessEmpty67, overviewSchema, overviewSchema67],
     ['setup', harnessSetup67, setupSchema, setupSchema67],
@@ -331,7 +345,7 @@ test('alpha.67 documents (revision 7) stay valid under the alpha.68 schemas and 
   }
 });
 
-test('revision 8 fields: valid under the alpha.68 schemas, refused by alpha.67, checked by the gate', () => {
+test('revision 8 fields: valid under the alpha.68+ schemas, refused by alpha.67, checked by the gate', () => {
   const v = structuredClone(viewFixture);
   v.viewRevision = 8;
   const w = v.works.find((x: Json) => x.id === 'import-csv');
@@ -494,7 +508,138 @@ test('revision 8 fields: valid under the alpha.68 schemas, refused by alpha.67, 
   assert.equal(checkWorkDetail(detail).ok, true);
 });
 
-test('alpha.66 documents (revision 6) stay valid under the alpha.68 schemas and pass the gate', () => {
+const overviewSchema68 = read('./contract/harness-0.1.0-alpha.68/operator-view.schema.json');
+const detailSchema68 = read('./contract/harness-0.1.0-alpha.68/work-detail-view.schema.json');
+const setupSchema68 = read('./contract/harness-0.1.0-alpha.68/setup-view.schema.json');
+const harnessEmpty68 = read('./contract/harness-0.1.0-alpha.68/empty-state.view.json');
+const harnessSetup68 = read('./contract/harness-0.1.0-alpha.68/setup-state.view.json');
+const harnessProgress68 = read('./contract/harness-0.1.0-alpha.68/setup-progress.view.json');
+
+test('alpha.68 documents (revision 8) stay valid under the alpha.69 schemas and pass the gate', () => {
+  for (const [name, env, schema, old] of [
+    ['empty', harnessEmpty68, overviewSchema, overviewSchema68],
+    ['setup', harnessSetup68, setupSchema, setupSchema68],
+    ['progress', harnessProgress68, overviewSchema, overviewSchema68],
+  ] as const) {
+    assert.equal(env.data.viewRevision, 8, name);
+    assert.equal(env.data.source.producerVersion, '0.1.0-alpha.68', name);
+    assert.deepEqual(validate(old, env.data), [], name);
+    assert.deepEqual(validate(schema, env.data), [], name);
+    const c = checkOverview(env.data);
+    assert.equal(c.ok, true, `${name}: ${c.ok ? '' : c.message}`);
+    assert.equal(c.ok && c.newerRevision, false, name);
+    // No revision 9 field in an alpha.68 document: the panel reads «absent».
+    if (c.ok && !('setup' in c)) {
+      assert.equal(c.view.settings.harnessMode, undefined, name);
+      assert.equal(c.view.settings.thresholds.reviewRoundsUnlimited, undefined, name);
+    }
+  }
+  for (const [name, doc, schema] of fixtures()) {
+    const old68 = schema === overviewSchema ? overviewSchema68 : detailSchema68;
+    assert.deepEqual(validate(old68, doc), [], name);
+  }
+});
+
+/** A revision 9 overview from the demo fixture: every new field once. */
+function revision9View(): Json {
+  const v = structuredClone(viewFixture);
+  v.viewRevision = 9;
+  v.settings.harnessMode = { mode: 'light', default: true, writeGuard: true };
+  v.settings.thresholds.reviewRoundsUnlimited = true;
+  v.forecast.progress.release.review = {
+    required: true,
+    status: 'findings',
+    round: 2,
+    open: 3,
+    blocking: 1,
+    base: '1a2b3c4',
+    baseSource: 'register',
+    head: '5d6e7f8',
+    target: 'main',
+    at: '2026-11-19T11:50:00.000Z',
+    line: 'release review found 1 blocking of 3 open (round 2): fix them with works (required: release done waits)',
+  };
+  v.reviews.push({
+    kind: 'release',
+    subject: 'release',
+    approved: false,
+    rounds: { used: 2, max: null },
+    open: { blocking: 1, notes: 2 },
+    accepted: 0,
+    spend: { calls: 2, usd: { value: 0.4, bound: 'exact' } },
+    findings: [],
+  });
+  v.resources.gates.held[0].cause = 'gate-definition';
+  return v;
+}
+
+test('revision 9 fields: valid under the alpha.69 schemas, refused by alpha.68, checked by the gate', () => {
+  const v = revision9View();
+  assert.deepEqual(validate(overviewSchema, v), []);
+  const old = validate(overviewSchema68, v).join();
+  for (const f of ['harnessMode', 'reviewRoundsUnlimited', 'review', 'cause'])
+    assert.match(old, new RegExp(`unknown field ${f}`), f);
+  assert.match(
+    old,
+    /reviews\[\d+\]\.kind: not in enum/,
+    'reviews[].kind release is not in the alpha.68 vocabulary',
+  );
+  const c = checkView(v);
+  assert.equal(c.ok, true, c.ok ? '' : c.message);
+  assert.equal(c.ok && c.newerRevision, false);
+  // The gate refuses a malformed revision 9 field instead of throwing during render.
+  const bad = (f: (d: Json) => void) => {
+    const d = structuredClone(v);
+    f(d);
+    return checkView(d).ok;
+  };
+  assert.equal(
+    bad((d) => (d.settings.harnessMode.writeGuard = 'yes')),
+    false,
+  );
+  assert.equal(
+    bad((d) => (d.settings.harnessMode.mode = 3)),
+    false,
+  );
+  assert.equal(
+    bad((d) => (d.settings.thresholds.reviewRoundsUnlimited = 1)),
+    false,
+  );
+  assert.equal(
+    bad((d) => (d.forecast.progress.release.review.required = 'true')),
+    false,
+  );
+  assert.equal(
+    bad((d) => (d.forecast.progress.release.review.open = -1)),
+    false,
+  );
+  assert.equal(
+    bad((d) => (d.forecast.progress.release.review.at = 'yesterday')),
+    false,
+  );
+  assert.equal(
+    bad((d) => delete d.forecast.progress.release.review.line),
+    false,
+  );
+  assert.equal(
+    bad((d) => (d.resources.gates.held[0].cause = 7)),
+    false,
+  );
+  // An unknown cause or status of a later harness is read, shown as its code.
+  assert.equal(
+    bad((d) => (d.resources.gates.held[0].cause = 'later-cause')),
+    true,
+  );
+  // The work detail carries release reviews too.
+  const detail = structuredClone(workFixture);
+  detail.viewRevision = 9;
+  detail.reviews.push(structuredClone(v.reviews.at(-1)));
+  assert.deepEqual(validate(detailSchema, detail), []);
+  assert.match(validate(detailSchema68, detail).join(), /reviews\[\d+\]\.kind: not in enum/);
+  assert.equal(checkWorkDetail(detail).ok, true);
+});
+
+test('alpha.66 documents (revision 6) stay valid under the alpha.69 schemas and pass the gate', () => {
   assert.equal(harnessEmpty66.data.viewRevision, 6);
   assert.equal(harnessEmpty66.data.source.producerVersion, '0.1.0-alpha.66');
   assert.deepEqual(validate(overviewSchema66, harnessEmpty66.data), []);
@@ -1369,6 +1514,7 @@ const shapes: [string, Json, Record<string, string>][] = [
       lean: 'req:o',
       defaulted: 'req:a<s>',
       decisions: 'opt:o',
+      harnessMode: 'opt:o',
     }),
   ],
   [
@@ -1440,6 +1586,7 @@ const shapes: [string, Json, Record<string, string>][] = [
       maxNeutralFailures: 'req:n',
       reviewRoundCap: 'req:n',
       reviewEscalationRounds: 'req:n',
+      reviewRoundsUnlimited: 'opt:b',
     }),
   ],
   [
@@ -2089,7 +2236,30 @@ const shapes: [string, Json, Record<string, string>][] = [
       doneAt: 'opt:s',
       summary: 'opt:s',
       line: 'req:s',
+      review: 'opt:o',
     }),
+  ],
+  [
+    'forecast.progress.release.review',
+    overviewSchema[ov].forecast[ov].progress[ov].release[ov].review,
+    shape<ReleaseReviewView>({
+      required: 'req:b',
+      status: 'req:s',
+      round: 'opt:n',
+      open: 'opt:n',
+      blocking: 'opt:n',
+      base: 'opt:s',
+      baseSource: 'opt:s',
+      head: 'opt:s',
+      target: 'opt:s',
+      at: 'opt:s',
+      line: 'req:s',
+    }),
+  ],
+  [
+    'settings.harnessMode',
+    overviewSchema[ov].settings[ov].harnessMode,
+    shape<HarnessModeView>({ mode: 'req:s', default: 'req:b', writeGuard: 'req:b' }),
   ],
   [
     'forecast.time.lead',
@@ -2254,6 +2424,7 @@ const shapes: [string, Json, Record<string, string>][] = [
       repositoryId: 'req:s',
       gate: 'req:s',
       workId: 'req:s',
+      cause: 'opt:s',
     }),
   ],
   [
@@ -2615,7 +2786,32 @@ const vocabularies: [string, Json, string[]][] = [
   [
     'reviews[].kind',
     overviewSchema[ov].reviews.items[ov].kind,
-    vocab<ReviewSubjectView['kind']>()(['plan', 'contract', 'code']),
+    vocab<ReviewSubjectView['kind']>()(['plan', 'contract', 'code', 'release']),
+  ],
+  [
+    'resources.gates.held[].cause',
+    overviewSchema[ov].resources[ov].gates[ov].held.items[ov].cause,
+    vocab<HeldGateCause>()([
+      'sandbox-process-list',
+      'sandbox-signal',
+      'sandbox-browser',
+      'gate-definition',
+    ]),
+  ],
+  [
+    'forecast.progress.release.review.status',
+    overviewSchema[ov].forecast[ov].progress[ov].release[ov].review[ov].status,
+    vocab<ReleaseReviewView['status']>()(['not-run', 'stale', 'findings', 'approved']),
+  ],
+  [
+    'forecast.progress.release.review.baseSource',
+    overviewSchema[ov].forecast[ov].progress[ov].release[ov].review[ov].baseSource,
+    vocab<NonNullable<ReleaseReviewView['baseSource']>>()(['register', 'outline', 'attempt']),
+  ],
+  [
+    'settings.harnessMode.mode',
+    overviewSchema[ov].settings[ov].harnessMode[ov].mode,
+    vocab<HarnessModeView['mode']>()(['light', 'strict']),
   ],
   [
     'reviews[].findings[].disposition.decision',

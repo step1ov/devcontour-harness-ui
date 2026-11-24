@@ -39,6 +39,23 @@ export interface RoleBinding {
 
 export type ReviewKind = 'plan' | 'contract' | 'code';
 
+/**
+ * The kind of a review subject (`reviews[].kind`): revision 9 (harness
+ * 0.1.0-alpha.69) adds `release` — the acceptance review of the release.
+ */
+export type ReviewSubjectKind = ReviewKind | 'release';
+
+/**
+ * `settings.harnessMode` (revision 9, harness 0.1.0-alpha.69): `light` (the
+ * default, `default: true` — the policy has no field) or `strict`;
+ * `writeGuard` — whether the write boundary is in force.
+ */
+export interface HarnessModeView {
+  mode: 'light' | 'strict';
+  default: boolean;
+  writeGuard: boolean;
+}
+
 export interface ReviewRuleView {
   kind: ReviewKind;
   /**
@@ -80,6 +97,12 @@ export interface ViewSettings {
     reviewRoundCap: number;
     /** Rounds without a decision after which a blocking finding goes to the operator. */
     reviewEscalationRounds: number;
+    /**
+     * Revision 9: light mode — plan (and contract) review rounds have no
+     * limit; the budget is the release time and cost. `reviewRoundCap` is
+     * then the strict mode's limit.
+     */
+    reviewRoundsUnlimited?: boolean;
   };
   budgets: {
     scope: 'work' | 'group' | 'total';
@@ -108,6 +131,8 @@ export interface ViewSettings {
    * summary in one phrase and an unusual combination. Absent = an older harness.
    */
   decisions?: DecisionSettingsView;
+  /** Revision 9: the harness mode; absent = an older harness. */
+  harnessMode?: HarnessModeView;
 }
 
 /** The keys of `settings.decisions.items[]` (harness alpha.66). */
@@ -171,9 +196,9 @@ export interface FindingView {
   title?: string;
 }
 
-/** One review subject (plan, contract or code) with its round counters. */
+/** One review subject (plan, contract, code or, from revision 9, release) with its round counters. */
 export interface ReviewSubjectView {
-  kind: ReviewKind;
+  kind: ReviewSubjectKind;
   subject: string;
   workId?: string;
   approved: boolean;
@@ -796,6 +821,26 @@ export interface SetupProgressView {
   lineEn: string;
 }
 
+/**
+ * `forecast.progress.release.review` (revision 9, harness 0.1.0-alpha.69):
+ * the acceptance review of the release — whether `release done` waits for
+ * it, its state, the round, open and blocking findings, the release base
+ * and where it comes from, and the harness line.
+ */
+export interface ReleaseReviewView {
+  required: boolean;
+  status: 'not-run' | 'stale' | 'findings' | 'approved';
+  round?: number;
+  open?: number;
+  blocking?: number;
+  base?: string;
+  baseSource?: 'register' | 'outline' | 'attempt';
+  head?: string;
+  target?: string;
+  at?: string;
+  line: string;
+}
+
 /** Release forecast (revision 4, harness alpha.60, proposal P11): an observation, not a promise. */
 export interface ForecastView {
   progress: {
@@ -878,6 +923,8 @@ export interface ForecastView {
       /** The lead's final report, at most 2000. */
       summary?: string;
       line: string;
+      /** Revision 9: the release acceptance review; absent = an older harness. */
+      review?: ReleaseReviewView;
     };
   };
   time: {
@@ -1149,6 +1196,14 @@ export interface LeadView {
   line: string;
 }
 
+/**
+ * Why a gate is held (`resources.gates.held[].cause`, revision 9): a check
+ * sandbox refusal, or `gate-definition` — the gate failed without naming a
+ * cause (harness 0.1.0-alpha.69).
+ */
+export type HeldGateCause =
+  'sandbox-process-list' | 'sandbox-signal' | 'sandbox-browser' | 'gate-definition';
+
 /** Network of a role or of the checks in plain words. */
 export type ResourcesNetwork = 'closed' | 'loopback' | 'domains' | 'open' | 'mixed';
 
@@ -1204,7 +1259,7 @@ export interface ResourcesView {
      * harness alpha.66): works that need them are not issued; `workId` is
      * the work whose attempt failed. At most 10.
      */
-    held?: { repositoryId: string; gate: string; workId: string }[];
+    held?: { repositoryId: string; gate: string; workId: string; cause?: HeldGateCause }[];
     /** The same in plain words; also the first of `lines`. */
     heldLine?: string;
   };

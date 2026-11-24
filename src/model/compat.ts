@@ -20,7 +20,7 @@ export type ViewCheck =
     };
 
 /** Highest `viewRevision` this build knows how to render in full. */
-export const KNOWN_VIEW_REVISION = 8;
+export const KNOWN_VIEW_REVISION = 9;
 
 type Obj = Record<string, unknown>;
 const isObject = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -173,6 +173,8 @@ const settings = obj({
     maxNeutralFailures: N,
     reviewRoundCap: N,
     reviewEscalationRounds: N,
+    // Revision 9: light mode — plan review rounds without a limit.
+    reviewRoundsUnlimited: opt(B),
   }),
   budgets: arr(obj({ scope: S, usd: opt(N), timeMs: opt(N) }), 3),
   budgetOnUnknown: opt(S),
@@ -191,6 +193,8 @@ const settings = obj({
       warning: opt(bilingual),
     }),
   ),
+  // Revision 9: the harness mode (light by default, or strict) and the write guard.
+  harnessMode: opt(obj({ mode: S, default: B, writeGuard: B })),
 });
 const work = obj({
   id: S,
@@ -581,7 +585,30 @@ const overview = obj({
             total: N,
           }),
         ),
-        release: opt(obj({ state: S, doneAt: opt(I), summary: opt(S), line: S })),
+        release: opt(
+          obj({
+            state: S,
+            doneAt: opt(I),
+            summary: opt(S),
+            line: S,
+            // Revision 9: the release acceptance review.
+            review: opt(
+              obj({
+                required: B,
+                status: S,
+                round: opt(C),
+                open: opt(C),
+                blocking: opt(C),
+                base: opt(S),
+                baseSource: opt(S),
+                head: opt(S),
+                target: opt(S),
+                at: opt(I),
+                line: S,
+              }),
+            ),
+          }),
+        ),
       }),
       time: obj({
         startedAt: opt(I),
@@ -741,7 +768,7 @@ const overview = obj({
         workspace: C,
         repositories: arr(obj({ repositoryId: S, count: C }), 10),
         line: S,
-        held: opt(arr(obj({ repositoryId: S, gate: S, workId: S }), 10)),
+        held: opt(arr(obj({ repositoryId: S, gate: S, workId: S, cause: opt(S) }), 10)),
         heldLine: opt(S),
       }),
       lines: arr(S, 8),
