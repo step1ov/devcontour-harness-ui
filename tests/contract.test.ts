@@ -69,6 +69,8 @@ import {
   type HeldGateCause,
   type ReleaseReviewView,
   type CostAmountView,
+  type AttemptCostView,
+  type WorkCostView,
   type CostRole,
   type CostsView,
   type ProposalView,
@@ -695,7 +697,7 @@ test('revision 10 fields: valid under the alpha.70 schemas, refused by alpha.69,
   const v = revision10Demo();
   assert.deepEqual(validate(overviewSchema, v), []);
   const old = validate(overviewSchema69, v).join();
-  for (const f of ['costs', 'secondPass', 'proposals', 'reference', 'docs'])
+  for (const f of ['costs', 'secondPass', 'proposals', 'reference', 'referenceUrl', 'docs', 'cost'])
     assert.match(old, new RegExp(`unknown field ${f}`), f);
   const c = checkView(v);
   assert.equal(c.ok, true, c.ok ? '' : c.message);
@@ -731,6 +733,30 @@ test('revision 10 fields: valid under the alpha.70 schemas, refused by alpha.69,
   );
   assert.equal(
     bad((d) => (work(d).attemptReviews[0].secondPass.refuted = -1)),
+    false,
+  );
+  assert.equal(
+    bad((d) => delete d.costs.total.unpricedCalls),
+    false,
+  );
+  assert.equal(
+    bad((d) => (d.costs.release.sinceRelease = 'yes')),
+    false,
+  );
+  assert.equal(
+    bad((d) => (d.costs.byWorkTruncated = -1)),
+    false,
+  );
+  assert.equal(
+    bad((d) => (work(d).attemptReviews[0].secondPass.refutedFindings[0].basis = 3)),
+    false,
+  );
+  assert.equal(
+    bad((d) => (work(d).proposals[0].decision.at = 'now')),
+    false,
+  );
+  assert.equal(
+    bad((d) => (work(d).cost.byAttempt = {})),
     false,
   );
   assert.equal(
@@ -1505,7 +1531,12 @@ function schemaKind(n: Json): string {
 type Truncated = NonNullable<OperatorView['truncated']>;
 type DetailTruncated = NonNullable<WorkDetailView['truncated']>;
 const ov = 'properties';
-const costAmountShape = { usd: 'req:n', bound: 'req:s', calls: 'req:n' } as const;
+const costAmountShape = {
+  usd: 'req:n',
+  bound: 'req:s',
+  calls: 'req:n',
+  unpricedCalls: 'req:n',
+} as const;
 const shapes: [string, Json, Record<string, string>][] = [
   [
     'OperatorView',
@@ -1549,14 +1580,16 @@ const shapes: [string, Json, Record<string, string>][] = [
       release: 'req:o',
       byRole: 'req:a<o>',
       byModel: 'req:a<o>',
+      byModelTruncated: 'req:n',
       byWork: 'req:a<o>',
+      byWorkTruncated: 'req:n',
     }),
   ],
   ['costs.total', overviewSchema[ov].costs[ov].total, shape<CostAmountView>(costAmountShape)],
   [
     'costs.release',
     overviewSchema[ov].costs[ov].release,
-    shape<CostsView['release']>({ ...costAmountShape, since: 'opt:s' }),
+    shape<CostsView['release']>({ ...costAmountShape, since: 'opt:s', sinceRelease: 'req:b' }),
   ],
   [
     'costs.byRole[]',
@@ -1580,7 +1613,22 @@ const shapes: [string, Json, Record<string, string>][] = [
       ...costAmountShape,
       workId: 'req:s',
       attempts: 'req:a<o>',
+      attemptsTruncated: 'req:n',
     }),
+  ],
+  [
+    'works[].cost',
+    overviewSchema[ov].works.items[ov].cost,
+    shape<WorkCostView>({
+      ...costAmountShape,
+      byAttempt: 'req:a<o>',
+      byAttemptTruncated: 'req:n',
+    }),
+  ],
+  [
+    'works[].cost.byAttempt[]',
+    overviewSchema[ov].works.items[ov].cost[ov].byAttempt.items,
+    shape<AttemptCostView>({ ...costAmountShape, runId: 'req:s', attempt: 'opt:n' }),
   ],
   [
     'costs.byWork[].attempts[]',
@@ -1823,6 +1871,7 @@ const shapes: [string, Json, Record<string, string>][] = [
       reopened: 'opt:o',
       attemptReviews: 'opt:a<o>',
       proposals: 'opt:a<o>',
+      cost: 'opt:o',
     }),
   ],
   [
@@ -1834,6 +1883,24 @@ const shapes: [string, Json, Record<string, string>][] = [
       status: 'req:s',
       attempt: 'req:n',
       title: 'opt:s',
+      goal: 'opt:s',
+      reason: 'opt:s',
+      parts: 'opt:n',
+      decision: 'opt:o',
+    }),
+  ],
+  [
+    'works[].proposals[].decision',
+    overviewSchema[ov].works.items[ov].proposals.items[ov].decision,
+    shape<NonNullable<ProposalView['decision']>>({ by: 'req:s', at: 'req:s', reason: 'opt:s' }),
+  ],
+  [
+    'works[].attemptReviews[].secondPass.refutedFindings[]',
+    overviewSchema[ov].works.items[ov].attemptReviews.items[ov].secondPass[ov].refutedFindings
+      .items,
+    shape<NonNullable<SecondPassView['refutedFindings']>[number]>({
+      finding: 'req:s',
+      basis: 'req:s',
     }),
   ],
   [
@@ -1845,6 +1912,7 @@ const shapes: [string, Json, Record<string, string>][] = [
       refuted: 'req:n',
       missed: 'req:n',
       overturned: 'opt:b',
+      refutedFindings: 'opt:a<o>',
     }),
   ],
   [
@@ -1958,6 +2026,7 @@ const shapes: [string, Json, Record<string, string>][] = [
       kind: 'opt:s',
       counted: 'opt:b',
       reference: 'opt:s',
+      referenceUrl: 'opt:s',
     }),
   ],
   [
@@ -3058,6 +3127,11 @@ const vocabularies: [string, Json, string[]][] = [
       'pending',
       'done',
     ]),
+  ],
+  [
+    'works[].proposals[].decision.by',
+    overviewSchema[ov].works.items[ov].proposals.items[ov].decision[ov].by,
+    vocab<NonNullable<ProposalView['decision']>['by']>()(['lead', 'operator']),
   ],
   [
     'costs.bound',

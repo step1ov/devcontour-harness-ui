@@ -1760,7 +1760,6 @@ const ru = {
     atLeast: (amount: string) => `не меньше ${amount}`,
     priceUnknown: 'цена неизвестна',
     belowCent: '< $0.01',
-    unpriced: 'есть вызовы без цены — сумма не меньше показанной',
     costsByRole: 'По ролям',
     costsByModel: 'По моделям',
     costsByWork: (n: number) => `По работам и попыткам (${n})`,
@@ -1816,6 +1815,25 @@ const ru = {
     } as Labels,
     docsWorks: (list: string) => `работы: ${list}`,
     docsMissingRoots: (list: string) => `не зависит от: ${list}`,
+    docsRootsWithout: (list: string) => `корневые работы без документации: ${list}`,
+    unpricedCalls: (n: number) => `без цены: ${rp(n, 'вызов', 'вызова', 'вызовов')}`,
+    unpricedNote: (n: number) =>
+      `без цены: ${rp(n, 'вызов', 'вызова', 'вызовов')} — суммы не меньше показанных`,
+    costsAfterRelease: 'вызовы после последнего release done',
+    moreModels: (n: number) => `ещё ${rp(n, 'модель', 'модели', 'моделей')}`,
+    moreWorks: (n: number) => `ещё ${rp(n, 'работа', 'работы', 'работ')}`,
+    moreAttempts: (n: number) =>
+      `ещё ${rp(n, 'ранняя попытка', 'ранние попытки', 'ранних попыток')}`,
+    refutedTitle: 'Снятые находки',
+    refutedItem: (finding: string, basis: string) => `«${finding}» — ${basis}`,
+    proposalGoal: (goal: string) => `цель: ${goal}`,
+    proposalReason: (reason: string) => `почему отдельно: ${reason}`,
+    proposalParts: (n: number) => `частей: ${n}`,
+    proposalDecision: (who: string, when: string, reason: string | undefined) =>
+      `решение — ${who}, ${when}${reason ? `: ${reason}` : ''}`,
+    decidedBy: { lead: 'ведущий', operator: 'оператор' } as Labels,
+    workCostTitle: 'Расход по попыткам',
+    workCostTotal: (amount: string, calls: string) => `всего ${amount} · ${calls}`,
   },
 };
 
@@ -3134,7 +3152,6 @@ const en: Dict = {
     atLeast: (amount: string) => `at least ${amount}`,
     priceUnknown: 'price unknown',
     belowCent: '< $0.01',
-    unpriced: 'some calls have no price — the sum is at least the one shown',
     costsByRole: 'By role',
     costsByModel: 'By model',
     costsByWork: (n: number) => `By work and attempt (${n})`,
@@ -3191,6 +3208,24 @@ const en: Dict = {
     },
     docsWorks: (list: string) => `works: ${list}`,
     docsMissingRoots: (list: string) => `does not follow: ${list}`,
+    docsRootsWithout: (list: string) => `root works without docs: ${list}`,
+    unpricedCalls: (n: number) => `no price: ${ep(n, 'call', 'calls')}`,
+    unpricedNote: (n: number) =>
+      `no price: ${ep(n, 'call', 'calls')} — the sums are at least the ones shown`,
+    costsAfterRelease: 'calls after the last release done',
+    moreModels: (n: number) => `${ep(n, 'more model', 'more models')}`,
+    moreWorks: (n: number) => `${ep(n, 'more work', 'more works')}`,
+    moreAttempts: (n: number) => `${ep(n, 'earlier attempt', 'earlier attempts')} more`,
+    refutedTitle: 'Refuted findings',
+    refutedItem: (finding: string, basis: string) => `“${finding}” — ${basis}`,
+    proposalGoal: (goal: string) => `goal: ${goal}`,
+    proposalReason: (reason: string) => `why separate: ${reason}`,
+    proposalParts: (n: number) => `${n} parts`,
+    proposalDecision: (who: string, when: string, reason: string | undefined) =>
+      `decided by the ${who}, ${when}${reason ? `: ${reason}` : ''}`,
+    decidedBy: { lead: 'lead', operator: 'operator' },
+    workCostTitle: 'Spend by attempt',
+    workCostTotal: (amount: string, calls: string) => `total ${amount} · ${calls}`,
   },
 };
 

@@ -32,7 +32,7 @@ import {
   type ReleaseDocsView,
   type WorkDetailView,
 } from '../src/index.ts';
-import { revision10View, revision9View } from './revision10.ts';
+import { REFERENCE_URL, revision10View, revision9View } from './revision10.ts';
 
 type Json = Record<string, any>;
 const read = (rel: string): Json =>
@@ -113,8 +113,9 @@ test('accessors: absent in a revision 9 view, the harness values in revision 10'
   assert.equal(releaseDocsOf(v.forecast)?.status, 'missing');
   assert.deepEqual(
     proposalsOf(v.works.find((w) => w.id === 'locale-format')!).map((p) => p.status),
-    ['proposed', 'rejected'],
+    ['accepted', 'proposed'],
   );
+  assert.equal(v.works.find((w) => w.id === 'locale-format')!.cost?.byAttempt.length, 2);
 });
 
 test('the failure reference links only a failure-causes anchor, to the harness document', () => {
@@ -150,60 +151,102 @@ test('a cost reads «не меньше» for a lower bound, «цена неиз�
   assert.equal(costText({ usd: 2, bound: 'later' as never }), 'не меньше $2.00');
 });
 
-test('«Расход»: the release and the install, by role and by model; the lower bound said honestly', () => {
+test('«Расход»: the release and the install, by role and by model; the lower bound and the unpriced calls said', () => {
   const v = viewOf(revision10View());
   const m = html(<CostsPanel view={v} lang="ru" timeZone={TZ} />);
   assert.equal(
     part(m, 'costs-release'),
-    'Текущий выпуск не меньше $1.00 2 вызова · вызовы после release done 11:00',
+    'Текущий выпуск не меньше $1.00 2 вызова · без цены: 1 вызов · вызовы после release done 11:00',
   );
-  assert.equal(part(m, 'costs-total'), 'Вся установка не меньше $3.75 5 вызовов');
-  assert.equal(part(m, 'costs-lower'), 'есть вызовы без цены — сумма не меньше показанной');
+  assert.equal(
+    part(m, 'costs-total'),
+    'Вся установка не меньше $3.75 5 вызовов · без цены: 1 вызов',
+  );
+  assert.equal(part(m, 'costs-lower'), 'без цены: 1 вызов — суммы не меньше показанных');
   assert.equal(
     part(m, 'costs-by-role'),
-    'По ролям исполнитель не меньше $3.00 · 3 вызова reviewer $0.50 · 1 вызов план и договор $0.25 · 1 вызов',
+    'По ролям исполнитель не меньше $3.00 · 3 вызова · без цены: 1 вызов reviewer $0.50 · 1 вызов план и договор $0.25 · 1 вызов',
   );
   assert.equal(
     part(m, 'costs-by-model'),
-    'По моделям claude-x (anthropic) не меньше $3.00 · 3 вызова gpt-x (openai) $0.75 · 2 вызова',
+    'По моделям claude-x (anthropic) не меньше $3.00 · 3 вызова · без цены: 1 вызов gpt-x (openai) $0.75 · 2 вызова',
   );
   // By work and attempt, folded; an attempt of only unpriced calls says so.
   const works = part(m, 'costs-by-work');
   assert.match(works, /^По работам и попыткам \(2\)/);
   assert.match(
     works,
-    /locale-format не меньше \$2\.50 · 3 вызова попытка 1 — \$2\.50, попытка 2 — цена неизвестна/,
+    /locale-format не меньше \$2\.50 · 3 вызова · без цены: 1 вызов попытка 1 — \$2\.50, попытка 2 — цена неизвестна/,
   );
   assert.match(works, /import-csv \$1\.00 · 1 вызов попытка 1 — \$1\.00/);
+  assert.doesNotMatch(m, /costs-models-more|costs-works-more|ещё/);
   // English.
   const en = html(<CostsPanel view={viewOf(revision10View('en'))} lang="en" timeZone={TZ} />);
-  assert.match(part(en, 'costs-total'), /^Whole install at least \$3\.75 5 calls$/);
+  assert.match(
+    part(en, 'costs-total'),
+    /^Whole install at least \$3\.75 5 calls · no price: 1 call$/,
+  );
 });
 
-test('«Расход» with every price known has no lower-bound note; no release closed — all calls', () => {
+test('«Расход»: lists the harness cut say «ещё N»', () => {
+  const d = revision10View();
+  d.costs.byModelTruncated = 3;
+  d.costs.byWorkTruncated = 2;
+  d.costs.byWork[0].attemptsTruncated = 4;
+  const m = html(<CostsPanel view={viewOf(d)} lang="ru" timeZone={TZ} />);
+  assert.equal(part(m, 'costs-models-more'), 'ещё 3 модели');
+  assert.equal(part(m, 'costs-works-more'), 'ещё 2 работы');
+  assert.match(part(m, 'costs-by-work'), /^По работам и попыткам \(4\)/);
+  assert.match(
+    part(m, 'costs-by-work'),
+    /ещё 4 ранние попытки, попытка 1 — \$2\.50, попытка 2 — цена неизвестна/,
+  );
+  const en = html(<CostsPanel view={viewOf(d)} lang="en" timeZone={TZ} />);
+  assert.equal(part(en, 'costs-models-more'), '3 more models');
+});
+
+test('«Расход» with every price known has no unpriced note; no release done yet — all calls', () => {
   const v = viewOf(
     (() => {
       const d = revision10View();
-      for (const a of [d.costs.total, d.costs.release, ...d.costs.byRole, ...d.costs.byModel])
+      for (const a of [
+        d.costs.total,
+        d.costs.release,
+        ...d.costs.byRole,
+        ...d.costs.byModel,
+        ...d.costs.byWork,
+      ]) {
         a.bound = 'exact';
+        a.unpricedCalls = 0;
+      }
       delete d.costs.release.since;
+      d.costs.release.sinceRelease = false;
       return d;
     })(),
   );
   const m = html(<CostsPanel view={v} lang="ru" timeZone={TZ} />);
-  assert.doesNotMatch(m, /costs-lower/);
-  assert.doesNotMatch(m, /не меньше \$3\.75/);
+  assert.doesNotMatch(m, /costs-lower|без цены|не меньше \$3\.75/);
   assert.match(part(m, 'costs-release'), /все вызовы: выпуск ещё не закрывался$/);
+  // sinceRelease without its time: «после последнего release done».
+  const noTime = revision10View();
+  delete noTime.costs.release.since;
+  assert.match(
+    part(html(<CostsPanel view={viewOf(noTime)} lang="ru" />), 'costs-release'),
+    /вызовы после последнего release done$/,
+  );
   // No calls yet: a sentence, no zero sums.
+  const zero = { usd: 0, bound: 'exact', calls: 0, unpricedCalls: 0 };
   const none = viewOf(
     (() => {
       const d = revision10View();
       d.costs = {
-        total: { usd: 0, bound: 'exact', calls: 0 },
-        release: { usd: 0, bound: 'exact', calls: 0 },
+        total: zero,
+        release: { ...zero, sinceRelease: false },
         byRole: [],
         byModel: [],
+        byModelTruncated: 0,
         byWork: [],
+        byWorkTruncated: 0,
       };
       return d;
     })(),
@@ -213,7 +256,7 @@ test('«Расход» with every price known has no lower-bound note; no releas
   assert.doesNotMatch(n, /\$0\.00/);
 });
 
-test('the task card: the second pass in the review line, proposals with status, the reference link', () => {
+test('the task card: the second pass with its refuted findings, proposals with texts and decision, the reference link', () => {
   const v = viewOf(revision10View());
   const c = card(html(<Tasks view={v} lang="ru" timeZone={TZ} />), 'locale-format');
   const line = part(c, 'task-attempt-reviews');
@@ -221,26 +264,29 @@ test('the task card: the second pass in the review line, proposals with status, 
     line,
     /^Ревью: попытка 1 — одобрено · второй проход: снято 1, отказ снят второй проход при отказе\. Второй проход — свежий вызов reviewer/,
   );
+  // The tooltip names each refuted finding with its basis.
+  assert.equal(part(c, 'second-pass-refuted'), 'Снятые находки: «ложная» — обработано в строке 3');
   assert.match(
     line,
     /попытка 2 — отклонено \(2 находки, 1 заметка\) · второй проход не удался — действует первый второй проход всегда\./,
   );
+  assert.equal((c.match(/data-testid="second-pass-refuted"/g) ?? []).length, 1);
   assert.match(c, /data-testid="second-pass" data-status="ran" data-overturned="true"/);
   // The tooltip is tied to the line for assistive technology and reachable by keyboard.
   assert.match(c, /class="hui-tooltip-root" aria-describedby="[^"]+" tabindex="0"/);
-  // Proposals: kind, title (or id), attempt, status; who decides — once, the CLI.
+  // Proposals: kind, title, attempt, status, the writer's words and the decision.
   assert.equal(
     part(c, 'proposals'),
-    'Предложения исполнителя (2) продолжение Локализация попытка 1 ждёт ведущего разделение p2 попытка 2 отклонено Решает ведущий (harness proposal); принятое войдёт в план через ревью плана.',
+    'Предложения исполнителя (2) продолжение Локализация попытка 1 принято цель: Строки в словарь локалей · почему отдельно: вне критериев решение — ведущий, 11:45: Вносим в следующий план разделение разделение на 2 части попытка 2 ждёт ведущего почему отдельно: форматы дат и чисел независимы Решает ведущий (harness proposal); принятое войдёт в план через ревью плана.',
   );
   const own = c.slice(c.indexOf('data-testid="proposals"'));
   assert.doesNotMatch(own, /<button|<form|<input/);
-  // The failure reference after the last failure.
+  // The failure reference after the last failure: the harness's own URL.
   assert.match(part(c, 'task-last-failure'), / · что значит этот отказ$/);
   assert.match(
     c,
     new RegExp(
-      `<a class="hui-link" href="${FAILURE_CAUSES_BASE.replace(/[.]/g, '\\.')}docs/failure-causes\\.md#kind-gate" target="_blank" rel="noopener noreferrer" data-testid="failure-reference" data-anchor="kind-gate">`,
+      `<a class="hui-link" href="${REFERENCE_URL.replace(/[.]/g, '\\.')}" target="_blank" rel="noopener noreferrer" data-testid="failure-reference" data-anchor="kind-gate" data-source="harness">`,
     ),
   );
   // English.
@@ -250,35 +296,75 @@ test('the task card: the second pass in the review line, proposals with status, 
   );
   assert.match(part(en, 'second-pass'), /^second pass: 1 refuted, rejection lifted/);
   assert.match(part(en, 'proposals'), /^Writer proposals \(2\) follow-up/);
+  assert.match(part(en, 'proposal-decision'), /^decided by the lead, 11:45: Вносим/);
 });
 
-test('decided proposals drop the «who decides» line; an unknown status of a later harness is its code', () => {
+test('the reference link: without referenceUrl (or with a non-http one) the path on the harness repository', () => {
+  for (const url of [undefined, 'javascript:alert(1)', 'not a url']) {
+    const d = revision10View();
+    const lf = d.works.find((x: Json) => x.id === 'locale-format').attempts.lastFailure;
+    if (url === undefined) delete lf.referenceUrl;
+    else lf.referenceUrl = url;
+    const c = card(html(<Tasks view={viewOf(d)} lang="ru" timeZone={TZ} />), 'locale-format');
+    assert.match(
+      c,
+      new RegExp(
+        `href="${FAILURE_CAUSES_BASE.replace(/[.]/g, '\\.')}docs/failure-causes\\.md#kind-gate"[^>]*data-source="path"`,
+      ),
+      String(url),
+    );
+  }
+  // A referenceUrl without a valid reference path is not linked either.
+  const d = revision10View();
+  const lf = d.works.find((x: Json) => x.id === 'locale-format').attempts.lastFailure;
+  lf.reference = 'other.md#x';
+  const c = card(html(<Tasks view={viewOf(d)} lang="ru" timeZone={TZ} />), 'locale-format');
+  assert.doesNotMatch(c, /failure-reference/);
+});
+
+test('no proposal waits: no «who decides» line; an unknown status of a later harness is its code', () => {
   const v = viewOf(
     (() => {
       const d = revision10View();
       const w = d.works.find((x: Json) => x.id === 'locale-format');
-      w.proposals[0].status = 'accepted';
       w.proposals[1].status = 'later-status';
+      delete w.proposals[1].title;
       w.attemptReviews[0].secondPass.mode = 'later-mode';
       return d;
     })(),
   );
   const c = card(html(<Tasks view={v} lang="ru" timeZone={TZ} />), 'locale-format');
+  // No proposal waits: no «who decides» line; a split without a title: its id and parts.
   assert.match(
     part(c, 'proposals'),
-    /Локализация попытка 1 принято разделение p2 попытка 2 later-status$/,
+    /разделение p2 попытка 2 later-status почему отдельно: форматы дат и чисел независимы · частей: 2$/,
   );
   assert.match(part(c, 'task-attempt-reviews'), /later-mode\. Второй проход/);
 });
 
-test('the docs step of the release: state, mode, works, roots and the harness line', () => {
+test('the docs step of the release: state, mode and the harness line; without a line the works and roots', () => {
   const block = (d: ReleaseDocsView, lang: 'ru' | 'en' = 'ru') =>
     part(html(<ReleaseDocs docs={d} lang={lang} />), 'release-docs');
   const v = viewOf(revision10View());
+  // The harness line wins: no works or roots of the panel's own.
   assert.equal(
     block(releaseDocsOf(v.forecast)!),
     'Документация выпуска: нет работы документации совет: выпуск не держит Шаг документации выпуска: нет работы с меткой docs после корневых работ (add-greeting, locale-format)',
   );
+  assert.equal(
+    block(releaseDocsOf(viewOf(revision10View('en')).forecast)!, 'en'),
+    'Release docs: no docs work advisory: does not hold the release Release documentation step: no work labelled docs after the root works (add-greeting, locale-format)',
+  );
+  assert.equal(
+    block({
+      mode: 'advisory',
+      status: 'done',
+      works: ['docs-page'],
+      line: 'Шаг документации выпуска: работа документации docs-page принята',
+    }),
+    'Документация выпуска: готово Шаг документации выпуска: работа документации docs-page принята',
+  );
+  // An earlier view without a line: the panel's words.
   assert.equal(
     block({
       mode: 'required',
@@ -289,16 +375,16 @@ test('the docs step of the release: state, mode, works, roots and the harness li
     'Документация выпуска: не после всех корневых работ обязательно: выпуск ждёт работы: docs-page не зависит от: export-csv',
   );
   assert.equal(
+    block({ mode: 'required', status: 'missing', works: [], missingRoots: ['export-csv'] }),
+    'Документация выпуска: нет работы документации обязательно: выпуск ждёт корневые работы без документации: export-csv',
+  );
+  assert.equal(
     block({ mode: 'advisory', status: 'done', works: ['docs-page'] }),
     'Документация выпуска: готово работы: docs-page',
   );
   assert.match(
     html(<ReleaseDocs docs={{ mode: 'required', status: 'missing', works: [] }} />),
     /data-status="missing" data-mode="required"/,
-  );
-  assert.equal(
-    block({ mode: 'advisory', status: 'pending', works: ['docs-page'] }, 'en'),
-    'Release docs: in work advisory: does not hold the release works: docs-page',
   );
   // On the release ring of the home screen, after the release block.
   const f = html(<ForecastRings forecast={v.forecast!} lang="ru" />);
@@ -311,7 +397,7 @@ test('the home screen shows «Расход» and the docs step', () => {
   assert.match(part(o, 'release-docs'), /^Документация выпуска: нет работы документации/);
 });
 
-test('the work detail: the reference link, the review line with the second pass and the proposals', () => {
+test('the work detail: the reference link, the review line with the second pass, the proposals and the spend by attempt', () => {
   const v = revision10View();
   const w = v.works.find((x: Json) => x.id === 'locale-format');
   const d = structuredClone(read('../fixtures/ru/work.sample.json'));
@@ -325,7 +411,11 @@ test('the work detail: the reference link, the review line with the second pass 
       plain: 'окружение: порт занят',
     }),
     reference: 'docs/failure-causes.md#cause-preflight',
+    referenceUrl:
+      'https://github.com/step1ov/devcontour-harness/blob/v0.1.0-alpha.70/docs/failure-causes.md#cause-preflight',
   };
+  d.work.cost = structuredClone(w.cost);
+  d.work.cost.byAttemptTruncated = 1;
   const c = checkWorkDetail(d);
   assert.ok(c.ok, c.ok ? '' : c.message);
   const m = html(
@@ -335,6 +425,20 @@ test('the work detail: the reference link, the review line with the second pass 
   assert.match(m, /data-anchor="cause-preflight"/);
   assert.match(part(m, 'work-attempts'), /второй проход: снято 1, отказ снят/);
   assert.match(part(m, 'proposals'), /^Предложения исполнителя \(2\)/);
+  assert.match(m, /href="[^"]*blob\/v0\.1\.0-alpha\.70\/docs\/failure-causes\.md#cause-preflight"/);
+  // Spend by attempt from works[].cost, earlier ones as «ещё N».
+  assert.equal(
+    part(m, 'work-cost'),
+    'Расход по попыткам всего не меньше $2.50 · 3 вызова · без цены: 1 вызов ещё 1 ранняя попытка попытка 1 $2.50 · 2 вызова попытка 2 цена неизвестна · 1 вызов · без цены: 1 вызов',
+  );
+  // Without the field: no block.
+  delete d.work.cost;
+  const c2 = checkWorkDetail(d);
+  assert.ok(c2.ok);
+  assert.doesNotMatch(
+    html(<WorkDetail detail={(c2 as { detail: WorkDetailView }).detail} lang="ru" />),
+    /work-cost/,
+  );
 });
 
 test('a revision 9 view renders as in alpha.11: no revision 10 block anywhere', () => {

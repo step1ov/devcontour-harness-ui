@@ -74,7 +74,7 @@ for (const scheme of ['light', 'dark'] as const)
       await expect(costs.getByTestId('costs-total')).toContainText('не меньше $3.75');
       await expect(costs.getByTestId('costs-release')).toContainText('не меньше $1.00');
       await expect(costs.getByTestId('costs-lower')).toHaveText(
-        'есть вызовы без цены — сумма не меньше показанной',
+        'без цены: 1 вызов — суммы не меньше показанных',
       );
       await expect(costs.getByTestId('costs-by-role')).toContainText('исполнитель');
       await expect(costs.getByTestId('costs-by-model')).toContainText('gpt-x (openai)');
@@ -94,13 +94,22 @@ for (const scheme of ['light', 'dark'] as const)
       await expect(
         cardEl.locator('.hui-tooltip-root:has([data-testid="second-pass"]) .hui-tooltip').first(),
       ).toBeVisible();
+      await expect(cardEl.getByTestId('second-pass-refuted')).toContainText(
+        '«ложная» — обработано в строке 3',
+      );
       await expect(cardEl.getByTestId('proposal')).toHaveCount(2);
-      await expect(cardEl.getByTestId('proposal-status').first()).toHaveText('ждёт ведущего');
+      await expect(cardEl.getByTestId('proposal-status').first()).toHaveText('принято');
+      await expect(cardEl.getByTestId('proposal-decision')).toContainText(
+        'Вносим в следующий план',
+      );
       await expect(cardEl.getByTestId('proposals-who')).toContainText('harness proposal');
       await expect(cardEl.locator('[data-testid="proposals"] button')).toHaveCount(0);
       const link = cardEl.getByTestId('failure-reference');
       await expect(link).toHaveText('что значит этот отказ');
-      await expect(link).toHaveAttribute('href', /docs\/failure-causes\.md#kind-gate$/);
+      await expect(link).toHaveAttribute(
+        'href',
+        /\/blob\/v0\.1\.0-alpha\.70\/docs\/failure-causes\.md#kind-gate$/,
+      );
       await expect(link).toHaveAttribute('rel', 'noopener noreferrer');
       await noScrollNoAxe(page);
     });

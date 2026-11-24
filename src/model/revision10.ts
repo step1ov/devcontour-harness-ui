@@ -18,12 +18,14 @@ import type {
 } from './view.ts';
 
 export type {
+  AttemptCostView,
   CostAmountView,
   CostRole,
   CostsView,
   ProposalView,
   ReleaseDocsView,
   SecondPassView,
+  WorkCostView,
 } from './view.ts';
 
 /** Spend by work, role and model; `undefined` for an older harness (no field). */

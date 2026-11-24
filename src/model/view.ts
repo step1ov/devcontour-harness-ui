@@ -484,6 +484,8 @@ export interface WorkView {
        * `docs/failure-causes.md#kind-<class>` or `#cause-<cause>`.
        */
       reference?: string;
+      /** Revision 10: the same document in the harness repository of this version. */
+      referenceUrl?: string;
     };
   };
   liveness?: 'active' | 'quiet' | 'stalled';
@@ -510,6 +512,21 @@ export interface WorkView {
    * 20, with the lead's decision (`harness proposal`; the panel only shows them).
    */
   proposals?: ProposalView[];
+  /** Revision 10: the work's spend, total and by attempt (no work-list limit). */
+  cost?: WorkCostView;
+}
+
+/** `works[].cost` (revision 10). */
+export interface WorkCostView extends CostAmountView {
+  byAttempt: AttemptCostView[];
+  /** Earlier attempts over the limit of `byAttempt`. */
+  byAttemptTruncated: number;
+}
+
+/** One attempt's spend (revision 10). */
+export interface AttemptCostView extends CostAmountView {
+  runId: string;
+  attempt?: number;
 }
 
 /** `works[].proposals[]` (revision 10). */
@@ -520,7 +537,15 @@ export interface ProposalView {
   status: 'proposed' | 'accepted' | 'rejected';
   /** The attempt that proposed it. */
   attempt: number;
+  /** For a split without a title the harness says «разделение на N части». */
   title?: string;
+  /** The writer's words: the goal and why it is outside the work. */
+  goal?: string;
+  reason?: string;
+  /** Parts of a split. */
+  parts?: number;
+  /** The decision of the lead or the operator, with its basis. */
+  decision?: { by: 'lead' | 'operator'; at: string; reason?: string };
 }
 
 /**
@@ -537,6 +562,8 @@ export interface SecondPassView {
   missed: number;
   /** The rejection of the first pass was lifted. */
   overturned?: true;
+  /** The refuted findings with the basis of each, masked, at most 20. */
+  refutedFindings?: { finding: string; basis: string }[];
 }
 
 /** `works[].reopened` (revision 8): why an accepted work is in work again. */
@@ -1428,6 +1455,8 @@ export interface CostAmountView {
   usd: number;
   bound: 'exact' | 'lower';
   calls: number;
+  /** Calls without a price; above zero with `bound: lower`. */
+  unpricedCalls: number;
 }
 
 export type CostRole = 'writer' | 'reviewer' | 'planner' | 'lead' | 'other';
@@ -1440,11 +1469,18 @@ export type CostRole = 'writer' | 'reviewer' | 'planner' | 'lead' | 'other';
  */
 export interface CostsView {
   total: CostAmountView;
-  release: CostAmountView & { since?: string };
+  /** `sinceRelease: false` — no release done yet: all calls (no `since`). */
+  release: CostAmountView & { since?: string; sinceRelease: boolean };
   byRole: ({ role: CostRole } & CostAmountView)[];
   byModel: ({ runtime: string; vendor: string; model: string } & CostAmountView)[];
+  /** Models over the limit of `byModel`. */
+  byModelTruncated: number;
   byWork: ({
     workId: string;
-    attempts: ({ runId: string; attempt?: number } & CostAmountView)[];
+    /** The latest attempts (at most 20); earlier ones in `attemptsTruncated`. */
+    attempts: AttemptCostView[];
+    attemptsTruncated: number;
   } & CostAmountView)[];
+  /** Works over the limit of `byWork` (a work's whole spend: `works[].cost`). */
+  byWorkTruncated: number;
 }

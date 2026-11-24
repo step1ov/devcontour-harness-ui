@@ -196,6 +196,26 @@ const settings = obj({
   // Revision 9: the harness mode (light by default, or strict) and the write guard.
   harnessMode: opt(obj({ mode: S, default: B, writeGuard: B })),
 });
+// Revision 10 (harness alpha.70): a sum of call costs with its unpriced calls.
+const costAmount = {
+  usd: leaf((v) => typeof v === 'number' && Number.isFinite(v) && v >= 0),
+  bound: S,
+  calls: C,
+  unpricedCalls: C,
+};
+const attemptCost = obj({ runId: S, attempt: opt(C), ...costAmount });
+const costs = obj({
+  total: obj(costAmount),
+  release: obj({ ...costAmount, since: opt(I), sinceRelease: B }),
+  byRole: arr(obj({ role: S, ...costAmount }), 10),
+  byModel: arr(obj({ runtime: S, vendor: S, model: S, ...costAmount }), 50),
+  byModelTruncated: C,
+  byWork: arr(
+    obj({ workId: S, ...costAmount, attempts: arr(attemptCost, 20), attemptsTruncated: C }),
+    500,
+  ),
+  byWorkTruncated: C,
+});
 const work = obj({
   id: S,
   graphId: S,
@@ -234,6 +254,7 @@ const work = obj({
         counted: opt(B),
         // Revision 10: the failure-cause reference (`docs/failure-causes.md#…`).
         reference: opt(S),
+        referenceUrl: opt(S),
       }),
     ),
   }),
@@ -302,13 +323,39 @@ const work = obj({
         at: I,
         earlier: opt(B),
         // Revision 10: the second review pass.
-        secondPass: opt(obj({ mode: S, status: S, refuted: C, missed: C, overturned: opt(B) })),
+        secondPass: opt(
+          obj({
+            mode: S,
+            status: S,
+            refuted: C,
+            missed: C,
+            overturned: opt(B),
+            refutedFindings: opt(arr(obj({ finding: S, basis: S }), 20)),
+          }),
+        ),
       }),
       40,
     ),
   ),
   // Revision 10: the writer's follow-up and split proposals with the lead's decision.
-  proposals: opt(arr(obj({ id: S, kind: S, status: S, attempt: C, title: opt(S) }), 20)),
+  proposals: opt(
+    arr(
+      obj({
+        id: S,
+        kind: S,
+        status: S,
+        attempt: C,
+        title: opt(S),
+        goal: opt(S),
+        reason: opt(S),
+        parts: opt(C),
+        decision: opt(obj({ by: S, at: I, reason: opt(S) })),
+      }),
+      20,
+    ),
+  ),
+  // Revision 10: the work's spend, total and by attempt.
+  cost: opt(obj({ ...costAmount, byAttempt: arr(attemptCost, 20), byAttemptTruncated: C })),
 });
 const review = obj({
   kind: S,
@@ -368,25 +415,6 @@ const drift = obj({
   filesSinceAccepted: opt(N),
   diverged: opt(B),
   unavailable: opt(S),
-});
-const costAmount = {
-  usd: leaf((v) => typeof v === 'number' && Number.isFinite(v) && v >= 0),
-  bound: S,
-  calls: C,
-};
-const costs = obj({
-  total: obj(costAmount),
-  release: obj({ ...costAmount, since: opt(I) }),
-  byRole: arr(obj({ role: S, ...costAmount }), 10),
-  byModel: arr(obj({ runtime: S, vendor: S, model: S, ...costAmount }), 50),
-  byWork: arr(
-    obj({
-      workId: S,
-      ...costAmount,
-      attempts: arr(obj({ runId: S, attempt: opt(C), ...costAmount }), 20),
-    }),
-    500,
-  ),
 });
 const overview = obj({
   viewRevision: C,

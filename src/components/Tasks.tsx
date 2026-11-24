@@ -378,7 +378,11 @@ function TaskCardView({
               {a.lastFailure.reference ? (
                 <>
                   {' · '}
-                  <FailureReference reference={a.lastFailure.reference} t={t} />
+                  <FailureReference
+                    reference={a.lastFailure.reference}
+                    url={a.lastFailure.referenceUrl}
+                    t={t}
+                  />
                 </>
               ) : null}
             </span>
@@ -386,7 +390,7 @@ function TaskCardView({
         </div>
         {w.track || attemptReviewResults(w) ? <ReviewLine w={w} t={t} /> : null}
         {/* Revision 10: the writer's proposals; the lead decides in the CLI. */}
-        <ProposalsList proposals={proposalsOf(w)} t={t} />
+        <ProposalsList proposals={proposalsOf(w)} t={t} timeZone={timeZone} now={clock} />
         {/* The lead's `harness review-code` rounds: separate, only when there are any. */}
         {!(w.track || attemptReviewResults(w)) || code.length ? (
           <p data-testid="task-reviews">

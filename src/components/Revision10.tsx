@@ -13,13 +13,15 @@ import {
   type ReleaseDocsView,
   type SecondPassView,
 } from '../model/revision10.ts';
+import { clockOf, safeHttpUrl } from './common.tsx';
 import { Badge, type Tone } from './ui/badge.tsx';
 import { Tooltip } from './ui/tooltip.tsx';
 
 /**
  * The second review pass of an attempt: what it refuted and whether it
- * lifted the rejection; the mode and what a second pass is — in the
- * tooltip, also read with the line by assistive technology.
+ * lifted the rejection; the mode, what a second pass is and each refuted
+ * finding with its basis — in the tooltip, also read with the line by
+ * assistive technology.
  */
 export function SecondPass({ pass, t }: { pass: SecondPassView; t: Dict }) {
   const r = t.r12;
@@ -29,7 +31,20 @@ export function SecondPass({ pass, t }: { pass: SecondPassView; t: Dict }) {
       : r.secondPassRan(pass.refuted, pass.missed, pass.overturned === true);
   const mode = knownLabel(r.secondPassMode, pass.mode) ?? pass.mode;
   return (
-    <Tooltip content={`${mode}. ${r.secondPassWhy}`} tabIndex={0}>
+    <Tooltip
+      content={
+        <>
+          {`${mode}. ${r.secondPassWhy}`}
+          {pass.refutedFindings?.length ? (
+            <span className="hui:mt-1 hui:block" data-testid="second-pass-refuted">
+              <span className="hui:font-semibold">{r.refutedTitle}:</span>{' '}
+              {pass.refutedFindings.map((f) => r.refutedItem(f.finding, f.basis)).join('; ')}
+            </span>
+          ) : null}
+        </>
+      }
+      tabIndex={0}
+    >
       <span
         className="hui-second-pass"
         data-testid="second-pass"
@@ -50,9 +65,25 @@ const proposalTone = (s: string): Tone =>
  * («ждёт ведущего», «принято», «отклонено»). Who decides is said once under
  * the list; the panel offers no button.
  */
-export function ProposalsList({ proposals, t }: { proposals: ProposalView[]; t: Dict }) {
+export function ProposalsList({
+  proposals,
+  t,
+  timeZone,
+  now,
+}: {
+  proposals: ProposalView[];
+  t: Dict;
+  timeZone?: string;
+  now?: number;
+}) {
   if (!proposals.length) return null;
   const r = t.r12;
+  const details = (p: ProposalView) =>
+    [
+      p.goal ? r.proposalGoal(p.goal) : undefined,
+      p.reason ? r.proposalReason(p.reason) : undefined,
+      p.parts !== undefined && !p.title ? r.proposalParts(p.parts) : undefined,
+    ].filter((x): x is string => Boolean(x));
   return (
     <div className="hui-proposals hui:grid hui:gap-1" data-testid="proposals">
       <h4 className="hui:text-sm hui:font-semibold">{r.proposalsTitle(proposals.length)}</h4>
@@ -66,12 +97,26 @@ export function ProposalsList({ proposals, t }: { proposals: ProposalView[]; t: 
             data-status={p.status}
           >
             <Badge tone="outline">{knownLabel(r.proposalKind, p.kind) ?? p.kind}</Badge>
-            {/* Without a title (the harness sends none for a split): the id. */}
+            {/* The harness names a title-less split («разделение на N части»); else the id. */}
             <span className="hui:min-w-0 hui:break-words">{p.title ?? p.id}</span>
             <span className="hui-muted">{r.proposalAttempt(p.attempt)}</span>
             <Badge tone={proposalTone(p.status)} data-testid="proposal-status">
               {knownLabel(r.proposalStatus, p.status) ?? p.status}
             </Badge>
+            {details(p).length ? (
+              <span className="hui-muted hui:basis-full hui:text-xs" data-testid="proposal-details">
+                {details(p).join(' · ')}
+              </span>
+            ) : null}
+            {p.decision ? (
+              <span className="hui:basis-full hui:text-xs" data-testid="proposal-decision">
+                {r.proposalDecision(
+                  knownLabel(r.decidedBy, p.decision.by) ?? p.decision.by,
+                  clockOf(p.decision.at, t, timeZone, now),
+                  p.decision.reason,
+                )}
+              </span>
+            ) : null}
           </li>
         ))}
       </ul>
@@ -86,10 +131,23 @@ export function ProposalsList({ proposals, t }: { proposals: ProposalView[]; t: 
 
 /**
  * The failure-cause reference of the last failure as a link to the harness
- * document; anything but `docs/failure-causes.md#<anchor>` is not linked.
+ * document: the harness's `referenceUrl` (its repository at the tag of its
+ * version) when it is an http(s) address, else the path `reference` on the
+ * public harness repository; anything but `docs/failure-causes.md#<anchor>`
+ * is not linked.
  */
-export function FailureReference({ reference, t }: { reference: string | undefined; t: Dict }) {
-  const href = failureReferenceHref(reference);
+export function FailureReference({
+  reference,
+  url,
+  t,
+}: {
+  reference: string | undefined;
+  /** Revision 10 (`lastFailure.referenceUrl`); absent in an earlier alpha.70 view. */
+  url?: string | undefined;
+  t: Dict;
+}) {
+  const fallback = failureReferenceHref(reference);
+  const href = (fallback && safeHttpUrl(url)) || fallback;
   if (!href) return null;
   return (
     <a
@@ -99,6 +157,7 @@ export function FailureReference({ reference, t }: { reference: string | undefin
       rel="noopener noreferrer"
       data-testid="failure-reference"
       data-anchor={failureReferenceAnchor(reference)}
+      data-source={href === fallback ? 'path' : 'harness'}
     >
       {t.r12.reference}
     </a>
@@ -118,8 +177,9 @@ const docsTone = (d: ReleaseDocsView): Tone =>
 
 /**
  * «Документация выпуска» under the release review: the state in words, the
- * mode (required — the release waits; advisory — it does not), the docs
- * works, the roots they do not follow and the harness line.
+ * mode (required — the release waits; advisory — it does not) and the
+ * harness line in the view language. Without a line (an earlier view) the
+ * panel names the docs works and the roots itself.
  */
 export function ReleaseDocs({
   docs,
@@ -150,24 +210,26 @@ export function ReleaseDocs({
           {knownLabel(r.docsMode, docs.mode) ?? docs.mode}
         </p>
       ) : null}
-      {docs.works.length ? (
-        <p className="hui:m-0 hui:text-sm" data-testid="release-docs-works">
-          {r.docsWorks(docs.works.map(name).join(', '))}
-        </p>
-      ) : null}
-      {docs.missingRoots?.length ? (
-        <p className="hui:m-0 hui:text-sm" data-testid="release-docs-roots">
-          {r.docsMissingRoots(docs.missingRoots.map(name).join(', '))}
-        </p>
-      ) : null}
       {docs.line ? (
-        <p
-          className="hui:m-0 hui:text-xs hui:text-muted-foreground"
-          data-testid="release-docs-line"
-        >
+        <p className="hui:m-0 hui:text-sm" data-testid="release-docs-line">
           {docs.line}
         </p>
-      ) : null}
+      ) : (
+        <>
+          {docs.works.length ? (
+            <p className="hui:m-0 hui:text-sm" data-testid="release-docs-works">
+              {r.docsWorks(docs.works.map(name).join(', '))}
+            </p>
+          ) : null}
+          {docs.missingRoots?.length ? (
+            <p className="hui:m-0 hui:text-sm" data-testid="release-docs-roots">
+              {(docs.status === 'missing' ? r.docsRootsWithout : r.docsMissingRoots)(
+                docs.missingRoots.map(name).join(', '),
+              )}
+            </p>
+          ) : null}
+        </>
+      )}
     </div>
   );
 }
