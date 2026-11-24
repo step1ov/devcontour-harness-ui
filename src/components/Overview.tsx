@@ -3,6 +3,7 @@
 // fetching, no writes. Counts come from the view's aggregate sections (never
 // from the possibly truncated lists). Hosts theme it through `--hui-*`.
 
+import { CostsPanel } from './Costs.tsx';
 import type {
   OperatorQuestion,
   OperatorView,
@@ -907,6 +908,9 @@ export function Overview({
           ) : null}
         </Block>
       ) : null}
+
+      {/* Revision 10: spend of the release and the install, by role and model. */}
+      <CostsPanel view={view} lang={lang} timeZone={timeZone} now={clock} {...links} />
 
       <ResourcesPanel view={view} lang={lang} timeZone={timeZone} now={clock} />
 

@@ -22,6 +22,8 @@ import {
   releaseWaitsForReview,
   type ReleaseReviewView,
 } from '../model/revision9.ts';
+import { releaseDocsOf } from '../model/revision10.ts';
+import { ReleaseDocs } from './Revision10.tsx';
 
 const SIZE = 120;
 const STROKE = 12;
@@ -342,6 +344,8 @@ export function ForecastRings({
   // below 100 too (the harness caps it; the panel never contradicts it).
   const review = releaseReviewOf(forecast);
   const waitsReview = releaseWaitsForReview(forecast);
+  // Revision 10: the docs step of the release.
+  const docs = releaseDocsOf(forecast);
   const shown = finishing || waitsReview ? Math.min(percent, 99) : percent;
   // Review P3: under the review cap the visible line and the accessible value
   // say the capped figure and why, never the harness's «100 %».
@@ -449,6 +453,7 @@ export function ForecastRings({
                 capped={waitsReview && (finishing || percent >= 99)}
               />
             ) : null}
+            {docs ? <ReleaseDocs docs={docs} lang={lang} /> : null}
             {p.lead ? (
               <details className="hui-term" data-testid="forecast-lead">
                 <summary>

@@ -36,6 +36,9 @@ import { Timeline } from './Timeline.tsx';
 import { timelineOf, timelines } from '../model/tasks.ts';
 import { trackAbsence } from '../model/track.ts';
 import { TrackTable } from './Track.tsx';
+import { FailureReference, ProposalsList } from './Revision10.tsx';
+import { ReviewLine } from './Tasks.tsx';
+import { proposalsOf } from '../model/revision10.ts';
 import { Badge } from './ui/badge.tsx';
 
 export interface WorkDetailProps extends ScreenProps {
@@ -271,6 +274,12 @@ export function WorkDetail({
                     {a.lastFailure.counted ? t.r4.counted : t.r4.notCounted}.
                   </span>
                 )}
+                {a.lastFailure.reference ? (
+                  <>
+                    {' '}
+                    <FailureReference reference={a.lastFailure.reference} t={t} />
+                  </>
+                ) : null}
               </>
             ) : a.failed > 0 ? (
               w.failureUnknown
@@ -316,6 +325,9 @@ export function WorkDetail({
           </ul>
         )}
         {clipped(w.attempts, detail.truncated?.attempts)}
+        {/* Revision 10: the review of each attempt with its second pass, the writer's proposals. */}
+        {work.attemptReviews?.some((r) => r.secondPass) ? <ReviewLine w={work} t={t} /> : null}
+        <ProposalsList proposals={proposalsOf(work)} t={t} />
       </div>
 
       <div className="hui-panel" data-testid="work-verification">
