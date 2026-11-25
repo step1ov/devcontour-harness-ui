@@ -1,17 +1,15 @@
 // Contract with devcontour-harness: the view schema is owned by the harness.
 // tests/contract/harness/*.schema.json are verbatim copies of the harness
 // schemas (schemas/operator-view.schema.json, schemas/work-detail-view.schema.json
-// and schemas/setup-view.schema.json of 0.1.0-alpha.70, view revision 10, from
-// its release branch before the release). The envelopes there are still the
-// alpha.69 ones (revision 9) until a released alpha.70 CLI regenerates them;
-// tests/contract/harness-0.1.0-alpha.69/ keeps the alpha.69 schemas with the
-// same envelopes. empty-state.view.json is a real `harness view --lang en` envelope of
-// 0.1.0-alpha.69 for a state that does not exist yet (examples/two-vendors policy),
+// and schemas/setup-view.schema.json of 0.1.0-alpha.70, view revision 10);
+// empty-state.view.json is a real `harness view --lang en` envelope of that
+// version for a state that does not exist yet (examples/two-vendors policy),
 // setup-state.view.json a real `harness view --repository <empty dir> --lang en`
 // (the setup document) and setup-progress.view.json a real `harness view
 // --repository <dir> --lang en` right after `harness init` (an overview at the
 // setup stage with `stage.progress`), made with the built CLI of the
-// released 0.1.0-alpha.69. tests/contract/harness-0.1.0-alpha.68/ keeps the same
+// released 0.1.0-alpha.70 (installed from its package). tests/contract/harness-0.1.0-alpha.69/
+// keeps the same files of 0.1.0-alpha.69 (revision 9); tests/contract/harness-0.1.0-alpha.68/ keeps the same
 // files of 0.1.0-alpha.68 (revision 8); tests/contract/harness-0.1.0-alpha.67/ keeps the same
 // files of 0.1.0-alpha.67 (revision 7); tests/contract/harness-0.1.0-alpha.66/ keeps the same
 // files of 0.1.0-alpha.66 (revision 6); tests/contract/harness-0.1.0-alpha.65/ keeps the same
@@ -129,8 +127,8 @@ const harnessEmpty = read('./contract/harness/empty-state.view.json');
 const setupSchema = read('./contract/harness/setup-view.schema.json');
 const harnessSetup = read('./contract/harness/setup-state.view.json');
 const harnessProgress = read('./contract/harness/setup-progress.view.json');
-/** The producer of the alpha.69 copies. */
-const ALPHA69 = /^0\.1\.0-alpha\.69$/;
+/** The producer of the alpha.70 copies. */
+const ALPHA70 = /^0\.1\.0-alpha\.70$/;
 const overviewSchema62 = read('./contract/harness-0.1.0-alpha.62/operator-view.schema.json');
 const detailSchema62 = read('./contract/harness-0.1.0-alpha.62/work-detail-view.schema.json');
 const harnessEmpty62 = read('./contract/harness-0.1.0-alpha.62/empty-state.view.json');
@@ -168,7 +166,7 @@ test('both fixtures and a real harness document are valid under the harness sche
   for (const f of ['work.sample.json', 'work.accepted.sample.json'])
     assert.deepEqual(validate(detailSchema, read('../fixtures/ru/' + f)), [], f);
   assert.equal(harnessEmpty.ok, true);
-  assert.equal(harnessEmpty.data.viewRevision, 9);
+  assert.equal(harnessEmpty.data.viewRevision, 10);
   // Revision 9: a policy without the field is in light mode, by default, with the write guard.
   assert.deepEqual(harnessEmpty.data.settings.harnessMode, {
     mode: 'light',
@@ -176,7 +174,7 @@ test('both fixtures and a real harness document are valid under the harness sche
     writeGuard: true,
   });
   assert.equal(harnessEmpty.data.settings.thresholds.reviewRoundsUnlimited, true);
-  assert.match(harnessEmpty.data.source.producerVersion, ALPHA69);
+  assert.match(harnessEmpty.data.source.producerVersion, ALPHA70);
   // Revision 6: who decides, with the harness's own words in both languages.
   assert.equal(harnessEmpty.data.settings.decisions.items[0].key, 'maxAttempts');
   assert.match(harnessEmpty.data.settings.decisions.summary.en, /you decide/);
@@ -258,11 +256,11 @@ test('alpha.57/58 documents (revision 2) stay valid under the alpha.59 schemas a
   }
 });
 
-test('the setup document of harness alpha.69 is valid, passes the setup gate and is not an overview', () => {
+test('the setup document of harness alpha.70 is valid, passes the setup gate and is not an overview', () => {
   assert.equal(harnessSetup.ok, true);
   const doc = harnessSetup.data;
-  assert.equal(doc.viewRevision, 9);
-  assert.match(doc.source.producerVersion, ALPHA69);
+  assert.equal(doc.viewRevision, 10);
+  assert.match(doc.source.producerVersion, ALPHA70);
   // An empty directory has no `.harness/`: no setup progress yet.
   assert.equal(Object.hasOwn(doc.stage, 'progress'), false);
   assert.deepEqual(validate(setupSchema, doc), []);
@@ -296,14 +294,14 @@ const setupSchema66 = read('./contract/harness-0.1.0-alpha.66/setup-view.schema.
 const harnessEmpty66 = read('./contract/harness-0.1.0-alpha.66/empty-state.view.json');
 const harnessSetup66 = read('./contract/harness-0.1.0-alpha.66/setup-state.view.json');
 
-test('a real alpha.69 overview right after harness init carries the setup progress', () => {
+test('a real alpha.70 overview right after harness init carries the setup progress', () => {
   assert.equal(harnessProgress.ok, true);
   const doc = harnessProgress.data;
-  assert.equal(doc.viewRevision, 9);
+  assert.equal(doc.viewRevision, 10);
   // harness init writes no harnessMode: light mode by default.
   assert.deepEqual(doc.settings.harnessMode, { mode: 'light', default: true, writeGuard: true });
   assert.equal(doc.settings.thresholds.reviewRoundsUnlimited, true);
-  assert.match(doc.source.producerVersion, ALPHA69);
+  assert.match(doc.source.producerVersion, ALPHA70);
   assert.deepEqual(validate(overviewSchema, doc), []);
   assert.deepEqual(doc.works, []);
   assert.equal(doc.stage.name, 'setup');
@@ -656,8 +654,7 @@ const detailSchema69 = read('./contract/harness-0.1.0-alpha.69/work-detail-view.
 const setupSchema69 = read('./contract/harness-0.1.0-alpha.69/setup-view.schema.json');
 
 test('alpha.69 documents (revision 9) stay valid under the alpha.70 schemas and pass the gate', () => {
-  // The real envelopes in harness/ are still the alpha.69 ones (a released
-  // alpha.70 CLI regenerates them); the copies in harness-0.1.0-alpha.69/ are the same.
+  // The real alpha.69 envelopes, kept in harness-0.1.0-alpha.69/.
   for (const [name, env, schema, old] of [
     [
       'empty',
