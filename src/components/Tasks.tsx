@@ -4,6 +4,7 @@
 // process (WorkDetail). Reviews without a work (plan, contract) follow the
 // cards. Pure render of an `OperatorView`; no fetching, no writes.
 
+import { Fragment, type ReactNode } from 'react';
 import { instantMs } from '../model/compat.ts';
 import { dict, knownLabel, label, type Dict, type Lang } from '../model/dict.ts';
 import { formatElapsed, questionStatus, stageLabel } from '../model/format.ts';
@@ -58,6 +59,8 @@ import { heldCauses, releaseReviewOf, reviewRoundsUnlimited } from '../model/rev
 import { Badge, type Tone } from './ui/badge.tsx';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card.tsx';
 import { Tooltip } from './ui/tooltip.tsx';
+import { FailureReference, ProposalsList, SecondPass } from './Revision10.tsx';
+import { proposalsOf } from '../model/revision10.ts';
 import { Progress } from './ui/progress.tsx';
 import { hasOverview, SetupScreen } from './Setup.tsx';
 import { TrackLine } from './Track.tsx';
@@ -372,10 +375,22 @@ function TaskCardView({
               {a.lastFailure.counted === undefined
                 ? ''
                 : `; ${a.lastFailure.counted ? t.r4.counted : t.r4.notCounted}`}
+              {a.lastFailure.reference ? (
+                <>
+                  {' · '}
+                  <FailureReference
+                    reference={a.lastFailure.reference}
+                    url={a.lastFailure.referenceUrl}
+                    t={t}
+                  />
+                </>
+              ) : null}
             </span>
           ) : null}
         </div>
         {w.track || attemptReviewResults(w) ? <ReviewLine w={w} t={t} /> : null}
+        {/* Revision 10: the writer's proposals; the lead decides in the CLI. */}
+        <ProposalsList proposals={proposalsOf(w)} t={t} timeZone={timeZone} now={clock} />
         {/* The lead's `harness review-code` rounds: separate, only when there are any. */}
         {!(w.track || attemptReviewResults(w)) || code.length ? (
           <p data-testid="task-reviews">
@@ -613,11 +628,11 @@ function AttemptBadge({
  * The independent review of each attempt (P6-10): «Ревью: попытка 1 —
  * отклонено, попытка 2 — одобрено», from the track's review steps.
  */
-function ReviewLine({ w, t }: { w: WorkView; t: Dict }) {
+export function ReviewLine({ w, t }: { w: WorkView; t: Dict }) {
   const k = t.r10;
   // Revision 8: the harness's own per-attempt results win over the track.
   const sent = attemptReviewResults(w);
-  const items: string[] = sent
+  const items: ReactNode[] = sent
     ? sent.map((r) => {
         const head = [
           k.groupHead(r.attempt, undefined).toLowerCase(),
@@ -630,7 +645,17 @@ function ReviewLine({ w, t }: { w: WorkView; t: Dict }) {
           r.findings ? k.findings(r.findings) : undefined,
           r.notes ? k.notes(r.notes) : undefined,
         ].filter(Boolean);
-        return `${head} — ${label(k.verdict, r.verdict)}${extra.length ? ` (${extra.join(', ')})` : ''}`;
+        const text = `${head} — ${label(k.verdict, r.verdict)}${extra.length ? ` (${extra.join(', ')})` : ''}`;
+        // Revision 10: the second pass that tried to refute the first one's findings.
+        return r.secondPass ? (
+          <>
+            {text}
+            {' · '}
+            <SecondPass pass={r.secondPass} t={t} />
+          </>
+        ) : (
+          text
+        );
       })
     : attemptReviews(w.track).map((r) => {
         const head = k.groupHead(r.attempt, r.rework).toLowerCase();
@@ -639,7 +664,19 @@ function ReviewLine({ w, t }: { w: WorkView; t: Dict }) {
       });
   return (
     <p data-testid="task-attempt-reviews" data-source={sent ? 'harness' : 'track'}>
-      {items.length ? k.reviewLine(items.join(', ')) : k.reviewNone}
+      {items.length ? (
+        <>
+          {k.reviewLine('')}
+          {items.map((x, i) => (
+            <Fragment key={i}>
+              {i ? ', ' : ''}
+              {x}
+            </Fragment>
+          ))}
+        </>
+      ) : (
+        k.reviewNone
+      )}
     </p>
   );
 }

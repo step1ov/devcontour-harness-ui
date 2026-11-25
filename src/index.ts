@@ -67,3 +67,11 @@ export { DecisionsPanel, decisionValueText } from './components/Settings.tsx';
 // Revision 9 (harness 0.1.0-alpha.69): the harness mode and the release acceptance review.
 export { HarnessModePanel } from './components/Settings.tsx';
 export { ReleaseReview } from './components/Forecast.tsx';
+// Revision 10 (harness 0.1.0-alpha.70): spend, second review pass, proposals, docs step, failure reference.
+export { CostsPanel, WorkCost, callsText, costText } from './components/Costs.tsx';
+export {
+  FailureReference,
+  ProposalsList,
+  ReleaseDocs,
+  SecondPass,
+} from './components/Revision10.tsx';

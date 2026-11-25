@@ -1750,6 +1750,91 @@ const ru = {
         'проверка запускает браузер, а в песочнице проверок он не стартует — поменять проверку, ход ведущего',
     } as Labels,
   },
+  // ui alpha.12 (view revision 10, harness 0.1.0-alpha.70).
+  r12: {
+    costsTitle: 'Расход',
+    costsRelease: 'Текущий выпуск',
+    costsTotal: 'Вся установка',
+    costsSince: (when: string) => `вызовы после release done ${when}`,
+    costsAllCalls: 'все вызовы: выпуск ещё не закрывался',
+    atLeast: (amount: string) => `не меньше ${amount}`,
+    priceUnknown: 'цена неизвестна',
+    belowCent: '< $0.01',
+    costsByRole: 'По ролям',
+    costsByModel: 'По моделям',
+    costsByWork: (n: number) => `По работам и попыткам (${n})`,
+    costsNone: 'Вызовов моделей ещё не было.',
+    costRole: {
+      writer: 'исполнитель',
+      reviewer: 'reviewer',
+      planner: 'план и договор',
+      lead: 'ведущий',
+      other: 'прочее',
+    } as Labels,
+    costModel: (model: string, vendor: string) => `${model} (${vendor})`,
+    costAttempt: (n: number | undefined) => (n !== undefined ? `попытка ${n}` : 'попытка'),
+    costCalls: (n: number) => rp(n, 'вызов', 'вызова', 'вызовов'),
+    secondPassRan: (refuted: number, missed: number, overturned: boolean) =>
+      [
+        `второй проход: снято ${refuted}`,
+        missed ? `пропущено первым ${missed}` : '',
+        overturned ? 'отказ снят' : '',
+      ]
+        .filter(Boolean)
+        .join(', '),
+    secondPassFailed: 'второй проход не удался — действует первый',
+    secondPassMode: {
+      'on-reject': 'второй проход при отказе',
+      always: 'второй проход всегда',
+    } as Labels,
+    secondPassWhy:
+      'Второй проход — свежий вызов reviewer: пытается опровергнуть каждую блокирующую находку первого. Подтверждённые остаются, опровергнутые снимаются с основанием.',
+    proposalsTitle: (n: number) => `Предложения исполнителя (${n})`,
+    proposalKind: { 'follow-up': 'продолжение', split: 'разделение' } as Labels,
+    proposalStatus: {
+      proposed: 'ждёт ведущего',
+      accepted: 'принято',
+      rejected: 'отклонено',
+    } as Labels,
+    proposalAttempt: (n: number) => `попытка ${n}`,
+    proposalsWho: 'Решает ведущий (harness proposal); принятое войдёт в план через ревью плана.',
+    reference: 'что значит этот отказ',
+    docsTitle: 'Документация выпуска',
+    docsMode: {
+      required: 'обязательно: выпуск ждёт',
+      advisory: 'совет: выпуск не держит',
+      off: 'выключено',
+    } as Labels,
+    docsStatus: {
+      off: 'выключено',
+      'no-works': 'работ ещё нет',
+      missing: 'нет работы документации',
+      'not-after-roots': 'не после всех корневых работ',
+      pending: 'в работе',
+      done: 'готово',
+    } as Labels,
+    docsWorks: (list: string) => `работы: ${list}`,
+    docsMissingRoots: (list: string) => `не зависит от: ${list}`,
+    docsRootsWithout: (list: string) => `корневые работы без документации: ${list}`,
+    unpricedCalls: (n: number) => `без цены: ${rp(n, 'вызов', 'вызова', 'вызовов')}`,
+    unpricedNote: (n: number) =>
+      `без цены: ${rp(n, 'вызов', 'вызова', 'вызовов')} — суммы не меньше показанных`,
+    costsAfterRelease: 'вызовы после последнего release done',
+    moreModels: (n: number) => `ещё ${rp(n, 'модель', 'модели', 'моделей')}`,
+    moreWorks: (n: number) => `ещё ${rp(n, 'работа', 'работы', 'работ')}`,
+    moreAttempts: (n: number) =>
+      `ещё ${rp(n, 'ранняя попытка', 'ранние попытки', 'ранних попыток')}`,
+    refutedTitle: 'Снятые находки',
+    refutedItem: (finding: string, basis: string) => `«${finding}» — ${basis}`,
+    proposalGoal: (goal: string) => `цель: ${goal}`,
+    proposalReason: (reason: string) => `почему отдельно: ${reason}`,
+    proposalParts: (n: number) => `частей: ${n}`,
+    proposalDecision: (who: string, when: string, reason: string | undefined) =>
+      `решение — ${who}, ${when}${reason ? `: ${reason}` : ''}`,
+    decidedBy: { lead: 'ведущий', operator: 'оператор' } as Labels,
+    workCostTitle: 'Расход по попыткам',
+    workCostTotal: (amount: string, calls: string) => `всего ${amount} · ${calls}`,
+  },
 };
 
 export type Dict = typeof ru;
@@ -3056,6 +3141,91 @@ const en: Dict = {
       'sandbox-browser':
         'the check starts a browser, and it does not start in the check sandbox — change the check, the lead’s move',
     },
+  },
+  // ui alpha.12 (view revision 10, harness 0.1.0-alpha.70).
+  r12: {
+    costsTitle: 'Spend',
+    costsRelease: 'Current release',
+    costsTotal: 'Whole install',
+    costsSince: (when: string) => `calls after release done ${when}`,
+    costsAllCalls: 'all calls: no release closed yet',
+    atLeast: (amount: string) => `at least ${amount}`,
+    priceUnknown: 'price unknown',
+    belowCent: '< $0.01',
+    costsByRole: 'By role',
+    costsByModel: 'By model',
+    costsByWork: (n: number) => `By work and attempt (${n})`,
+    costsNone: 'No model calls yet.',
+    costRole: {
+      writer: 'writer',
+      reviewer: 'reviewer',
+      planner: 'plan and contract',
+      lead: 'lead',
+      other: 'other',
+    },
+    costModel: (model: string, vendor: string) => `${model} (${vendor})`,
+    costAttempt: (n: number | undefined) => (n !== undefined ? `attempt ${n}` : 'attempt'),
+    costCalls: (n: number) => ep(n, 'call', 'calls'),
+    secondPassRan: (refuted: number, missed: number, overturned: boolean) =>
+      [
+        `second pass: ${refuted} refuted`,
+        missed ? `${missed} missed by the first` : '',
+        overturned ? 'rejection lifted' : '',
+      ]
+        .filter(Boolean)
+        .join(', '),
+    secondPassFailed: 'second pass failed — the first pass stands',
+    secondPassMode: {
+      'on-reject': 'second pass on rejection',
+      always: 'second pass always',
+    },
+    secondPassWhy:
+      'The second pass is a fresh reviewer call that tries to refute each blocking finding of the first. Confirmed ones stay; refuted ones are lifted with a basis.',
+    proposalsTitle: (n: number) => `Writer proposals (${n})`,
+    proposalKind: { 'follow-up': 'follow-up', split: 'split' },
+    proposalStatus: {
+      proposed: 'waits for the lead',
+      accepted: 'accepted',
+      rejected: 'rejected',
+    },
+    proposalAttempt: (n: number) => `attempt ${n}`,
+    proposalsWho:
+      'The lead decides (harness proposal); an accepted one enters the plan through the plan review.',
+    reference: 'what this failure means',
+    docsTitle: 'Release docs',
+    docsMode: {
+      required: 'required: the release waits',
+      advisory: 'advisory: does not hold the release',
+      off: 'off',
+    },
+    docsStatus: {
+      off: 'off',
+      'no-works': 'no works yet',
+      missing: 'no docs work',
+      'not-after-roots': 'not after every root work',
+      pending: 'in work',
+      done: 'done',
+    },
+    docsWorks: (list: string) => `works: ${list}`,
+    docsMissingRoots: (list: string) => `does not follow: ${list}`,
+    docsRootsWithout: (list: string) => `root works without docs: ${list}`,
+    unpricedCalls: (n: number) => `no price: ${ep(n, 'call', 'calls')}`,
+    unpricedNote: (n: number) =>
+      `no price: ${ep(n, 'call', 'calls')} — the sums are at least the ones shown`,
+    costsAfterRelease: 'calls after the last release done',
+    moreModels: (n: number) => `${ep(n, 'more model', 'more models')}`,
+    moreWorks: (n: number) => `${ep(n, 'more work', 'more works')}`,
+    moreAttempts: (n: number) => `${ep(n, 'earlier attempt', 'earlier attempts')} more`,
+    refutedTitle: 'Refuted findings',
+    refutedItem: (finding: string, basis: string) => `“${finding}” — ${basis}`,
+    proposalGoal: (goal: string) => `goal: ${goal}`,
+    proposalReason: (reason: string) => `why separate: ${reason}`,
+    proposalParts: (n: number) => `${n} parts`,
+    proposalDecision: (who: string, when: string, reason: string | undefined) =>
+      `decided by the ${who}, ${when}${reason ? `: ${reason}` : ''}`,
+    decidedBy: { lead: 'lead', operator: 'operator' },
+    workCostTitle: 'Spend by attempt',
+    workCostTotal: (amount: string, calls: string) => `total ${amount} · ${calls}`,
   },
 };
 
