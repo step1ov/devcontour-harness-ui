@@ -207,8 +207,8 @@ test('reviews: plan rounds without a limit name thin mode', () => {
 test('the work detail: each attempt names its writer session, with what it means', () => {
   const m = html(<WorkDetail detail={detailOf(revision11Detail())} lang="ru" timeZone={TZ} />);
   const rows = part(m, 'work-attempts');
-  assert.match(rows, /попытка 2 .*· сессия: продолжена/);
-  assert.match(rows, /попытка 1 .*· сессия: новая/);
+  assert.match(rows, /Попытка 2 .*· сессия: продолжена/);
+  assert.match(rows, /Попытка 1 .*· сессия: новая/);
   assert.match(m, /data-testid="writer-session" data-session="resumed"/);
   assert.match(m, /data-testid="writer-session" data-session="fresh"/);
   assert.match(shown(m), /Сессия исполнителя: продолжение сессии этой работы/);
