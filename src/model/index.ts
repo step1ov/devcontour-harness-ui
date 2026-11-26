@@ -158,6 +158,7 @@ export {
   releaseDocsOf,
   workCostOf,
 } from './revision10.ts';
+export { isThinMode, writerSessionOf } from './revision11.ts';
 export {
   isInfraWork,
   setupElapsed,

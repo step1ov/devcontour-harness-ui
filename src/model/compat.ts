@@ -20,7 +20,7 @@ export type ViewCheck =
     };
 
 /** Highest `viewRevision` this build knows how to render in full. */
-export const KNOWN_VIEW_REVISION = 10;
+export const KNOWN_VIEW_REVISION = 11;
 
 type Obj = Record<string, unknown>;
 const isObject = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -193,7 +193,8 @@ const settings = obj({
       warning: opt(bilingual),
     }),
   ),
-  // Revision 9: the harness mode (light by default, or strict) and the write guard.
+  // Revision 9: the harness mode (light by default, or strict) and the write
+  // guard; revision 11 adds thin (a string either way: an unknown mode is shown as its code).
   harnessMode: opt(obj({ mode: S, default: B, writeGuard: B })),
 });
 // Revision 10 (harness alpha.70): a sum of call costs with its unpriced calls.
@@ -881,6 +882,8 @@ const detail = obj({
       model: opt(S),
       startedAt: I,
       finishedAt: opt(I),
+      // Revision 11: the writer session of a thin mode attempt.
+      writerSession: opt(S),
       stages: arr(obj({ stage: S, durationMs: opt(N), outcome: opt(S) }), 50),
     }),
     20,
