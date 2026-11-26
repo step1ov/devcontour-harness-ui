@@ -16,6 +16,7 @@ import { UpdatesSection } from './Updates.tsx';
 import { instantMs } from '../model/compat.ts';
 import { hasOverview, SetupScreen } from './Setup.tsx';
 import { harnessModeOf, reviewRoundsUnlimited } from '../model/revision9.ts';
+import { isThinMode } from '../model/revision11.ts';
 
 /** Theme choice of the viewer: follow the system, or light, or dark. */
 export type ThemeChoice = 'system' | 'light' | 'dark';
@@ -235,7 +236,7 @@ export function Settings({ view, lang = 'ru', theme = 'system', onThemeChange }:
             v.roundCap,
             // Revision 9: light mode lifts the plan review limit; the cap is the strict one.
             reviewRoundsUnlimited(view)
-              ? t.r11.roundCapUnlimited(th.reviewRoundCap)
+              ? (isThinMode(view) ? t.r13 : t.r11).roundCapUnlimited(th.reviewRoundCap)
               : String(th.reviewRoundCap),
             'thresholds.reviewRoundCap',
           )}
@@ -371,6 +372,9 @@ export function DecisionsPanel({ view, lang = 'ru' }: { view: OperatorView; lang
 /**
  * The harness mode (revision 9, harness 0.1.0-alpha.69): light (the default)
  * or strict, and one line on the write guard. Nothing for an older harness.
+ * Revision 11 (harness 0.1.0-alpha.73): thin mode is named neutrally with
+ * what it means; it runs in the light environment, so a missing write guard
+ * is flagged as in light; the guard line names the work tree (one per work).
  */
 export function HarnessModePanel({ view, lang = 'ru' }: { view: OperatorView; lang?: Lang }) {
   const m = harnessModeOf(view);
@@ -388,9 +392,13 @@ export function HarnessModePanel({ view, lang = 'ru' }: { view: OperatorView; la
         : sandbox === 'none'
           ? r.guardStrictNone
           : r.guardStrictUnknown
-      : m.writeGuard
-        ? r.guardOn
-        : r.guardOff;
+      : m.mode === 'thin'
+        ? m.writeGuard
+          ? t.r13.guardThinOn
+          : t.r13.guardThinOff
+        : m.writeGuard
+          ? r.guardOn
+          : r.guardOff;
   return (
     <div
       className="hui-panel"
@@ -405,10 +413,19 @@ export function HarnessModePanel({ view, lang = 'ru' }: { view: OperatorView; la
       </p>
       <p
         data-testid="harness-mode-guard"
-        data-status={(m.mode === 'light' && !m.writeGuard) || strictOff ? 'blocked' : undefined}
+        data-status={
+          ((m.mode === 'light' || m.mode === 'thin') && !m.writeGuard) || strictOff
+            ? 'blocked'
+            : undefined
+        }
       >
         {guard}
       </p>
+      {m.mode === 'thin' ? (
+        <p className="hui-muted" data-testid="harness-mode-thin">
+          {t.r13.thinWhy}
+        </p>
+      ) : null}
     </div>
   );
 }

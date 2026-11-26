@@ -47,11 +47,13 @@ export type ReviewSubjectKind = ReviewKind | 'release';
 
 /**
  * `settings.harnessMode` (revision 9, harness 0.1.0-alpha.69): `light` (the
- * default, `default: true` — the policy has no field) or `strict`;
+ * default, `default: true` — the policy has no field) or `strict`; revision
+ * 11 (harness 0.1.0-alpha.73) adds `thin` — the light environment with one
+ * writer session per work, checks on a clean checkout and one review.
  * `writeGuard` — whether the write boundary is in force.
  */
 export interface HarnessModeView {
-  mode: 'light' | 'strict';
+  mode: 'light' | 'strict' | 'thin';
   default: boolean;
   writeGuard: boolean;
 }
@@ -1370,6 +1372,9 @@ export interface PreviewView {
   state: 'running';
 }
 
+/** The writer session of a thin mode attempt (revision 11). */
+export type WriterSession = 'fresh' | 'resumed' | 'fallback';
+
 /** One attempt row of the work detail document. */
 export interface AttemptRow {
   attempt: number;
@@ -1381,6 +1386,12 @@ export interface AttemptRow {
   model?: string;
   startedAt: string;
   finishedAt?: string;
+  /**
+   * Revision 11 (harness 0.1.0-alpha.73, thin mode): the writer session of
+   * the attempt — `fresh` a new one, `resumed` the work's session continued,
+   * `fallback` a new one in place of a lost or overflowed session.
+   */
+  writerSession?: WriterSession;
   /**
    * Timed stages of the attempt as the harness records them: `prepare` and
    * `integration-prepare` (revision 3, harness alpha.59: preparing the

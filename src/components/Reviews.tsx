@@ -12,6 +12,7 @@ import {
   roundsWithoutLimit,
   type ReleaseReviewView,
 } from '../model/revision9.ts';
+import { isThinMode } from '../model/revision11.ts';
 import {
   Clipped,
   Codes,
@@ -38,6 +39,7 @@ export function ReviewSubjectCard({
   links,
   collapsed,
   unlimited = false,
+  thin = false,
   releaseStatus,
 }: {
   r: ReviewSubjectView;
@@ -46,6 +48,8 @@ export function ReviewSubjectCard({
   collapsed?: boolean;
   /** `settings.thresholds.reviewRoundsUnlimited` (revision 9): plan rounds without a limit. */
   unlimited?: boolean;
+  /** Revision 11: thin mode lifts the limit too; the reason names it. */
+  thin?: boolean;
   /**
    * Revision 9: the current release acceptance (`forecast.progress.release.review.status`).
    * A release round approved earlier is not the current acceptance when it is stale.
@@ -82,7 +86,7 @@ export function ReviewSubjectCard({
       {r.line ? <p className="hui-muted">{r.line}</p> : null}
       <ul className="hui-facts">
         <li data-testid="review-rounds">
-          <RoundsText r={r} t={t} unlimited={unlimited} />
+          <RoundsText r={r} t={t} unlimited={unlimited} thin={thin} />
         </li>
         <li>{v.open(r.open.blocking, r.open.notes)}</li>
         <li>{v.acceptedLimits(r.accepted)}</li>
@@ -174,6 +178,7 @@ export function Reviews({
   const v = t.reviews;
   const links = { onOpenWork, workHref };
   const unlimited = reviewRoundsUnlimited(view);
+  const thin = isThinMode(view);
   const releaseStatus = releaseReviewOf(view.forecast)?.status;
   return (
     <section className="hui hui-reviews" aria-labelledby="hui-reviews-title" lang={lang}>
@@ -216,7 +221,7 @@ export function Reviews({
                   </td>
                   <td data-label={v.col.kind}>{label(v.kind, r.kind)}</td>
                   <td data-label={v.col.rounds}>
-                    <RoundsText r={r} t={t} unlimited={unlimited} />
+                    <RoundsText r={r} t={t} unlimited={unlimited} thin={thin} />
                   </td>
                   <td data-label={v.col.open}>{v.open(r.open.blocking, r.open.notes)}</td>
                   <td data-label={v.col.accepted}>{r.accepted}</td>
@@ -233,6 +238,7 @@ export function Reviews({
               links={links}
               collapsed={Boolean(collapseFindings)}
               unlimited={unlimited}
+              thin={thin}
               releaseStatus={releaseStatus}
             />
           ))}
@@ -255,10 +261,13 @@ export function RoundsText({
   r,
   t,
   unlimited = false,
+  thin = false,
 }: {
   r: ReviewSubjectView;
   t: Dict;
   unlimited?: boolean;
+  /** Revision 11: the limit is lifted by thin mode, not light. */
+  thin?: boolean;
 }) {
   const v = t.reviews;
   const light = unlimited && (r.kind === 'plan' || r.kind === 'contract');
@@ -271,7 +280,7 @@ export function RoundsText({
       {light ? (
         <span className="hui-muted" data-testid="rounds-unlimited">
           {' · '}
-          {t.r11.roundsUnlimitedWhy}
+          {(thin ? t.r13 : t.r11).roundsUnlimitedWhy}
         </span>
       ) : null}
       {typeof left === 'number' ? (

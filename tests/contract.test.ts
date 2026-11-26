@@ -1,14 +1,17 @@
 // Contract with devcontour-harness: the view schema is owned by the harness.
 // tests/contract/harness/*.schema.json are verbatim copies of the harness
 // schemas (schemas/operator-view.schema.json, schemas/work-detail-view.schema.json
-// and schemas/setup-view.schema.json of 0.1.0-alpha.70, view revision 10);
+// and schemas/setup-view.schema.json of 0.1.0-alpha.73, view revision 11);
 // empty-state.view.json is a real `harness view --lang en` envelope of that
 // version for a state that does not exist yet (examples/two-vendors policy),
 // setup-state.view.json a real `harness view --repository <empty dir> --lang en`
-// (the setup document) and setup-progress.view.json a real `harness view
+// (the setup document), setup-progress.view.json a real `harness view
 // --repository <dir> --lang en` right after `harness init` (an overview at the
-// setup stage with `stage.progress`), made with the built CLI of the
-// released 0.1.0-alpha.70 (installed from its package). tests/contract/harness-0.1.0-alpha.69/
+// setup stage with `stage.progress`) and setup-progress-thin.view.json the
+// same after `harness init --harness-mode thin`, made with the CLI of the
+// 0.1.0-alpha.73 release branch run from its sources. tests/contract/harness-0.1.0-alpha.70/
+// keeps the same files of 0.1.0-alpha.70 (revision 10; the schemas are also
+// those of .71 and .72); tests/contract/harness-0.1.0-alpha.69/
 // keeps the same files of 0.1.0-alpha.69 (revision 9); tests/contract/harness-0.1.0-alpha.68/ keeps the same
 // files of 0.1.0-alpha.68 (revision 8); tests/contract/harness-0.1.0-alpha.67/ keeps the same
 // files of 0.1.0-alpha.67 (revision 7); tests/contract/harness-0.1.0-alpha.66/ keeps the same
@@ -64,6 +67,7 @@ import {
   type ForecastOutlineView,
   type ForecastView,
   type HarnessModeView,
+  type WriterSession,
   type HeldGateCause,
   type ReleaseReviewView,
   type CostAmountView,
@@ -114,6 +118,7 @@ import {
 } from './legacy.ts';
 import { instantMs } from '../src/model/compat.ts';
 import { revision10View as revision10Demo, revision9View as revision9Demo } from './revision10.ts';
+import { revision11Detail, revision11View as revision11Demo } from './revision11.ts';
 
 type Json = Record<string, any>;
 const read = (rel: string): Json =>
@@ -127,8 +132,9 @@ const harnessEmpty = read('./contract/harness/empty-state.view.json');
 const setupSchema = read('./contract/harness/setup-view.schema.json');
 const harnessSetup = read('./contract/harness/setup-state.view.json');
 const harnessProgress = read('./contract/harness/setup-progress.view.json');
-/** The producer of the alpha.70 copies. */
-const ALPHA70 = /^0\.1\.0-alpha\.70$/;
+const harnessThin = read('./contract/harness/setup-progress-thin.view.json');
+/** The producer of the alpha.73 copies. */
+const ALPHA73 = /^0\.1\.0-alpha\.73$/;
 const overviewSchema62 = read('./contract/harness-0.1.0-alpha.62/operator-view.schema.json');
 const detailSchema62 = read('./contract/harness-0.1.0-alpha.62/work-detail-view.schema.json');
 const harnessEmpty62 = read('./contract/harness-0.1.0-alpha.62/empty-state.view.json');
@@ -166,7 +172,7 @@ test('both fixtures and a real harness document are valid under the harness sche
   for (const f of ['work.sample.json', 'work.accepted.sample.json'])
     assert.deepEqual(validate(detailSchema, read('../fixtures/ru/' + f)), [], f);
   assert.equal(harnessEmpty.ok, true);
-  assert.equal(harnessEmpty.data.viewRevision, 10);
+  assert.equal(harnessEmpty.data.viewRevision, 11);
   // Revision 9: a policy without the field is in light mode, by default, with the write guard.
   assert.deepEqual(harnessEmpty.data.settings.harnessMode, {
     mode: 'light',
@@ -174,7 +180,7 @@ test('both fixtures and a real harness document are valid under the harness sche
     writeGuard: true,
   });
   assert.equal(harnessEmpty.data.settings.thresholds.reviewRoundsUnlimited, true);
-  assert.match(harnessEmpty.data.source.producerVersion, ALPHA70);
+  assert.match(harnessEmpty.data.source.producerVersion, ALPHA73);
   // Revision 6: who decides, with the harness's own words in both languages.
   assert.equal(harnessEmpty.data.settings.decisions.items[0].key, 'maxAttempts');
   assert.match(harnessEmpty.data.settings.decisions.summary.en, /you decide/);
@@ -256,11 +262,11 @@ test('alpha.57/58 documents (revision 2) stay valid under the alpha.59 schemas a
   }
 });
 
-test('the setup document of harness alpha.70 is valid, passes the setup gate and is not an overview', () => {
+test('the setup document of harness alpha.73 is valid, passes the setup gate and is not an overview', () => {
   assert.equal(harnessSetup.ok, true);
   const doc = harnessSetup.data;
-  assert.equal(doc.viewRevision, 10);
-  assert.match(doc.source.producerVersion, ALPHA70);
+  assert.equal(doc.viewRevision, 11);
+  assert.match(doc.source.producerVersion, ALPHA73);
   // An empty directory has no `.harness/`: no setup progress yet.
   assert.equal(Object.hasOwn(doc.stage, 'progress'), false);
   assert.deepEqual(validate(setupSchema, doc), []);
@@ -294,14 +300,14 @@ const setupSchema66 = read('./contract/harness-0.1.0-alpha.66/setup-view.schema.
 const harnessEmpty66 = read('./contract/harness-0.1.0-alpha.66/empty-state.view.json');
 const harnessSetup66 = read('./contract/harness-0.1.0-alpha.66/setup-state.view.json');
 
-test('a real alpha.70 overview right after harness init carries the setup progress', () => {
+test('a real alpha.73 overview right after harness init carries the setup progress', () => {
   assert.equal(harnessProgress.ok, true);
   const doc = harnessProgress.data;
-  assert.equal(doc.viewRevision, 10);
+  assert.equal(doc.viewRevision, 11);
   // harness init writes no harnessMode: light mode by default.
   assert.deepEqual(doc.settings.harnessMode, { mode: 'light', default: true, writeGuard: true });
   assert.equal(doc.settings.thresholds.reviewRoundsUnlimited, true);
-  assert.match(doc.source.producerVersion, ALPHA70);
+  assert.match(doc.source.producerVersion, ALPHA73);
   assert.deepEqual(validate(overviewSchema, doc), []);
   assert.deepEqual(doc.works, []);
   assert.equal(doc.stage.name, 'setup');
@@ -699,8 +705,8 @@ test('revision 10 fields: valid under the alpha.70 schemas, refused by alpha.69,
   const c = checkView(v);
   assert.equal(c.ok, true, c.ok ? '' : c.message);
   assert.equal(c.ok && c.newerRevision, false);
-  // A revision 11 document is read and flagged as newer.
-  const later = checkView({ ...structuredClone(v), viewRevision: 11 });
+  // A revision 12 document is read and flagged as newer.
+  const later = checkView({ ...structuredClone(v), viewRevision: 12 });
   assert.equal(later.ok && later.newerRevision, true);
   const bad = (f: (d: Json) => void) => {
     const d = structuredClone(v);
@@ -785,6 +791,120 @@ test('revision 10 fields: valid under the alpha.70 schemas, refused by alpha.69,
   assert.deepEqual(validate(detailSchema, detail), []);
   assert.match(validate(detailSchema69, detail).join(), /unknown field (secondPass|proposals)/);
   assert.equal(checkWorkDetail(detail).ok, true);
+});
+
+const overviewSchema70 = read('./contract/harness-0.1.0-alpha.70/operator-view.schema.json');
+const detailSchema70 = read('./contract/harness-0.1.0-alpha.70/work-detail-view.schema.json');
+const setupSchema70 = read('./contract/harness-0.1.0-alpha.70/setup-view.schema.json');
+
+test('alpha.70 documents (revision 10) stay valid under the alpha.73 schemas and pass the gate', () => {
+  // The real alpha.70 envelopes, kept in harness-0.1.0-alpha.70/ (alpha.71 and
+  // .72 send the same revision 10 under the same schemas).
+  for (const [name, env, schema, old] of [
+    [
+      'empty',
+      read('./contract/harness-0.1.0-alpha.70/empty-state.view.json'),
+      overviewSchema,
+      overviewSchema70,
+    ],
+    [
+      'setup',
+      read('./contract/harness-0.1.0-alpha.70/setup-state.view.json'),
+      setupSchema,
+      setupSchema70,
+    ],
+    [
+      'progress',
+      read('./contract/harness-0.1.0-alpha.70/setup-progress.view.json'),
+      overviewSchema,
+      overviewSchema70,
+    ],
+  ] as const) {
+    assert.equal(env.data.viewRevision, 10, name);
+    assert.equal(env.data.source.producerVersion, '0.1.0-alpha.70', name);
+    assert.deepEqual(validate(old, env.data), [], name);
+    assert.deepEqual(validate(schema, env.data), [], name);
+    const c = checkOverview(env.data);
+    assert.equal(c.ok, true, `${name}: ${c.ok ? '' : c.message}`);
+    assert.equal(c.ok && c.newerRevision, false, name);
+  }
+  const v10 = revision10Demo();
+  assert.deepEqual(validate(overviewSchema70, v10), []);
+  assert.deepEqual(validate(overviewSchema, v10), []);
+  assert.equal(checkView(v10).ok, true);
+  // The alpha.70 detail schema is the alpha.73 one without the writer session.
+  const detail = structuredClone(workFixture);
+  assert.deepEqual(validate(detailSchema70, detail), []);
+  assert.deepEqual(validate(detailSchema, detail), []);
+});
+
+test('revision 11 fields: valid under the alpha.73 schemas, refused by alpha.70, checked by the gate', () => {
+  const v = revision11Demo();
+  assert.deepEqual(validate(overviewSchema, v), []);
+  assert.match(validate(overviewSchema70, v).join(), /harnessMode\.mode: not in enum/);
+  const c = checkView(v);
+  assert.equal(c.ok, true, c.ok ? '' : c.message);
+  assert.equal(c.ok && c.newerRevision, false);
+  assert.equal(c.ok && c.view.settings.harnessMode?.mode, 'thin');
+  const d = revision11Detail();
+  assert.deepEqual(validate(detailSchema, d), []);
+  assert.match(validate(detailSchema70, d).join(), /unknown field writerSession/);
+  const cd = checkWorkDetail(d);
+  assert.equal(cd.ok, true, cd.ok ? '' : cd.message);
+  assert.deepEqual(cd.ok && cd.detail.attempts.map((a) => a.writerSession), ['resumed', 'fresh']);
+  for (const session of ['fresh', 'resumed', 'fallback']) {
+    const x = revision11Detail();
+    x.attempts[0].writerSession = session;
+    assert.deepEqual(validate(detailSchema, x), [], session);
+  }
+  // A malformed session is refused at the gate; an unknown one of a later harness is read.
+  const detailOk = (f: (x: Json) => void) => {
+    const x = revision11Detail();
+    f(x);
+    return checkWorkDetail(x).ok;
+  };
+  assert.equal(
+    detailOk((x) => (x.attempts[0].writerSession = 2)),
+    false,
+  );
+  assert.equal(
+    detailOk((x) => (x.attempts[0].writerSession = 'later-session')),
+    true,
+  );
+  assert.equal(
+    detailOk((x) => delete x.attempts[0].writerSession),
+    true,
+  );
+  // An unknown mode of a later harness is read and shown as its code; a malformed one is refused.
+  const viewOk = (f: (x: Json) => void) => {
+    const x = revision11Demo();
+    f(x);
+    return checkView(x).ok;
+  };
+  assert.equal(
+    viewOk((x) => (x.settings.harnessMode.mode = 'later-mode')),
+    true,
+  );
+  assert.equal(
+    viewOk((x) => (x.settings.harnessMode.mode = 11)),
+    false,
+  );
+});
+
+test('a real alpha.73 overview after harness init --harness-mode thin names thin mode', () => {
+  assert.equal(harnessThin.ok, true);
+  const doc = harnessThin.data;
+  assert.equal(doc.viewRevision, 11);
+  assert.match(doc.source.producerVersion, ALPHA73);
+  // Chosen in the policy, in the light environment: the write guard is in force.
+  assert.deepEqual(doc.settings.harnessMode, { mode: 'thin', default: false, writeGuard: true });
+  // Thin mode lifts the plan review limit as light mode does.
+  assert.equal(doc.settings.thresholds.reviewRoundsUnlimited, true);
+  assert.deepEqual(validate(overviewSchema, doc), []);
+  assert.match(validate(overviewSchema70, doc).join(), /harnessMode\.mode: not in enum/);
+  const c = checkOverview(doc);
+  assert.equal(c.ok && !('setup' in c) && c.newerRevision, false);
+  assert.equal(c.ok && !('setup' in c) && c.view.settings.harnessMode?.mode, 'thin');
 });
 
 test('alpha.66 documents (revision 6) stay valid under the alpha.69 schemas and pass the gate', () => {
@@ -2946,6 +3066,7 @@ const shapes: [string, Json, Record<string, string>][] = [
       model: 'opt:s',
       startedAt: 'req:s',
       finishedAt: 'opt:s',
+      writerSession: 'opt:s',
       stages: 'req:a<o>',
     }),
   ],
@@ -3143,7 +3264,12 @@ const vocabularies: [string, Json, string[]][] = [
   [
     'settings.harnessMode.mode',
     overviewSchema[ov].settings[ov].harnessMode[ov].mode,
-    vocab<HarnessModeView['mode']>()(['light', 'strict']),
+    vocab<HarnessModeView['mode']>()(['light', 'strict', 'thin']),
+  ],
+  [
+    'detail attempts[].writerSession',
+    detailSchema[ov].attempts.items[ov].writerSession,
+    vocab<WriterSession>()(['fresh', 'resumed', 'fallback']),
   ],
   [
     'reviews[].findings[].disposition.decision',

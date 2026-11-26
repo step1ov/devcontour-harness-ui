@@ -474,10 +474,12 @@ test('a revision 9 view renders as in alpha.11: no revision 10 block anywhere', 
   for (const id of NEW_IDS) assert.doesNotMatch(m, new RegExp(`data-testid="${id}"`), id);
 });
 
-test('the gate keeps revision 10 views and flags a newer one', () => {
+test('the gate keeps revision 10 views; a revision 11 one is known too', () => {
   const c = checkView(revision10View());
   assert.equal(c.ok && c.newerRevision, false);
-  const later = checkView({ ...revision10View(), viewRevision: 11 });
+  const next = checkView({ ...revision10View(), viewRevision: 11 });
+  assert.equal(next.ok && next.newerRevision, false);
+  const later = checkView({ ...revision10View(), viewRevision: 12 });
   assert.equal(later.ok && later.newerRevision, true);
   assert.equal(t.r12.costsTitle, 'Расход');
 });

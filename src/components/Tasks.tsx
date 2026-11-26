@@ -56,6 +56,7 @@ import {
 } from './common.tsx';
 import { ReviewSubjectCard } from './Reviews.tsx';
 import { heldCauses, releaseReviewOf, reviewRoundsUnlimited } from '../model/revision9.ts';
+import { isThinMode } from '../model/revision11.ts';
 import { Badge, type Tone } from './ui/badge.tsx';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card.tsx';
 import { Tooltip } from './ui/tooltip.tsx';
@@ -169,6 +170,7 @@ export function Tasks({ view, lang = 'ru', now, onOpenWork, workHref, timeZone }
               links={links}
               collapsed
               unlimited={reviewRoundsUnlimited(view)}
+              thin={isThinMode(view)}
               releaseStatus={releaseReviewOf(view.forecast)?.status}
             />
           ))}
