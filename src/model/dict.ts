@@ -1839,16 +1839,20 @@ const ru = {
   r13: {
     thinWhy:
       'Тонкий режим: окружение облегчённого, поток тоньше. Исполнитель считается честным, но ошибающимся: у работы одна сессия исполнителя, она продолжается от сдачи к сдаче; каждая сдача проверяется на чистом checkout цели и проходит одно независимое ревью против постановки.',
+    guardThinOn:
+      'Защита записи: исполнитель и проверки пишут только в дерево работы, свой временный каталог и кеши (от случайных ошибок, не граница безопасности).',
+    guardThinOff:
+      'Защиты записи нет: исполнитель и проверки могут писать вне дерева работы (harness doctor называет причину).',
     writerSessionTitle: 'Сессия исполнителя',
     writerSession: {
       fresh: 'новая',
       resumed: 'продолжена',
-      fallback: 'новая после переполнения',
+      fallback: 'новая вместо утраченной',
     } as Labels,
     writerSessionRow: (session: string) => `сессия: ${session}`,
     writerSessionWhy: {
       fresh:
-        'первая сдача работы или новая сессия со сводкой (после разбора ведущего, нового ответа или retry --reset)',
+        'первая сдача работы или новая сессия со сводкой: после разбора ведущего, сброса попыток (retry --reset / --start-over), новой постановки, смены runtime или если CLI исполнителя не умеет продолжать сессию',
       resumed:
         'продолжение сессии этой работы с причиной отказа, хвостами проверок и открытыми находками',
       fallback:
@@ -3253,16 +3257,20 @@ const en: Dict = {
   r13: {
     thinWhy:
       'Thin mode: the light environment with a thinner flow. The writer is trusted but fallible: a work has one writer session, continued from one handover to the next; each handover is checked on a clean checkout of the target and gets one independent review against the task.',
+    guardThinOn:
+      'Write guard: the writer and the checks write only to the work tree, their own temporary directory and caches (against accidents, not a security boundary).',
+    guardThinOff:
+      'No write guard: the writer and the checks may write outside the work tree (harness doctor names the cause).',
     writerSessionTitle: 'Writer session',
     writerSession: {
       fresh: 'new',
       resumed: 'resumed',
-      fallback: 'new after overflow',
+      fallback: 'new in place of a lost one',
     },
     writerSessionRow: (session: string) => `session: ${session}`,
     writerSessionWhy: {
       fresh:
-        'the first handover of the work, or a new session with a summary (after the lead’s review, a new answer or retry --reset)',
+        'the first handover of the work, or a new session with a summary: after the lead’s review, an attempts reset (retry --reset / --start-over), a changed task, a changed runtime, or when the writer CLI cannot continue a session',
       resumed:
         'the work’s session continued with the failure cause, the check tails and the open findings',
       fallback:

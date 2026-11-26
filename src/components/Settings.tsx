@@ -373,8 +373,8 @@ export function DecisionsPanel({ view, lang = 'ru' }: { view: OperatorView; lang
  * The harness mode (revision 9, harness 0.1.0-alpha.69): light (the default)
  * or strict, and one line on the write guard. Nothing for an older harness.
  * Revision 11 (harness 0.1.0-alpha.73): thin mode is named neutrally with
- * what it means; it runs in the light environment, so its write guard line
- * reads as light's (a missing guard is flagged the same way).
+ * what it means; it runs in the light environment, so a missing write guard
+ * is flagged as in light; the guard line names the work tree (one per work).
  */
 export function HarnessModePanel({ view, lang = 'ru' }: { view: OperatorView; lang?: Lang }) {
   const m = harnessModeOf(view);
@@ -392,9 +392,13 @@ export function HarnessModePanel({ view, lang = 'ru' }: { view: OperatorView; la
         : sandbox === 'none'
           ? r.guardStrictNone
           : r.guardStrictUnknown
-      : m.writeGuard
-        ? r.guardOn
-        : r.guardOff;
+      : m.mode === 'thin'
+        ? m.writeGuard
+          ? t.r13.guardThinOn
+          : t.r13.guardThinOff
+        : m.writeGuard
+          ? r.guardOn
+          : r.guardOff;
   return (
     <div
       className="hui-panel"

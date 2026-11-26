@@ -2,7 +2,7 @@
 // on the settings and the home screen (named neutrally, with what it means;
 // the write guard line reads as in the light environment), the plan review
 // limit lifted «тонкий режим», and the writer session of each attempt in the
-// work detail («сессия: новая / продолжена / новая после переполнения»).
+// work detail («сессия: новая / продолжена / новая вместо утраченной»).
 // Older views (revision 10) render as in alpha.12.
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
@@ -125,11 +125,8 @@ test('settings: thin mode named neutrally, with what it means and the write guar
     'Тонкий режим: окружение облегчённого, поток тоньше. Исполнитель считается честным, но ошибающимся: у работы одна сессия исполнителя, она продолжается от сдачи к сдаче; каждая сдача проверяется на чистом checkout цели и проходит одно независимое ревью против постановки.',
   );
   // Nothing in the mode panel is flagged while the guard is in force.
-  assert.doesNotMatch(part(m, 'settings-harness-mode'), /blocked/);
-  assert.doesNotMatch(
-    m.slice(m.indexOf('data-testid="settings-harness-mode"')).split('</div>')[0]!,
-    /data-status="blocked"/,
-  );
+  assert.match(m, /data-testid="harness-mode-guard"(?! data-status)/);
+  assert.match(part(m, 'harness-mode-guard'), /только в дерево работы/);
   // The round cap names thin mode, not light.
   assert.match(shown(m), /без предела \(тонкий режим; в строгом — \d+\)/);
   assert.doesNotMatch(shown(m), /облегчённый режим; в строгом/);
@@ -217,10 +214,10 @@ test('the work detail: each attempt names its writer session, with what it means
   assert.match(part(en, 'work-attempts'), /· session: new/);
 });
 
-test('the writer session: fallback reads «новая после переполнения»; an unknown one is its code', () => {
+test('the writer session: fallback reads «новая вместо утраченной»; an unknown one is its code', () => {
   const t = dict('ru');
   const fb = html(<WriterSessionText row={{ writerSession: 'fallback' }} t={t} />);
-  assert.equal(part(fb, 'writer-session'), '· сессия: новая после переполнения');
+  assert.equal(part(fb, 'writer-session'), '· сессия: новая вместо утраченной');
   assert.match(shown(fb), /контекст переполнен или сессия утрачена/);
   const later = html(
     <WriterSessionText row={{ writerSession: 'later' as unknown as 'fresh' }} t={t} />,
@@ -233,7 +230,7 @@ test('the writer session: fallback reads «новая после перепол�
       html(<WriterSessionText row={{ writerSession: 'fallback' }} t={dict('en')} />),
       'writer-session',
     ),
-    '· session: new after overflow',
+    '· session: new in place of a lost one',
   );
 });
 
