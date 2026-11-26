@@ -4,7 +4,7 @@
 // Pure render of a `WorkDetailView`; no fetching, no writes.
 
 import { instantMs } from '../model/compat.ts';
-import { dict, label, type Dict, type Lang } from '../model/dict.ts';
+import { dict, knownLabel, label, type Dict, type Lang } from '../model/dict.ts';
 import {
   SLOT_STAGES,
   formatDuration,
@@ -41,6 +41,8 @@ import { WorkCost } from './Costs.tsx';
 import { ReviewLine } from './Tasks.tsx';
 import { proposalsOf } from '../model/revision10.ts';
 import { Badge } from './ui/badge.tsx';
+import { Tooltip } from './ui/tooltip.tsx';
+import { writerSessionOf } from '../model/revision11.ts';
 
 export interface WorkDetailProps extends ScreenProps {
   detail: WorkDetailView;
@@ -324,6 +326,7 @@ export function WorkDetail({
                   {w.startedAt(clockOf(r.startedAt, t, timeZone, now))}
                   {r.finishedAt ? ', ' + w.finishedAt(clockOf(r.finishedAt, t, timeZone, now)) : ''}
                 </span>
+                <WriterSessionText row={r} t={t} />
                 {r.interrupted ? <div className="hui-muted">{w.interruptedRow}</div> : null}
               </li>
             ))}
@@ -511,5 +514,42 @@ export function WorkDetail({
       ) : null}
       {clipped(w.clippedName.dependsOn!, detail.truncated?.dependsOn)}
     </section>
+  );
+}
+
+/**
+ * Revision 11 (harness alpha.73, thin mode): the writer session of an
+ * attempt — new, resumed or new after an overflow — with what it means in
+ * the tooltip. Nothing for an older harness or another mode.
+ */
+export function WriterSessionText({
+  row,
+  t,
+}: {
+  row: Pick<WorkDetailView['attempts'][number], 'writerSession'>;
+  t: Dict;
+}) {
+  const session = writerSessionOf(row);
+  if (!session) return null;
+  const r = t.r13;
+  const why = knownLabel(r.writerSessionWhy, session);
+  const text = r.writerSessionRow(label(r.writerSession, session));
+  return (
+    <>
+      {' '}
+      {why ? (
+        <Tooltip content={`${r.writerSessionTitle}: ${why}`} tabIndex={0}>
+          <span className="hui-muted" data-testid="writer-session" data-session={session}>
+            {'· '}
+            {text}
+          </span>
+        </Tooltip>
+      ) : (
+        <span className="hui-muted" data-testid="writer-session" data-session={session}>
+          {'· '}
+          {text}
+        </span>
+      )}
+    </>
   );
 }

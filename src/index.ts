@@ -75,3 +75,5 @@ export {
   ReleaseDocs,
   SecondPass,
 } from './components/Revision10.tsx';
+// Revision 11 (harness 0.1.0-alpha.73): thin mode and the writer session of an attempt.
+export { WriterSessionText } from './components/WorkDetail.tsx';

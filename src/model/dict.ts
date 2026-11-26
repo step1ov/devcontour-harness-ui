@@ -1704,7 +1704,7 @@ const ru = {
   // ui alpha.11 (view revision 9, harness 0.1.0-alpha.69).
   r11: {
     modeTitle: 'Режим harness',
-    mode: { light: 'облегчённый', strict: 'строгий' } as Labels,
+    mode: { light: 'облегчённый', strict: 'строгий', thin: 'тонкий' } as Labels,
     modeBadge: (mode: string) => `режим: ${mode}`,
     modeDefault: 'по умолчанию',
     modeChosen: 'выбран в политике',
@@ -1834,6 +1834,28 @@ const ru = {
     decidedBy: { lead: 'ведущий', operator: 'оператор' } as Labels,
     workCostTitle: 'Расход по попыткам',
     workCostTotal: (amount: string, calls: string) => `всего ${amount} · ${calls}`,
+  },
+  // ui alpha.13 (view revision 11, harness 0.1.0-alpha.73).
+  r13: {
+    thinWhy:
+      'Тонкий режим: окружение облегчённого, поток тоньше. Исполнитель считается честным, но ошибающимся: у работы одна сессия исполнителя, она продолжается от сдачи к сдаче; каждая сдача проверяется на чистом checkout цели и проходит одно независимое ревью против постановки.',
+    writerSessionTitle: 'Сессия исполнителя',
+    writerSession: {
+      fresh: 'новая',
+      resumed: 'продолжена',
+      fallback: 'новая после переполнения',
+    } as Labels,
+    writerSessionRow: (session: string) => `сессия: ${session}`,
+    writerSessionWhy: {
+      fresh:
+        'первая сдача работы или новая сессия со сводкой (после разбора ведущего, нового ответа или retry --reset)',
+      resumed:
+        'продолжение сессии этой работы с причиной отказа, хвостами проверок и открытыми находками',
+      fallback:
+        'контекст переполнен или сессия утрачена: новый вызов в той же попытке со сводкой сдачи',
+    } as Labels,
+    roundsUnlimitedWhy: 'тонкий режим; бюджет — время и стоимость выпуска',
+    roundCapUnlimited: (cap: number) => `без предела (тонкий режим; в строгом — ${cap})`,
   },
 };
 
@@ -3095,7 +3117,7 @@ const en: Dict = {
   },
   r11: {
     modeTitle: 'Harness mode',
-    mode: { light: 'light', strict: 'strict' },
+    mode: { light: 'light', strict: 'strict', thin: 'thin' },
     modeBadge: (mode: string) => `mode: ${mode}`,
     modeDefault: 'default',
     modeChosen: 'set in the policy',
@@ -3226,6 +3248,28 @@ const en: Dict = {
     decidedBy: { lead: 'lead', operator: 'operator' },
     workCostTitle: 'Spend by attempt',
     workCostTotal: (amount: string, calls: string) => `total ${amount} · ${calls}`,
+  },
+  // ui alpha.13 (view revision 11, harness 0.1.0-alpha.73).
+  r13: {
+    thinWhy:
+      'Thin mode: the light environment with a thinner flow. The writer is trusted but fallible: a work has one writer session, continued from one handover to the next; each handover is checked on a clean checkout of the target and gets one independent review against the task.',
+    writerSessionTitle: 'Writer session',
+    writerSession: {
+      fresh: 'new',
+      resumed: 'resumed',
+      fallback: 'new after overflow',
+    },
+    writerSessionRow: (session: string) => `session: ${session}`,
+    writerSessionWhy: {
+      fresh:
+        'the first handover of the work, or a new session with a summary (after the lead’s review, a new answer or retry --reset)',
+      resumed:
+        'the work’s session continued with the failure cause, the check tails and the open findings',
+      fallback:
+        'the context overflowed or the session was lost: a new call in the same attempt with the handover summary',
+    },
+    roundsUnlimitedWhy: 'thin mode; the budget is the release time and cost',
+    roundCapUnlimited: (cap: number) => `no limit (thin mode; ${cap} in strict)`,
   },
 };
 
